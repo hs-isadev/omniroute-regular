@@ -44,7 +44,9 @@ export async function installLinux(bundle,root) {
     catch(check) {if(check.code!=='ENOENT') throw check;}
   }
   await mkdir(root,{recursive:true,mode:0o700});await chmod(root,0o700);
-  const versions=join(root,'versions');await mkdir(versions,{mode:0o700});
+  const versions=join(root,'versions');await mkdir(versions,{recursive:true,mode:0o700});
+  const versionsInfo=await lstat(versions);
+  if(!versionsInfo.isDirectory() || versionsInfo.isSymbolicLink()) throw new Error('Versions directory must not be a symlink.');
   const stage=await mkdtemp(join(versions,`${manifest.version}-`));
   // Copy only verified files. Existing versions and all user data are retained.
   for(const entry of manifest.files) {
