@@ -30,12 +30,12 @@ for (const mode of ["regular", "orchestrator"] as const) {
   });
 }
 
-test("Claude launcher selection rejects a workspace-planted Windows shim", () => {
+test("Claude launcher selection rejects a workspace-planted shim", () => {
+  const project = join(tmpdir(), "project"), installed = join(tmpdir(), "bin", "claude.cmd");
   const selected = selectClaudeLauncher([
-    "C:\\project\\claude.cmd",
-    "C:\\Users\\test\\AppData\\Roaming\\npm\\claude.cmd",
-  ], "C:\\project");
-  assert.equal(selected, "C:\\Users\\test\\AppData\\Roaming\\npm\\claude.cmd");
+    join(project, "claude.cmd"), installed,
+  ], project);
+  assert.equal(selected, installed);
 });
 
 test("OpenCode regular harness uses a clean environment and only the configured free gateway", () => {
@@ -68,7 +68,8 @@ test("OpenCode regular harness uses a clean environment and only the configured 
 });
 
 test("generic harness launcher selection rejects workspace shims", () => {
-  assert.equal(selectHarnessLauncher(["C:\\workspace\\opencode.cmd", "C:\\Users\\test\\AppData\\Roaming\\npm\\opencode.cmd"], "C:\\workspace"), "C:\\Users\\test\\AppData\\Roaming\\npm\\opencode.cmd");
+  const project=join(tmpdir(), "workspace"), installed=join(tmpdir(), "bin", "opencode.cmd");
+  assert.equal(selectHarnessLauncher([join(project, "opencode.cmd"), installed], project), installed);
 });
 
 test("OpenCode wrapper disables external plugins and pins the free model", () => {
@@ -85,14 +86,15 @@ test("model-label adapter changes only the host transport and display name", () 
 });
 
 test("global npm launcher is allowed from home without allowing home-folder shims", () => {
-  const profile = "C:\\Users\\test", bin = `${profile}\\AppData\\Roaming\\npm`;
-  assert.equal(selectHarnessLauncher([`${profile}\\opencode.cmd`, `${profile}\\project\\opencode.cmd`, `${bin}\\opencode.cmd`], profile, [bin]), `${bin}\\opencode.cmd`);
-  assert.equal(selectHarnessLauncher([`${bin}\\nested\\opencode.cmd`, `${bin}-fake\\opencode.cmd`], profile, [bin]), null);
-  assert.equal(selectHarnessLauncher([`${bin}\\opencode.cmd`], bin, [bin]), null);
+  const profile = join(tmpdir(), "profile"), bin = join(profile,"AppData","Roaming","npm");
+  assert.equal(selectHarnessLauncher([join(profile,"opencode.cmd"), join(profile,"project","opencode.cmd"), join(bin,"opencode.cmd")], profile, [bin]), join(bin,"opencode.cmd"));
+  assert.equal(selectHarnessLauncher([join(bin,"nested","opencode.cmd"), join(`${bin}-fake`,"opencode.cmd")], profile, [bin]), null);
+  assert.equal(selectHarnessLauncher([join(bin,"opencode.cmd")], bin, [bin]), null);
 });
 
 test("child directory beginning with two dots is still inside the workspace", () => {
-  assert.equal(selectHarnessLauncher(["C:\\project\\..evil\\opencode.cmd"], "C:\\project"), null);
+  const project=join(tmpdir(),"project");
+  assert.equal(selectHarnessLauncher([join(project,"..evil","opencode.cmd")], project), null);
 });
 
 test("resolver skips executable-shaped directories on PATH", async () => {

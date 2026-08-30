@@ -37,7 +37,8 @@ test("standalone CLI setup creates only local encrypted runtime state and a safe
     assert.equal(output.defaultMode, "regular");
     assert.equal(output.freeOnly, true);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /OPENAI_API_KEY=\S+/);
-    assert.match(await readFile(join(root, "vault", "vault.json"), "utf8"), /dpapi-current-user/);
+    const storedVault = JSON.parse(await readFile(join(root, "vault", "vault.json"), "utf8"));
+    assert.equal(storedVault.wrappedMasterKey.scheme, process.platform === "linux" ? "linux-secret-service-v1" : "dpapi-current-user");
     const credentials = await readFile(join(root, "import", "credentials.txt"), "utf8");
     assert.doesNotMatch(credentials, /OPENAI_API_KEY=/);
     assert.doesNotMatch(credentials, /ANTHROPIC_API_KEY=/);

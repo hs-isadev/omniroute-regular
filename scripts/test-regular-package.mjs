@@ -66,6 +66,16 @@ if(linux) {
     const vault=await SecretVault.load(${JSON.stringify(join(install,'data/vault/vault.json'))});
     assert.equal(vault.get('openrouter').OPENROUTER_API_KEY,'fixture-portable-smoke-not-a-real-key');vault.dispose();
     await assert.rejects(new SecretServiceProtector().unprotect(Buffer.from('00000000-0000-0000-0000-000000000000')),/keyring/);
+    import {randomUUID} from 'node:crypto';
+    import {spawn} from 'node:child_process';
+    const reference=randomUUID();
+    const tool=(args,input='')=>new Promise((resolve,reject)=>{
+      const child=spawn('secret-tool',args,{stdio:['pipe','ignore','ignore']});
+      child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(new Error('Synthetic keyring fixture failed')));child.stdin.end(input);
+    });
+    await tool(['store','--label=OmniRoute CI malformed key','application','omniroute','vault-id',reference],'invalid-base64');
+    try {await assert.rejects(new SecretServiceProtector().unprotect(Buffer.from(reference)),/missing or invalid/);}
+    finally {await tool(['clear','application','omniroute','vault-id',reference]);}
   `],{env});
   await assert.rejects(run(node,['--input-type=module','-e',`
     import {SecretVault} from ${JSON.stringify(url('packages/vault/dist/index.js'))};

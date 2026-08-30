@@ -50,6 +50,7 @@ export async function installLinux(bundle,root) {
   for(const entry of manifest.files) {
     const dest=join(stage,entry.path);await mkdir(resolve(dest,'..'),{recursive:true,mode:0o700});
     await copyFile(join(bundle,'payload',entry.path),dest);
+    if(createHash('sha256').update(await readFile(dest)).digest('hex')!==entry.sha256) throw new Error('Package changed during installation; current version was not replaced.');
     await chmod(dest,entry.path==='node/node'||entry.path==='opencode/opencode'?0o700:0o600);
   }
   const link=join(root,`.current-${randomUUID()}`);
