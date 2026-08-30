@@ -5,6 +5,12 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { atomicWriteFile, ensureRuntimeDirectories, EXTRA_FREE_PROVIDERS, getRuntimePaths, type RuntimePaths } from "@omniroute/config";
 import { globalRedactor, SafeError } from "@omniroute/observability";
+import { SecretServiceProtector } from "./secret-service.js";
+export { SecretServiceProtector } from "./secret-service.js";
+
+export function defaultKeyProtector(): KeyProtector {
+  return process.platform === "linux" ? new SecretServiceProtector() : new DpapiCurrentUserProtector();
+}
 
 export interface KeyProtector {
   readonly scheme: string;
@@ -110,13 +116,13 @@ export class SecretVault {
     this.#masterKey = masterKey;
   }
 
-  static async create(protector: KeyProtector = new DpapiCurrentUserProtector()): Promise<SecretVault> {
+  static async create(protector: KeyProtector = defaultKeyProtector()): Promise<SecretVault> {
     const masterKey = randomBytes(32);
     const wrapped = await protector.protect(masterKey);
     return new SecretVault(protector, { version: 1, wrappedMasterKey: { scheme: protector.scheme, data: wrapped.toString("base64") }, records: {} }, masterKey);
   }
 
-  static async load(path: string, protector: KeyProtector = new DpapiCurrentUserProtector()): Promise<SecretVault> {
+  static async load(path: string, protector: KeyProtector = defaultKeyProtector()): Promise<SecretVault> {
     let data: VaultData;
     try { data = JSON.parse(await readFile(path, "utf8")) as VaultData; }
     catch (error) {

@@ -10,6 +10,8 @@ const SAFE_INHERITED_ENVIRONMENT = [
   "PROGRAMDATA", "USERNAME", "USERDOMAIN", "OS", "HOME", "USER", "SHELL",
   "TMPDIR", "TERM", "TERM_PROGRAM", "COLORTERM", "LANG", "LC_ALL",
   "NO_COLOR", "FORCE_COLOR", "WT_SESSION", "WT_PROFILE_ID",
+  // Linux MCP child processes need the user's existing Secret Service session.
+  "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", "DISPLAY", "WAYLAND_DISPLAY",
 ] as const;
 
 export function claudeHarnessEnvironment(base: NodeJS.ProcessEnv, mode: RoutingMode, runtimeRoot?: string): NodeJS.ProcessEnv {

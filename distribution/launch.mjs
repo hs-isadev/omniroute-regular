@@ -9,7 +9,9 @@ import { openCodeRegularConfig, openCodeHarnessEnvironment } from '../apps/cli/d
 import { startHostModelProxy } from '../apps/cli/dist/host-model-proxy.js';
 const app = fileURLToPath(new URL('../', import.meta.url));
 const install = resolve(app, '..');
-process.env.OMNIROUTE_HOME = join(install,'data');
+const userRoot = process.platform === 'linux' ? process.env.OMNIROUTE_REGULAR_ROOT : install;
+if (!userRoot) throw new Error('Use the installed Launch.sh script.');
+process.env.OMNIROUTE_HOME = join(userRoot,'data');
 const paths = getRuntimePaths();
 let daemon, proxy, child;
 for (const signal of ['SIGINT','SIGTERM']) process.on(signal,()=>{child?.kill(); daemon?.kill();});
@@ -36,12 +38,12 @@ try {
   inline.share='disabled'; inline.autoupdate=false;
   inline.skills={paths:[join(app,'distribution/skills')]};
   inline.permission={task:'deny'};
-  const workspace=join(install,'workspace'); await mkdir(workspace,{recursive:true});
+  const workspace=join(userRoot,'workspace'); await mkdir(workspace,{recursive:true});
   const environment=openCodeHarnessEnvironment(process.env,paths.root,proxy.token,JSON.stringify(inline));
   // Keep OpenCode config, auth and history separate from other installations.
-  for(const kind of ['CONFIG','DATA','STATE','CACHE']) environment[`XDG_${kind}_HOME`]=join(install,'opencode-user',kind.toLowerCase());
+  for(const kind of ['CONFIG','DATA','STATE','CACHE']) environment[`XDG_${kind}_HOME`]=join(userRoot,'opencode-user',kind.toLowerCase());
   environment.OPENCODE_DISABLE_PROJECT_CONFIG='true';
-  child=spawn(join(install,'opencode/opencode.exe'),['--pure','--model','openrouter/openrouter/free'],{cwd:workspace,env:environment,stdio:'inherit',shell:false});
+  child=spawn(join(install,process.platform==='win32'?'opencode/opencode.exe':'opencode/opencode'),['--pure','--model','openrouter/openrouter/free'],{cwd:workspace,env:environment,stdio:'inherit',shell:false});
   process.exitCode=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>resolve(code??1));});
 } catch(error) { console.error(error.message); process.exitCode=1; }
 finally { if(proxy) await proxy.close(); if(daemon && daemon.exitCode===null) daemon.kill(); }

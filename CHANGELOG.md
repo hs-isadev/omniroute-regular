@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2 - Linux desktop support
+
+- Linux x64 tarball bundles pinned Node and OpenCode binaries, alongside the Windows ZIP.
+- Linux per-user setup, launch and settings scripts, hidden terminal key entry, and Secret Service backed encrypted vault. No plaintext credential fallback.
+- Integrity-checked Linux installation stages versioned binaries and preserves keys, workspace and history on rerun.
+- Linux CI exercises an isolated synthetic GNOME keyring, private file permissions, installer, real OpenCode/MCP connection and daemon health; Windows checks remain in place.
+- Both packages retain regular-mode free routing and the same 12 provider choices. ARM, Alpine/musl and headless Linux are outside the supported installer target.
+
 ## 0.1.1 - More free-provider choices
 
 - Added Kilo's free-model gateway adapter and credential import support.
@@ -19,4 +27,4 @@
 - Runtime-scoped daemon locking and clean-profile installation smoke tests.
 - Windows CI builds and tests a downloadable ZIP without API secrets.
 
-Known limits: unsigned installer; Windows x64 only; OpenRouter host quota can stop chat independently of worker-provider quotas; provider free tiers and eligibility can change. This release has no in-place binary updater. Do not share an installed profile or vault.
+Known limits: unsigned packages; Windows and desktop Linux x64 only; OpenRouter host quota can stop chat independently of worker-provider quotas; provider free tiers and eligibility can change. No automatic updater. Do not share an installed profile or vault.

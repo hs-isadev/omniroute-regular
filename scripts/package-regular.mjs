@@ -1,15 +1,18 @@
-import { mkdir, mkdtemp, cp, readdir, readFile, writeFile, access } from 'node:fs/promises';
+import { mkdir, mkdtemp, cp, readdir, readFile, writeFile, access, chmod } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { resolve, join, relative } from 'node:path';
 
-if(process.platform!=='win32') throw new Error('Build the Windows package on Windows.');
+if(!['win32','linux'].includes(process.platform) || process.arch!=='x64') throw new Error('Build on Windows or Linux x64.');
+const linux=process.platform==='linux';
+const platform=linux?'linux-x64':'windows-x64';
+const tar=linux?'tar':'tar.exe';
 const root=resolve(import.meta.dirname,'..');
 const version=JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
 const cache=join(root,'.cache'); await mkdir(cache,{recursive:true});
 await mkdir(join(root,'.build'),{recursive:true});
 const work=await mkdtemp(join(root,'.build','regular-'));
-const release=join(root,'release',`OmniRoute-Regular-${version}-windows-x64`);
+const release=join(root,'release',`OmniRoute-Regular-${version}-${platform}`);
 try {await access(release); throw new Error('Release folder already exists. Preserve or move it before rebuilding.');} catch(e) {if(e.code!=='ENOENT') throw e;}
 const payload=join(release,'payload'); await mkdir(payload,{recursive:true});
 const ps=(s)=>"'"+s.replaceAll("'","''")+"'";
@@ -29,15 +32,21 @@ async function download(url,name,algorithm,expected,encoding='hex') {
   if(createHash(algorithm).update(bytes).digest(encoding)!==expected) throw new Error(`Integrity check failed: ${name}`);
   await writeFile(path,bytes); return path;
 }
-const nodeZip=await download('https://nodejs.org/dist/v22.23.2/node-v22.23.2-win-x64.zip','node-v22.23.2-win-x64.zip','sha256','1177b4137ba5adaa56354ae40f1080c7450e8ae09cecb47da459d1c52ac99f97');
-await run('powershell.exe',['-NoProfile','-Command',`Expand-Archive -LiteralPath ${ps(nodeZip)} -DestinationPath ${ps(work)}`]);
+const nodeFolder=linux?'node-v22.23.2-linux-x64':'node-v22.23.2-win-x64';
+const nodeArchive=nodeFolder+(linux?'.tar.xz':'.zip');
+const nodeZip=await download(`https://nodejs.org/dist/v22.23.2/${nodeArchive}`,nodeArchive,'sha256',linux?'d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307':'1177b4137ba5adaa56354ae40f1080c7450e8ae09cecb47da459d1c52ac99f97');
+if(linux) await run(tar,['-xJf',nodeZip,'-C',work]);
+else await run('powershell.exe',['-NoProfile','-Command',`Expand-Archive -LiteralPath ${ps(nodeZip)} -DestinationPath ${ps(work)}`]);
 await mkdir(join(payload,'node'));
-for(const name of ['node.exe','LICENSE']) await cp(join(work,'node-v22.23.2-win-x64',name),join(payload,'node',name));
-const openCode=await download('https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.18.25.tgz','opencode-windows-x64-1.18.25.tgz','sha512','xW5wtSxWYbI7DcmQWMlNWIiDBdMJON1vDiEmVWo88R9tT/PaahOhWKgp7FoWDqJKf89jS3ZIzkqnkU3F2dio7A==','base64');
+await cp(join(work,nodeFolder,linux?'bin/node':'node.exe'),join(payload,'node',linux?'node':'node.exe'));
+await cp(join(work,nodeFolder,'LICENSE'),join(payload,'node/LICENSE'));
+const openCodePackage=linux?'opencode-linux-x64':'opencode-windows-x64';
+const openCode=await download(`https://registry.npmjs.org/${openCodePackage}/-/${openCodePackage}-1.18.25.tgz`,`${openCodePackage}-1.18.25.tgz`,'sha512',linux?'bdRSJ6gbK/EnLNWxROOQYXFXiUeqeFxGz8DIO8LCqnii99A2OWFAyZ3Da5gpvfT1Yrp9/lYL55n/tM3ale5smg==':'xW5wtSxWYbI7DcmQWMlNWIiDBdMJON1vDiEmVWo88R9tT/PaahOhWKgp7FoWDqJKf89jS3ZIzkqnkU3F2dio7A==','base64');
 const extraction=join(work,'opencode'); await mkdir(extraction);
-await run('tar.exe',['-xzf',openCode,'-C',extraction]);
+await run(tar,['-xzf',openCode,'-C',extraction]);
 await mkdir(join(payload,'opencode'));
-await cp(join(extraction,'package/bin/opencode.exe'),join(payload,'opencode/opencode.exe'));
+await cp(join(extraction,'package/bin',linux?'opencode':'opencode.exe'),join(payload,'opencode',linux?'opencode':'opencode.exe'));
+if(linux) for(const path of ['node/node','opencode/opencode']) await chmod(join(payload,path),0o755);
 await cp(join(root,'distribution/OPENCODE-LICENSE.txt'),join(payload,'opencode/LICENSE.txt'));
 // Build a production-only workspace, then dereference npm workspace junctions.
 const appStage=join(work,'app'); await mkdir(appStage);
@@ -51,15 +60,17 @@ for(const group of ['apps','packages']) {
     try {await cp(join(src,'dist'),join(dst,'dist'),{recursive:true});} catch(e) {if(e.code!=='ENOENT') throw e;}
   }
 }
-const npmCli=join(work,'node-v22.23.2-win-x64/node_modules/npm/bin/npm-cli.js');
-await run(join(payload,'node/node.exe'),[npmCli,'ci','--omit=dev','--ignore-scripts','--no-audit','--no-fund'],appStage);
+const npmCli=join(work,nodeFolder,linux?'lib/node_modules/npm/bin/npm-cli.js':'node_modules/npm/bin/npm-cli.js');
+await run(join(payload,'node',linux?'node':'node.exe'),[npmCli,'ci','--omit=dev','--ignore-scripts','--no-audit','--no-fund'],appStage);
 await cp(appStage,join(payload,'app'),{recursive:true,dereference:true});
 await mkdir(join(payload,'app/distribution'),{recursive:true});
 for(const name of ['launch.mjs','settings.mjs','skills']) await cp(join(root,'distribution',name),join(payload,'app/distribution',name),{recursive:true});
+if(linux) for(const name of ['settings-linux.mjs','install-linux.mjs']) await cp(join(root,'distribution',name),join(payload,'app/distribution',name));
 await mkdir(join(payload,'app/docs/integrations'),{recursive:true});
 await cp(join(root,'docs/integrations/opencode-regular-instructions.md'),join(payload,'app/docs/integrations/opencode-regular-instructions.md'));
-for(const name of ['Settings.ps1','Settings.cmd','Launch.cmd']) await cp(join(root,'distribution',name),join(payload,name));
-for(const name of ['Setup.ps1','Setup.cmd']) await cp(join(root,'distribution',name),join(release,name));
+for(const name of linux?['Settings.sh','Launch.sh']:['Settings.ps1','Settings.cmd','Launch.cmd']) await cp(join(root,'distribution',name),join(payload,name));
+for(const name of linux?['Setup.sh']:['Setup.ps1','Setup.cmd']) await cp(join(root,'distribution',name),join(release,name));
+if(linux) for(const path of [join(release,'Setup.sh'),join(payload,'Settings.sh'),join(payload,'Launch.sh')]) await chmod(path,0o755);
 await cp(join(root,'README.md'),join(release,'README.md'));
 await mkdir(join(release,'docs'),{recursive:true});
 await cp(join(root,'docs/free-provider-expansion.md'),join(release,'docs/free-provider-expansion.md'));
@@ -78,9 +89,10 @@ async function walk(directory) {
   }
 }
 await walk(payload); files.sort((a,b)=>a.path.localeCompare(b.path));
-await writeFile(join(release,'manifest.json'),JSON.stringify({version,node:'22.23.2',opencode:'1.18.25',files},null,2)+'\n');
+await writeFile(join(release,'manifest.json'),JSON.stringify({version,platform,node:'22.23.2',opencode:'1.18.25',files},null,2)+'\n');
 console.log('Compressing portable package...');
-await run('tar.exe',['-a','-cf',release+'.zip','-C',join(root,'release'),relative(join(root,'release'),release)]);
-const digest=createHash('sha256').update(await readFile(release+'.zip')).digest('hex');
-await writeFile(release+'.zip.sha256',`${digest}  ${relative(join(root,'release'),release)}.zip\n`);
-console.log(`Built ${release}.zip (${files.length} checked files)`);
+const extension=linux?'.tar.gz':'.zip';
+await run(tar,[...(linux?['-czf']:['-a','-cf']),release+extension,'-C',join(root,'release'),relative(join(root,'release'),release)]);
+const digest=createHash('sha256').update(await readFile(release+extension)).digest('hex');
+await writeFile(release+extension+'.sha256',`${digest}  ${relative(join(root,'release'),release)}${extension}\n`);
+console.log(`Built ${release}${extension} (${files.length} checked files)`);
