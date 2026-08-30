@@ -61,6 +61,8 @@ await cp(join(root,'docs/integrations/opencode-regular-instructions.md'),join(pa
 for(const name of ['Settings.ps1','Settings.cmd','Launch.cmd']) await cp(join(root,'distribution',name),join(payload,name));
 for(const name of ['Setup.ps1','Setup.cmd']) await cp(join(root,'distribution',name),join(release,name));
 await cp(join(root,'README.md'),join(release,'README.md'));
+await mkdir(join(release,'docs'),{recursive:true});
+await cp(join(root,'docs/free-provider-expansion.md'),join(release,'docs/free-provider-expansion.md'));
 const files=[];
 async function walk(directory) {
   for(const entry of await readdir(directory,{withFileTypes:true})) {

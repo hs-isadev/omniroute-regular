@@ -3,8 +3,8 @@ import test from 'node:test';
 import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { configure, regularConfig } from './settings.mjs';
-import { getRuntimePaths, loadConfig } from '../packages/config/dist/index.js';
+import { configure, regularConfig, fields } from './settings.mjs';
+import { getRuntimePaths, loadConfig, saveConfig, EXTRA_FREE_PROVIDERS } from '../packages/config/dist/index.js';
 import { InMemoryKeyProtector, SecretVault } from '../packages/vault/dist/index.js';
 
 const fixture='fixture-only-not-a-real-secret-123';
@@ -59,4 +59,27 @@ test('incomplete Cloudflare replacement keeps the existing provider enabled',asy
   assert.deepEqual(result.failed,['cloudflare']);
   assert.equal(JSON.parse(await readFile(paths.config,'utf8')).providers.find(x=>x.id==='cloudflare').enabled,true);
   const vault=await SecretVault.load(paths.vault,protector);assert.equal(vault.get('cloudflare').CLOUDFLARE_API_TOKEN,'fixture-cloudflare');vault.dispose();
+});
+test('all hosted free profiles have key-entry fields',()=>{
+  assert.equal(Object.keys(fields).length,12);
+  for(const profile of EXTRA_FREE_PROVIDERS) assert.ok(fields[profile.id].includes(profile.credentialField));
+});
+test('existing setup preserves orchestrator mode, port, disabled providers and old keys',async()=>{
+  const {paths,protector}=await context();
+  await configure({keys:{OPENROUTER_API_KEY:fixture,GROQ_API_KEY:'fixture-groq'},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  const config=await loadConfig(paths);config.routing.defaultMode='orchestrator';config.daemon.port=47831;config.daemon.allowedOrigins=['http://127.0.0.1:47831'];
+  config.providers.find(x=>x.id==='groq').enabled=false;await saveConfig(config,paths);
+  const result=await configure({keys:{KILO_API_KEY:'fixture-kilo'},freeOnlyConfirmed:true},paths,{protector,factory:success,existingSetup:true});
+  assert.deepEqual(result.accepted,['kilo']);const updated=await loadConfig(paths);
+  assert.equal(updated.routing.defaultMode,'orchestrator');assert.equal(updated.daemon.port,47831);
+  assert.equal(updated.providers.find(x=>x.id==='groq').enabled,false);assert.equal(updated.providers.find(x=>x.id==='kilo').enabled,true);
+  assert.ok(updated.routing.directProviderOrder.includes('kilo'));
+  const vault=await SecretVault.load(paths.vault,protector);assert.equal(vault.get('groq').GROQ_API_KEY,'fixture-groq');vault.dispose();
+  await configure({keys:{GROQ_API_KEY:'fixture-invalid-replacement'},freeOnlyConfirmed:true},paths,{protector,existingSetup:true,factory:()=>({generate:async()=>{throw Error('invalid');}})});
+  assert.equal((await loadConfig(paths)).providers.find(x=>x.id==='groq').enabled,false);
+});
+test('provider validation falls back within its free models before rejecting a key',async()=>{
+  const {paths,protector}=await context();const attempts=[];
+  const result=await configure({keys:{OPENROUTER_API_KEY:fixture,ZAI_API_KEY:'fixture-zai'},freeOnlyConfirmed:true},paths,{protector,factory:settings=>settings.id==='zai'?{generate:async request=>{attempts.push(request.modelId);if(attempts.length===1) throw Error('model unavailable');return {text:'OK'};}}:success()});
+  assert.ok(result.accepted.includes('zai'));assert.deepEqual(attempts,['glm-4.7-flash','glm-4.5-flash']);
 });

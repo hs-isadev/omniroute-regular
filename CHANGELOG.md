@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 - More free-provider choices
+
+- Added Kilo's free-model gateway adapter and credential import support.
+- Exposed Z.AI, NVIDIA, Vercel and OpenCode Zen alongside the original seven providers: 12 choices in a scrolling masked-key form.
+- Added a key editor for existing installations that preserves modes, port, old keys and disabled providers; accepted additions join both modes' worker routing.
+- Credential checks try the same provider's configured free fallback models, without crossing into paid models.
+- Documented current free-access restrictions and excluded retired GitHub Models and Cerebras's expiring, payment-method-required trial.
+
 ## 0.1.0 - Regular Windows distribution
 
 - Portable Node.js 22.23.2 + OpenCode 1.18.25, with pinned upstream integrity verification.

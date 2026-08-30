@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { EXTRA_FREE_PROVIDERS } from "@omniroute/config";
 
 const cli = fileURLToPath(new URL("../apps/cli/dist/bin.js", import.meta.url));
 
@@ -112,7 +113,7 @@ test("provider CLI persists opt-in activation for both modes and can disable it"
     assert.deepEqual(JSON.parse(enabled.stdout).modes, ["regular", "orchestrator"]);
     const listed = await runCli(["providers", "list"], root);
     const profiles = JSON.parse(listed.stdout);
-    assert.equal(profiles.filter((item: { credentialField: string | null }) => item.credentialField !== null).length, 11);
+    assert.equal(profiles.filter((item: { credentialField: string | null }) => item.credentialField !== null).length, EXTRA_FREE_PROVIDERS.length + 3);
     assert.equal(profiles.find((item: { id: string }) => item.id === "mistral").enabled, true);
     assert.equal((await runCli(["providers", "disable", "mistral"], root)).code, 0);
     const config = JSON.parse(await readFile(join(root, "config.json"), "utf8"));

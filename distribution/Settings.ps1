@@ -1,10 +1,15 @@
 [CmdletBinding()]
-param([string]$InstallRoot = $PSScriptRoot,[switch]$SmokeTest)
+param([string]$InstallRoot,[string]$AppRoot,[string]$NodePath,[string]$RuntimeRoot,[switch]$ExistingSetup,[switch]$SmokeTest)
 $ErrorActionPreference = 'Stop'
+if(-not $InstallRoot) {$InstallRoot=$PSScriptRoot}
+if(-not $AppRoot) {$AppRoot=Join-Path $InstallRoot 'app'}
+if(-not $NodePath) {$NodePath=Join-Path $InstallRoot 'node\node.exe'}
+if(-not $RuntimeRoot) {$RuntimeRoot=Join-Path $InstallRoot 'data'}
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $form = New-Object Windows.Forms.Form
 $form.Text = 'OmniRoute Regular - Your API keys'
+if($ExistingSetup) {$form.Text='OmniRoute - Provider keys (existing setup)'}
 $form.Size = New-Object Drawing.Size(690,590)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
@@ -13,6 +18,7 @@ $intro = New-Object Windows.Forms.Label
 $intro.Text = 'OpenRouter is required. Other providers are optional. Keys stay on this Windows account.'
 $intro.SetBounds(15,12,650,36)
 $form.Controls.Add($intro)
+$panel=New-Object Windows.Forms.Panel; $panel.SetBounds(15,52,650,330); $panel.AutoScroll=$true; $form.Controls.Add($panel)
 $rows = @(
   @('OpenRouter *','OPENROUTER_API_KEY','https://openrouter.ai/settings/keys'),
   @('Groq','GROQ_API_KEY','https://console.groq.com/keys'),
@@ -21,20 +27,26 @@ $rows = @(
   @('Cohere','COHERE_API_KEY','https://dashboard.cohere.com/api-keys'),
   @('Cloudflare token','CLOUDFLARE_API_TOKEN','https://dash.cloudflare.com/'),
   @('Cloudflare account ID','CLOUDFLARE_ACCOUNT_ID','https://dash.cloudflare.com/'),
-  @('Hugging Face','HF_TOKEN','https://huggingface.co/settings/tokens')
+  @('Hugging Face','HF_TOKEN','https://huggingface.co/settings/tokens'),
+  @('Kilo free gateway','KILO_API_KEY','https://app.kilo.ai/'),
+  @('Z.AI Flash only','ZAI_API_KEY','https://z.ai/manage-apikey/apikey-list'),
+  @('NVIDIA dev/test','NVIDIA_API_KEY','https://build.nvidia.com/'),
+  @('Vercel monthly credit','VERCEL_AI_GATEWAY_API_KEY','https://vercel.com/ai-gateway'),
+  @('OpenCode Zen free','OPENCODE_ZEN_API_KEY','https://opencode.ai/auth')
 )
 $boxes = @{}
 for ($i=0; $i -lt $rows.Count; $i++) {
-  $label=New-Object Windows.Forms.Label; $label.Text=$rows[$i][0]; $label.SetBounds(15,(55+$i*42),150,25); $form.Controls.Add($label)
-  $box=New-Object Windows.Forms.TextBox; $box.UseSystemPasswordChar=$true; $box.SetBounds(170,(52+$i*42),380,26); $form.Controls.Add($box); $boxes[$rows[$i][1]]=$box
-  $link=New-Object Windows.Forms.LinkLabel; $link.Text='Get key'; $link.Tag=$rows[$i][2]; $link.SetBounds(570,(55+$i*42),80,25)
-  $link.Add_LinkClicked({param($sender,$eventArgs) Start-Process $sender.Tag}); $form.Controls.Add($link)
+  $label=New-Object Windows.Forms.Label; $label.Text=$rows[$i][0]; $label.SetBounds(0,(3+$i*42),150,25); $panel.Controls.Add($label)
+  $box=New-Object Windows.Forms.TextBox; $box.UseSystemPasswordChar=$true; $box.SetBounds(155,($i*42),370,26); $panel.Controls.Add($box); $boxes[$rows[$i][1]]=$box
+  $link=New-Object Windows.Forms.LinkLabel; $link.Text='Get key'; $link.Tag=$rows[$i][2]; $link.SetBounds(540,(3+$i*42),75,25)
+  $link.Add_LinkClicked({param($sender,$eventArgs) Start-Process $sender.Tag}); $panel.Controls.Add($link)
 }
 $confirm=New-Object Windows.Forms.CheckBox
-$confirm.Text='These are free-tier / evaluation accounts. Paid overages and auto top-up are off.'
+$confirm.Text='I checked free-tier/evaluation terms. Paid overages, BYOK and auto top-up are off.'
 $confirm.SetBounds(15,393,650,38); $form.Controls.Add($confirm)
 $notice=New-Object Windows.Forms.Label
-$notice.Text='Hugging Face uses limited free monthly credit; Cohere uses trial keys. Cloudflare requires both fields. Leave a field blank to keep its saved key. Close OpenCode before changing keys.'
+$notice.Text='Scroll for all 12 providers. NVIDIA/Kilo: no confidential data; evaluation use only. Vercel/HF: monthly credits. Zen: temporary free models. Blank keeps saved keys. Close OpenCode first.'
+if($ExistingSetup) {$notice.Text+=' Saving valid keys restarts OmniRoute.'}
 $notice.SetBounds(15,433,650,50); $form.Controls.Add($notice)
 $save=New-Object Windows.Forms.Button; $save.Text='Validate and save'; $save.SetBounds(235,492,190,35); $form.Controls.Add($save)
 $save.Add_Click({
@@ -43,11 +55,12 @@ $save.Add_Click({
   try {
     $keys=@{}; foreach($name in $boxes.Keys) {$keys[$name]=$boxes[$name].Text}
     $info=New-Object Diagnostics.ProcessStartInfo
-    $info.FileName=Join-Path $InstallRoot 'node\node.exe'
-    $backend=Join-Path $InstallRoot 'app\distribution\settings.mjs'
+    $info.FileName=$NodePath
+    $backend=Join-Path $AppRoot 'distribution\settings.mjs'
     $info.Arguments='"'+$backend+'"'; $info.UseShellExecute=$false; $info.CreateNoWindow=$true
     $info.RedirectStandardInput=$true; $info.RedirectStandardOutput=$true; $info.RedirectStandardError=$true
-    $info.EnvironmentVariables['OMNIROUTE_HOME']=Join-Path $InstallRoot 'data'
+    if($ExistingSetup) {$info.Arguments+=' --existing --restart'}
+    $info.EnvironmentVariables['OMNIROUTE_HOME']=$RuntimeRoot
     $process=New-Object Diagnostics.Process; $process.StartInfo=$info; [void]$process.Start()
     $process.StandardInput.Write((@{keys=$keys;freeOnlyConfirmed=$true} | ConvertTo-Json -Compress)); $process.StandardInput.Close()
     $errorTask=$process.StandardError.ReadToEndAsync()
@@ -57,13 +70,15 @@ $save.Add_Click({
     if(-not $result.ready) { [Windows.Forms.MessageBox]::Show($result.error,'Setup needs attention'); return }
     foreach($box in $boxes.Values) {$box.Clear()}; $keys.Clear()
     $message='Saved. Open the OmniRoute Regular desktop shortcut.'
+    if($ExistingSetup) {$message='Saved for your existing OmniRoute setup. Modes, port and existing keys were preserved.'}
+    if($result.restartNeeded) {$message+=' Restart OmniRoute with omni service stop, then omni service start.'}
     if($result.failed.Count -gt 0) {$message+=' Some supplied keys failed validation: '+($result.failed -join ', ')+'. Existing keys were kept. Reopen Settings to retry.'}
     [Windows.Forms.MessageBox]::Show($message,'Ready'); $form.Close()
   } catch { [Windows.Forms.MessageBox]::Show('Setup could not finish. Check your connection and try again. No key values were logged.','Setup error') }
   finally { $save.Enabled=$true; $save.Text='Validate and save' }
 })
 if($SmokeTest) {
-  if($boxes.Count -ne 8) {throw 'Missing credential fields'}
+  if($boxes.Count -ne 13 -or -not $panel.AutoScroll) {throw 'Missing credential fields or scrolling'}
   foreach($box in $boxes.Values) {if(-not $box.UseSystemPasswordChar) {throw 'Unmasked credential field'}}
   $form.Dispose(); Write-Output 'PASS: masked Windows Forms key-entry controls'; return
 }

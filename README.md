@@ -4,7 +4,7 @@ OpenCode coding/chat harness + OmniRoute free-provider workers. No Codex or Clau
 
 ## Install (Windows 10/11, x64)
 
-1. Download the **OmniRoute-Regular-0.1.0-windows-x64.zip** release asset (not GitHub's "Source code" ZIP).
+1. Download the **OmniRoute-Regular-0.1.1-windows-x64.zip** release asset (not GitHub's "Source code" ZIP).
 2. Right-click the ZIP, choose **Extract All**, open the extracted folder, and double-click **Setup.cmd**. No administrator account, Node installation, or terminal commands are required. Windows may show an unsigned-download warning; inspect the source and checksum before deciding whether to run it.
 3. In the local masked form, paste **your own OpenRouter API key**. Add any optional provider keys below. Confirm your accounts have no paid overages/auto top-up, then click **Validate and save**. Validation makes one small API request per supplied provider, consuming free quota. It can take a few minutes.
 4. Open **OmniRoute Regular** on the desktop. Use **OmniRoute Regular Settings** to add/change keys later. Blank fields keep saved keys; failed replacement keys do not overwrite working ones.
@@ -22,6 +22,13 @@ Setup bundles Node.js 22.23.2 and OpenCode 1.18.25. An internet connection is re
 | Cohere | [Dashboard keys](https://dashboard.cohere.com/api-keys) | Optional trial/evaluation key, not a paid production key; trial terms apply. |
 | Cloudflare Workers AI | [Dashboard](https://dash.cloudflare.com/) | Optional Workers AI API token and the **32-character account ID**, not an account password. Use the free allowance with paid overages disabled. |
 | Hugging Face | [Access tokens](https://huggingface.co/settings/tokens) | Optional token with Inference Providers permission. Uses limited included monthly credit, not unlimited free compute. |
+| Kilo Gateway | [Personal profile](https://app.kilo.ai/) | API key at bottom of Your Profile. Free-router models only; no confidential prompts. |
+| Z.AI | [API keys](https://z.ai/manage-apikey/apikey-list) | Free Flash models only, not paid FlashX or search tools. |
+| NVIDIA | [Build catalog](https://build.nvidia.com/) | Free Developer Program API for development/evaluation, not production; no confidential data. |
+| Vercel AI Gateway | [Gateway dashboard](https://vercel.com/ai-gateway) | Eligible monthly free credit only. No paid balance, BYOK or top-ups. |
+| OpenCode Zen | [Sign in](https://opencode.ai/auth) | Temporary free models only; no billing or auto-reload. |
+
+There are **12 provider choices**. Scroll in the key-entry form to reach the additional rows. See [verified free-access details and exclusions](docs/free-provider-expansion.md) for conditions, current source links, and why retired GitHub Models and Cerebras's expiring paid-card trial are excluded.
 
 Never enter your email password, browser cookies, Claude/ChatGPT login session, or someone else's key. Consumer free-plan logins are not interchangeable with API credentials. This package does not enable billing or add credits. Free-only routing is a local model policy, **not control over your provider's billing account**: quotas and account settings must also be correct. Optional providers that fail validation stay disabled unless a working key was previously saved.
 
