@@ -1,0 +1,17 @@
+{
+  "name": "@omniroute/integrations",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": "./dist/index.js",
+  "dependencies": {
+    "@omniroute/config": "0.1.0",
+    "@omniroute/contracts": "0.1.0",
+    "@omniroute/mcp-server": "0.1.0",
+    "@omniroute/observability": "0.1.0",
+    "@omniroute/vault": "0.1.0",
+    "smol-toml": "^1.4.2"
+  }
+}

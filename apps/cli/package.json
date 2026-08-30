@@ -1,0 +1,19 @@
+{
+  "name": "@omniroute/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/bin.js",
+  "types": "dist/bin.d.ts",
+  "bin": { "omni": "dist/bin.js" },
+  "dependencies": {
+    "@omniroute/config": "0.1.0",
+    "@omniroute/contracts": "0.1.0",
+    "@omniroute/core": "0.1.0",
+    "@omniroute/integrations": "0.1.0",
+    "@omniroute/mcp-server": "0.1.0",
+    "@omniroute/observability": "0.1.0",
+    "@omniroute/providers": "0.1.0",
+    "@omniroute/vault": "0.1.0"
+  }
+}

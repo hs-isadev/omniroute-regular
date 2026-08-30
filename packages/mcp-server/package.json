@@ -1,0 +1,14 @@
+{
+  "name": "@omniroute/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": "./dist/index.js",
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@omniroute/contracts": "0.1.0",
+    "zod": "^4.0.0"
+  }
+}

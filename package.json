@@ -1,0 +1,44 @@
+{
+  "name": "omniroute",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first, policy-validated multi-model routing with explicit attribution",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "bin": {
+    "omni": "apps/cli/dist/bin.js"
+  },
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "tsc -b && node scripts/copy-assets.mjs && node scripts/build-mcpb.mjs",
+    "build:mcpb": "node scripts/build-mcpb.mjs",
+    "test:regular": "node --test distribution/settings.test.mjs",
+    "package:regular": "npm run build && node scripts/package-regular.mjs",
+    "test:package": "node scripts/test-regular-package.mjs",
+    "typecheck": "tsc -b --pretty false",
+    "lint": "npm run typecheck",
+    "test": "npm run build && tsx --test --test-concurrency=1 tests/*.test.ts",
+    "test:security": "npm run build && tsx --test --test-concurrency=1 tests/security.test.ts tests/vault.test.ts",
+    "eval": "npm run build && node evals/run.mjs",
+    "check": "npm run lint && npm test && npm run eval",
+    "start": "node apps/daemon/dist/main.js",
+    "omni": "node apps/cli/dist/bin.js"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "2.1.2",
+    "@types/node": "^22.15.0",
+    "esbuild": "0.28.2",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.3"
+  },
+  "overrides": {
+    "tmp": "0.2.7"
+  }
+}

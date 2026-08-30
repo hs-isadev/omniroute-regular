@@ -1,0 +1,16 @@
+{
+  "name": "@omniroute/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts",
+  "dependencies": {
+    "@omniroute/config": "0.1.0",
+    "@omniroute/contracts": "0.1.0",
+    "@omniroute/core": "0.1.0",
+    "@omniroute/observability": "0.1.0",
+    "@omniroute/providers": "0.1.0",
+    "@omniroute/vault": "0.1.0"
+  }
+}

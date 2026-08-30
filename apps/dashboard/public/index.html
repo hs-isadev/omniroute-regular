@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>OmniRoute</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div><strong>OmniRoute</strong><small>Local model control plane</small></div>
+        </div>
+        <nav aria-label="Primary">
+          <button class="nav active" data-view="chat">Chat <span>⌘1</span></button>
+          <button class="nav" data-view="models">Models <span>⌘2</span></button>
+          <button class="nav" data-view="routes">Routes <span>⌘3</span></button>
+          <button class="nav" data-view="settings">Budgets <span>⌘4</span></button>
+        </nav>
+        <div class="privacy-card">
+          <span class="pulse"></span>
+          <div><strong id="health-label">Checking daemon</strong><small>Bound to 127.0.0.1</small></div>
+        </div>
+        <p class="disclosure">Free-only policy is active. Regular mode skips an LLM planner; orchestrator mode uses the configured free planner.</p>
+      </aside>
+
+      <main>
+        <section class="view active" id="view-chat">
+          <header>
+            <div><p class="eyebrow">Standalone routing</p><h1>Ask once. Route deliberately.</h1></div>
+            <div class="orchestrator-pill"><span>Policy</span><strong id="routing-policy">Loading…</strong></div>
+          </header>
+          <div class="conversation" id="conversation">
+            <article class="welcome">
+              <p class="eyebrow">Ready</p>
+              <h2>Every answer names the models that produced it.</h2>
+              <p>Choose regular deterministic routing or free-model orchestration. Every result preserves provider and model attribution.</p>
+              <div class="suggestions">
+                <button data-prompt="Compare the tradeoffs of three approaches to this architecture and recommend one.">Compare approaches</button>
+                <button data-prompt="Review this design for security risks and create a prioritized remediation plan.">Run a careful review</button>
+                <button data-prompt="Break a broad repository migration into dependency-aware subtasks.">Plan a large task</button>
+              </div>
+            </article>
+          </div>
+          <form class="composer" id="chat-form">
+            <textarea id="prompt" rows="3" maxlength="1000000" placeholder="Describe the outcome you want…" required></textarea>
+            <div class="composer-footer">
+              <label>Mode <select id="routing-mode"><option value="regular">Regular</option><option value="orchestrator">Orchestrator</option></select></label>
+              <label><input type="checkbox" id="privacy"> Minimal routing envelope</label>
+              <button type="submit" id="send">Route request <span>↗</span></button>
+            </div>
+          </form>
+        </section>
+
+        <section class="view" id="view-models">
+          <header><div><p class="eyebrow">Validated registry</p><h1>Models</h1></div><button class="secondary" id="refresh-models">Refresh health</button></header>
+          <div class="stats" id="model-stats"></div>
+          <div class="panel table-wrap"><table><thead><tr><th>Provider / model</th><th>Health</th><th>Capabilities</th><th>Limits</th><th>Policy</th></tr></thead><tbody id="models-body"></tbody></table></div>
+        </section>
+
+        <section class="view" id="view-routes">
+          <header><div><p class="eyebrow">Content-free audit trail</p><h1>Recent routes</h1></div><button class="secondary" id="refresh-routes">Refresh</button></header>
+          <div class="panel table-wrap"><table><thead><tr><th>Route</th><th>Task</th><th>Orchestrator</th><th>Worker</th><th>Usage</th><th>Status</th></tr></thead><tbody id="routes-body"></tbody></table></div>
+        </section>
+
+        <section class="view" id="view-settings">
+          <header><div><p class="eyebrow">Spend policy</p><h1>Budgets</h1></div></header>
+          <form class="panel budget-form" id="budget-form">
+            <label>Daily maximum (USD)<input type="number" id="daily" min="0" step="0.01"></label>
+            <label>Monthly maximum (USD)<input type="number" id="monthly" min="0" step="0.01"></label>
+            <label>Per-request maximum (USD)<input type="number" id="per-request" min="0" step="0.01"></label>
+            <p>Zero is the default and blocks non-free projected routes.</p>
+            <button type="submit">Save budget limits</button>
+            <span id="budget-status" role="status"></span>
+          </form>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,241 @@
+{
+  "generatedAt": "2026-08-30T15:38:39.428Z",
+  "mode": "deterministic pre-route policy evaluation; no provider calls",
+  "fixtures": 15,
+  "passed": 15,
+  "routeAccuracy": 1,
+  "unnecessarySolWorkerRate": 0,
+  "averageLatencyMs": 0.6488933333333496,
+  "totalEstimatedWorkerCostUsd": 0.8343809999999999,
+  "rows": [
+    {
+      "id": "micro-format",
+      "expectedClasses": [
+        "micro"
+      ],
+      "actualClass": "micro",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "luna",
+      "expectedWorkerTier": "luna",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.00036219999999999997,
+      "latencyMs": 4.54260000000005
+    },
+    {
+      "id": "micro-extract",
+      "expectedClasses": [
+        "micro",
+        "small"
+      ],
+      "actualClass": "micro",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "luna",
+      "expectedWorkerTier": "luna",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.00036260000000000003,
+      "latencyMs": 1.8752999999999815
+    },
+    {
+      "id": "small-explain",
+      "expectedClasses": [
+        "small"
+      ],
+      "actualClass": "small",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "luna",
+      "expectedWorkerTier": "luna",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.0012042,
+      "latencyMs": 0.22879999999997835
+    },
+    {
+      "id": "small-code",
+      "expectedClasses": [
+        "small",
+        "medium"
+      ],
+      "actualClass": "small",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "luna",
+      "expectedWorkerTier": "luna",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.0012028,
+      "latencyMs": 0.07900000000000773
+    },
+    {
+      "id": "medium-files",
+      "expectedClasses": [
+        "medium"
+      ],
+      "actualClass": "medium",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "terra",
+      "expectedWorkerTier": "terra",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.036042,
+      "latencyMs": 0.06979999999998654
+    },
+    {
+      "id": "medium-research",
+      "expectedClasses": [
+        "medium",
+        "large"
+      ],
+      "actualClass": "medium",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "terra",
+      "expectedWorkerTier": "terra",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.036048,
+      "latencyMs": 0.26120000000003074
+    },
+    {
+      "id": "medium-schema",
+      "expectedClasses": [
+        "medium"
+      ],
+      "actualClass": "medium",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "terra",
+      "expectedWorkerTier": "terra",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.036042,
+      "latencyMs": 0.129099999999994
+    },
+    {
+      "id": "large-repo",
+      "expectedClasses": [
+        "large"
+      ],
+      "actualClass": "large",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "sol",
+      "expectedWorkerTier": "sol",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.120128,
+      "latencyMs": 0.7515999999999963
+    },
+    {
+      "id": "large-debug",
+      "expectedClasses": [
+        "large"
+      ],
+      "actualClass": "large",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "sol",
+      "expectedWorkerTier": "sol",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.120116,
+      "latencyMs": 0.186300000000017
+    },
+    {
+      "id": "large-synthesis",
+      "expectedClasses": [
+        "large"
+      ],
+      "actualClass": "large",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "sol",
+      "expectedWorkerTier": "sol",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.12012,
+      "latencyMs": 0.11430000000001428
+    },
+    {
+      "id": "critical-security",
+      "expectedClasses": [
+        "critical"
+      ],
+      "actualClass": "critical",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "sol",
+      "expectedWorkerTier": "sol",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.120132,
+      "latencyMs": 0.6042000000000485
+    },
+    {
+      "id": "critical-medical",
+      "expectedClasses": [
+        "critical"
+      ],
+      "actualClass": "critical",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "sol",
+      "expectedWorkerTier": "sol",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.120096,
+      "latencyMs": 0.2897000000000389
+    },
+    {
+      "id": "critical-delete",
+      "expectedClasses": [
+        "critical"
+      ],
+      "actualClass": "critical",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "sol",
+      "expectedWorkerTier": "sol",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.120116,
+      "latencyMs": 0.09430000000003247
+    },
+    {
+      "id": "vision-small",
+      "expectedClasses": [
+        "small"
+      ],
+      "actualClass": "small",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "luna",
+      "expectedWorkerTier": "luna",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.0012054000000000001,
+      "latencyMs": 0.4267000000000394
+    },
+    {
+      "id": "web-current",
+      "expectedClasses": [
+        "small",
+        "medium"
+      ],
+      "actualClass": "small",
+      "classAccepted": true,
+      "capabilitiesAccepted": true,
+      "workerTier": "luna",
+      "expectedWorkerTier": "luna",
+      "workerTierAccepted": true,
+      "unnecessarySolWorker": false,
+      "estimatedCostUsd": 0.0012037999999999999,
+      "latencyMs": 0.0805000000000291
+    }
+  ]
+}

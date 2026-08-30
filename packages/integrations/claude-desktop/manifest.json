@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/mcpb/main/schemas/mcpb-manifest-v0.4.schema.json",
+  "manifest_version": "0.4",
+  "name": "omniroute",
+  "display_name": "OmniRoute",
+  "version": "0.1.0",
+  "description": "Route work through an authenticated local OmniRoute daemon with exact model attribution.",
+  "long_description": "OmniRoute uses OpenAI/gpt-5.6-sol as a validated routing planner, executes explicitly selected workers, and returns provider/model attribution. The extension talks only to the user's loopback OmniRoute daemon and stores no provider credentials.",
+  "author": { "name": "OmniRoute contributors" },
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"]
+    }
+  },
+  "tools": [
+    { "name": "omni_route", "description": "Route a task and return attributed output." },
+    { "name": "omni_models", "description": "Inspect configured and healthy models." },
+    { "name": "omni_routes", "description": "Inspect recent content-free attribution." }
+  ],
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": ["win32"],
+    "runtimes": { "node": ">=22" }
+  }
+}
