@@ -16,7 +16,7 @@ Add-Type -AssemblyName System.Drawing
 $form = New-Object Windows.Forms.Form
 $form.Text = 'OmniRoute Regular - Your API keys'
 if($ExistingSetup) {$form.Text='OmniRoute - Provider keys (existing setup)'}
-$form.Size = New-Object Drawing.Size(690,590)
+$form.Size = New-Object Drawing.Size(690,640)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
@@ -54,7 +54,10 @@ $notice=New-Object Windows.Forms.Label
 $notice.Text='Scroll for all 12 providers. NVIDIA/Kilo: no confidential data; evaluation use only. Vercel/HF: monthly credits. Zen: temporary free. Blank keeps saved keys. Reconnect MCP after saving.'
 if($ExistingSetup) {$notice.Text+=' Saving valid keys restarts OmniRoute.'}
 $notice.SetBounds(15,433,650,50); $form.Controls.Add($notice)
-$save=New-Object Windows.Forms.Button; $save.Text='Validate and save'; $save.SetBounds(235,492,190,35); $form.Controls.Add($save)
+$candidates=New-Object Windows.Forms.CheckBox
+$candidates.Text='Also test Kimi K2.6 / Qwen3 Coder free candidates (up to one extra call per supplied key).'
+$candidates.SetBounds(15,485,650,35); $candidates.Enabled=(-not $ExistingSetup); $form.Controls.Add($candidates)
+$save=New-Object Windows.Forms.Button; $save.Text='Validate and save'; $save.SetBounds(235,535,190,35); $form.Controls.Add($save)
 $save.Add_Click({
   if(-not $confirm.Checked) { [Windows.Forms.MessageBox]::Show('Confirm free-only account settings first.'); return }
   $save.Enabled=$false; $save.Text='Checking keys...'; $form.Refresh()
@@ -68,7 +71,7 @@ $save.Add_Click({
     if($ExistingSetup) {$info.Arguments+=' --existing --restart'}
     $info.EnvironmentVariables['OMNIROUTE_HOME']=$RuntimeRoot
     $process=New-Object Diagnostics.Process; $process.StartInfo=$info; [void]$process.Start()
-    $process.StandardInput.Write((@{keys=$keys;freeOnlyConfirmed=$true} | ConvertTo-Json -Compress)); $process.StandardInput.Close()
+    $process.StandardInput.Write((@{keys=$keys;freeOnlyConfirmed=$true;validateCodingCandidates=$candidates.Checked} | ConvertTo-Json -Compress)); $process.StandardInput.Close()
     $errorTask=$process.StandardError.ReadToEndAsync()
     $outputTask=$process.StandardOutput.ReadToEndAsync()
     while(-not $process.HasExited) { [Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 100 }
@@ -79,6 +82,7 @@ $save.Add_Click({
     if($ExistingSetup) {$message='Saved for your existing OmniRoute setup. Modes, port and existing keys were preserved.'}
     if($result.restartNeeded) {$message+=' Restart OmniRoute with omni service stop, then omni service start.'}
     if($result.failed.Count -gt 0) {$message+=' Some supplied keys failed validation: '+($result.failed -join ', ')+'. Existing keys were kept. Reopen Settings to retry.'}
+    foreach($candidate in $result.codingCandidates) {$message+=[Environment]::NewLine+$candidate.provider+'/'+$candidate.model+': '+$candidate.status}
     [Windows.Forms.MessageBox]::Show($message,'Ready'); $form.Close()
   } catch { [Windows.Forms.MessageBox]::Show('Setup could not finish. Check your connection and try again. No key values were logged.','Setup error') }
   finally { $save.Enabled=$true; $save.Text='Validate and save' }

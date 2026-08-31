@@ -39,10 +39,12 @@ if (process.argv[1] && new URL(import.meta.url).pathname.endsWith('/settings-lin
     const consent=await hiddenPrompt('Confirm free-only accounts, no paid overages or auto-top-up. Type yes: ');
     if(consent.trim().toLowerCase()!=='yes') throw new Error('Free-only confirmation is required.');
     for(const names of Object.values(fields)) for(const name of names) keys[name]=await hiddenPrompt(`${name}: `);
+    const validateCodingCandidates=(await hiddenPrompt('Test Kimi K2.6 / Qwen3 Coder free candidates? Up to one extra call per supplied key. Type yes: ')).trim().toLowerCase()==='yes';
     console.log('Validating supplied keys with small API requests (uses free quota)…');
-    const result=await configure({keys,freeOnlyConfirmed:true},getRuntimePaths());
+    const result=await configure({keys,freeOnlyConfirmed:true,validateCodingCandidates},getRuntimePaths());
     console.log(`Saved: ${result.accepted.join(', ') || 'existing keys retained'}.`);
     if(result.failed.length) console.log(`Not updated: ${result.failed.join(', ')}. Check keys, eligibility and free quota; saved working keys were preserved.`);
+    for(const candidate of result.codingCandidates) console.log(`${candidate.provider}/${candidate.model}: ${candidate.status}`);
     console.log('Ready. Close any running OmniRoute Regular window, then run Launch.sh.');
   } catch(error) { console.error(globalRedactor.redactText(error.message));process.exitCode=1; }
   finally {for(const name of Object.keys(keys)) keys[name]='';}
