@@ -100,3 +100,13 @@ test('validation never invokes a disabled, forbidden or unknown-price model',asy
   }})});
   assert.equal(result.ready,true);assert.ok(calls.length);
 });
+test('new coding candidates are opt-in and activated only after their own validation',async()=>{
+  const {paths,protector}=await context();const calls=[];
+  const base=regularConfig();
+  assert.equal(base.providers.find(p=>p.id==='nvidia').models.find(m=>m.modelId==='moonshotai/kimi-k2.6')?.enabled,false);
+  await configure({keys:{NVIDIA_API_KEY:fixture},freeOnlyConfirmed:true,validateCodingCandidates:true},paths,{protector,factory:()=>({generate:async r=>{calls.push(r.modelId);return {text:'OK'};}})});
+  assert.ok(calls.includes('moonshotai/kimi-k2.6'));
+  assert.equal((await loadConfig(paths)).providers.find(p=>p.id==='nvidia').models.find(m=>m.modelId==='moonshotai/kimi-k2.6').enabled,true);
+  await configure({keys:{},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  assert.equal((await loadConfig(paths)).providers.find(p=>p.id==='nvidia').models.find(m=>m.modelId==='moonshotai/kimi-k2.6').enabled,true);
+});
