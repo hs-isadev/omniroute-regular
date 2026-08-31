@@ -6,6 +6,7 @@ import { createProviders, buildRegistry } from '../packages/providers/dist/index
 import { OmniRouter } from '../packages/core/dist/index.js';
 import { AuditStore, JsonlLogger, globalRedactor } from '../packages/observability/dist/index.js';
 import { serveOmniMcp } from '../packages/mcp-server/dist/index.js';
+import { assertRegularProviderPolicy } from './regular-policy.mjs';
 
 // No listening socket, daemon token, provider login or credential writes.
 // A host-owned stdio process exits on EOF; each connection keeps one router.
@@ -15,6 +16,8 @@ export async function createRegularBackend(options={}) {
   const config=options.config??await loadConfig(paths);
   if(!config.routing.freeOnly) throw new Error('Antigravity MCP requires free-only configuration.');
   if(config.routing.defaultMode!=='regular') throw new Error('Antigravity MCP requires an isolated regular profile, not an orchestrator profile.');
+  // Check before loading/decrypting any credentials, not only during key entry.
+  assertRegularProviderPolicy(config);
   let router=options.router,registry=options.registry,recent=options.recent;
   let routeSignal,cache,loadedAt=0;
   if(!router) {

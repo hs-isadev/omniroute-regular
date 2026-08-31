@@ -4,6 +4,8 @@ import { SecretVault } from '../packages/vault/dist/index.js';
 import { createConfiguredProvider } from '../packages/providers/dist/index.js';
 import { globalRedactor } from '../packages/observability/dist/index.js';
 import { pathToFileURL } from 'node:url';
+import { CREDIT_PROVIDERS, CODING_CANDIDATES } from './regular-policy.mjs';
+export { CODING_CANDIDATES } from './regular-policy.mjs';
 
 export const fields = {
   openrouter: ['OPENROUTER_API_KEY'], groq: ['GROQ_API_KEY'], gemini: ['GEMINI_API_KEY'],
@@ -12,10 +14,6 @@ export const fields = {
   kilo: ['KILO_API_KEY'], zai: ['ZAI_API_KEY'], nvidia: ['NVIDIA_API_KEY'],
   vercel: ['VERCEL_AI_GATEWAY_API_KEY'], 'opencode-zen': ['OPENCODE_ZEN_API_KEY'],
 };
-export const CODING_CANDIDATES=[
-  {provider:'nvidia',model:'moonshotai/kimi-k2.6',context:262144},
-  {provider:'openrouter',model:'qwen/qwen3-coder:free',context:131072},
-];
 export function regularConfig() {
   // Never send newly entered keys to an endpoint from editable runtime config.
   const existing = structuredClone(DEFAULT_CONFIG);
@@ -43,6 +41,9 @@ export function regularConfig() {
 export async function configure(input, paths, { protector, factory = createConfiguredProvider, existingSetup = false } = {}) {
   if (input.freeOnlyConfirmed !== true) throw new Error('Confirm free-only provider account settings first.');
   if (!input.keys || typeof input.keys !== 'object') throw new Error('Missing key fields.');
+  const known=new Set(Object.values(fields).flat());
+  if(Object.keys(input.keys).some(key=>!known.has(key))) throw new Error('Unknown credential field. Use only the supplied template fields.');
+  if(!existingSetup&&CREDIT_PROVIDERS.some(id=>fields[id].some(name=>input.keys[name]?.trim()))) throw new Error('Credit-based providers are disabled in strict Regular mode.');
   for (const value of Object.values(input.keys)) {
     if (typeof value !== 'string' || /[\r\n\0]/.test(value) || value.length > 4096) throw new Error('Invalid key format.');
     globalRedactor.register(value);
@@ -64,6 +65,7 @@ export async function configure(input, paths, { protector, factory = createConfi
     if (!Object.values(input.keys).some(value=>value.trim()) && !config.providers.some(provider=>provider.enabled && vault.get(provider.id))) throw new Error('At least one supported worker credential is required.');
     const accepted = [], failed = [], codingCandidates=[];
     for (const [id, names] of Object.entries(fields)) {
+      if(!existingSetup&&CREDIT_PROVIDERS.includes(id)) {config.providers.find(p=>p.id===id).enabled=false;continue;}
       const supplied = names.some(name => input.keys[name]?.trim());
       const settings = config.providers.find(provider => provider.id === id);
       const retainedEnabled = existingSetup ? settings.enabled : !!vault.get(id);
