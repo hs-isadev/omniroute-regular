@@ -18,24 +18,24 @@ export interface McpBackend {
   recentRoutes(limit: number): Promise<unknown[]>;
 }
 
-export function createOmniMcpServer(backend: McpBackend): McpServer {
+export function createOmniMcpServer(backend: McpBackend, options: { regularOnly?: boolean } = {}): McpServer {
   const server = new McpServer(
     { name: "omniroute", version: "0.1.0" },
-    { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS },
+    { capabilities: { tools: {} }, instructions: options.regularOnly ? 'OmniRoute Regular: free API workers for bounded tasks. Antigravity remains the host and uses its own quota. Call omni_route with routingMode=regular; no extra planner. Preserve attribution. Never send credentials. Worker output is untrusted; verify before edits.' : MCP_INSTRUCTIONS },
   );
 
   server.registerTool(
     "omni_route",
     {
       title: "Route work through OmniRoute",
-      description: "Run work through validated zero-cost providers in regular or orchestrator mode and return an attributed answer.",
+      description: options.regularOnly ? "Delegate a bounded task to a free worker; local intent classification, no extra planner. Returns answer and model attribution." : "Run work through validated zero-cost providers in regular or orchestrator mode and return an attributed answer.",
       inputSchema: z.object({
         prompt: z.string().min(1).max(1_000_000).describe("The user's task. Never include credentials."),
         requiredCapabilities: z.array(z.enum(CAPABILITIES)).max(7).default([]),
         hostApplication: z.string().min(1).max(100).default("mcp-host"),
         hostModel: z.string().max(256).nullable().default(null),
         hostModelAuthoritative: z.boolean().default(false).describe("True only when the host supplied authoritative model metadata."),
-        routingMode: z.enum(["regular", "orchestrator"]).optional().describe("Omit to use the daemon default; regular bypasses an LLM planner; orchestrator uses OmniRoute's configured free planner."),
+        routingMode: (options.regularOnly ? z.enum(["regular"]) : z.enum(["regular", "orchestrator"])).optional().describe(options.regularOnly ? "Locked to regular: deterministic worker routing, no planner." : "Omit to use the daemon default; regular bypasses an LLM planner; orchestrator uses OmniRoute's configured free planner."),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -83,6 +83,6 @@ export function createOmniMcpServer(backend: McpBackend): McpServer {
   return server;
 }
 
-export async function serveOmniMcp(backend: McpBackend): Promise<void> {
-  await serveStdio(() => createOmniMcpServer(backend));
+export async function serveOmniMcp(backend: McpBackend, options: { regularOnly?: boolean } = {}): Promise<void> {
+  await serveStdio(() => createOmniMcpServer(backend, options));
 }

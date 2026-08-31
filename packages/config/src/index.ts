@@ -309,8 +309,10 @@ export function validateConfig(config: OmniConfig): void {
   if (!providerIds.has(config.routing.orchestratorProviderId)) throw new Error("orchestrator provider is not configured");
   const orchestratorProvider = config.providers.find((provider) => provider.id === config.routing.orchestratorProviderId)!;
   const orchestratorModel = orchestratorProvider.models.find((model) => model.modelId === config.routing.orchestratorModelId);
-  if (!orchestratorProvider.enabled || !orchestratorModel?.enabled || !orchestratorModel.allowed) throw new Error("orchestrator provider and model must be enabled and allowed");
-  if (config.routing.freeOnly && (!orchestratorProvider.freeTierOnly || orchestratorModel.inputPerMillionUsd !== 0 || orchestratorModel.outputPerMillionUsd !== 0)) throw new Error("orchestrator must be zero-priced under free-only policy");
+  if (config.routing.defaultMode === "orchestrator") {
+    if (!orchestratorProvider.enabled || !orchestratorModel?.enabled || !orchestratorModel.allowed) throw new Error("orchestrator provider and model must be enabled and allowed");
+    if (config.routing.freeOnly && (!orchestratorProvider.freeTierOnly || orchestratorModel.inputPerMillionUsd !== 0 || orchestratorModel.outputPerMillionUsd !== 0)) throw new Error("orchestrator must be zero-priced under free-only policy");
+  }
 }
 
 export function isSafeProviderBaseUrl(url: URL, allowLoopbackHttp: boolean): boolean {

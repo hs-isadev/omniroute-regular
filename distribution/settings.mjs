@@ -45,7 +45,7 @@ export async function configure(input, paths, { protector, factory = createConfi
   try {
     const config = existingSetup ? await loadConfig(paths) : regularConfig();
     if (!config.routing.freeOnly) throw new Error('This key editor only supports an existing free-only configuration.');
-    if (!input.keys.OPENROUTER_API_KEY?.trim() && !vault.get('openrouter')) throw new Error('An OpenRouter API key is required.');
+    if (!Object.values(input.keys).some(value=>value.trim()) && !config.providers.some(provider=>provider.enabled && vault.get(provider.id))) throw new Error('At least one supported worker credential is required.');
     const accepted = [], failed = [];
     for (const [id, names] of Object.entries(fields)) {
       const supplied = names.some(name => input.keys[name]?.trim());
@@ -59,7 +59,8 @@ export async function configure(input, paths, { protector, factory = createConfi
         trusted.freeTierConfirmed = true;
         const provider = factory(trusted, values);
         const preferred = { openrouter:'openrouter/free', groq:'openai/gpt-oss-120b', gemini:'gemini-3.1-flash-lite' }[id];
-        const candidates = preferred ? [preferred] : trusted.freeModelOrder ?? trusted.models.map(model => model.modelId);
+        const eligible = trusted.models.filter(model=>model.enabled && model.allowed && model.inputPerMillionUsd===0 && model.outputPerMillionUsd===0);
+        const candidates = [...new Set([...(preferred?[preferred]:[]),...(trusted.freeModelOrder ?? eligible.map(model=>model.modelId))])].filter(id=>eligible.some(model=>model.modelId===id));
         let validated = false;
         for (const modelId of candidates.slice(0,3)) {
           try {
@@ -74,7 +75,7 @@ export async function configure(input, paths, { protector, factory = createConfi
       } catch { failed.push(id); settings.enabled = retainedEnabled; }
     }
     // Failed entries never replace existing credentials. Other valid entries may be saved.
-    if (!vault.get('openrouter')) throw new Error('OpenRouter validation failed. Check the key and free quota, then try again.');
+    if (!config.providers.some(provider=>provider.enabled && provider.freeTierOnly && vault.get(provider.id) && provider.models.some(model=>model.enabled && model.allowed && model.inputPerMillionUsd===0 && model.outputPerMillionUsd===0))) throw new Error('Worker validation failed. At least one valid free provider is required; check the key and quota.');
     await mkdir(paths.vaultDir, {recursive:true});
     await vault.save(paths.vault); await saveConfig(config, paths);
     return { accepted, failed, ready:true };
