@@ -30,7 +30,10 @@ export async function createRegularBackend(options={}) {
       if(cache&&Date.now()-loadedAt<config.routing.modelHealthTtlSeconds*1000) return cache;
       cache=await buildRegistry(config,providers,routeSignal??AbortSignal.timeout(60_000));loadedAt=Date.now();return cache;
     };
-    const audit=new AuditStore(paths.routes),logger=new JsonlLogger(paths.log);
+    const audit=new AuditStore(paths.routes),sink=new JsonlLogger(paths.log);
+    // Upstream error bodies can echo user content. Return redacted details to
+    // the caller, but persist only a generic error plus routing metadata.
+    const logger={write:(level,event,data)=>sink.write(level,event,event==='route.failed'?{...data,error:'Worker failed; details returned to the host, not persisted.'}:data)};
     recent=limit=>audit.recent(limit);
     router=new OmniRouter({config,providers,registry,audit,logger});
   }
