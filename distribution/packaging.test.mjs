@@ -15,3 +15,8 @@ test('both platform launchers forward project arguments through versioned instal
   assert.match(await source('Setup.sh'),/install.mjs/);
   assert.doesNotMatch(await source('Settings.ps1'),/OpenRouter is required/);
 });
+test('Linux extracted-package smoke follows package version instead of a stale archive',async()=>{
+  const smoke=await source('../scripts/linux-package-smoke.sh');
+  assert.doesNotMatch(smoke,/OmniRoute-Regular-\d+\.\d+\.\d+/);
+  assert.match(smoke,/version=/);
+});
