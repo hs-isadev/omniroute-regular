@@ -5,7 +5,7 @@ const source=name=>readFile(new URL(name,import.meta.url),'utf8');
 test('default packages bundle MCP but not OpenCode and include provenance',async()=>{
   const build=await source('../scripts/package-regular.mjs');
   assert.doesNotMatch(build,/const openCodePackage|opencode:.*1\.18/);
-  for(const name of ['antigravity.mjs','mcp-regular.mjs','install.mjs','provenance.json','dependencies.json']) assert.ok(build.includes(name),name);
+  for(const name of ['antigravity.mjs','mcp-regular.mjs','install.mjs','provenance.json','dependencies.json','docs/testing/antigravity-regular.tdd.md']) assert.ok(build.includes(name),name);
 });
 test('both platform launchers forward project arguments through versioned installs',async()=>{
   assert.match(await source('Launch.sh'),/active-version.txt/);
