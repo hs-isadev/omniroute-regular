@@ -8,6 +8,11 @@ import test from "node:test";
 
 const repository = dirname(fileURLToPath(new URL("../package.json", import.meta.url)));
 const installer = join(repository, "installers", "windows", "install.ps1");
+test('source installer prunes generated package trees before recursion',async()=>{
+  const source=await readFile(installer,'utf8');
+  for(const name of ['.build','.cache','release','test-artifacts','artifacts'])assert.ok(source.includes("'"+name+"'"),name);
+  assert.doesNotMatch(source,/Get-ChildItem -LiteralPath \$sourceRoot -Recurse -File/);
+});
 
 test("Windows installer restores the previous application and shim after post-setup failure", { skip: process.platform !== "win32", timeout: 120_000 }, async () => {
   const root = await mkdtemp(join(tmpdir(), "omniroute-installer-rollback-"));
