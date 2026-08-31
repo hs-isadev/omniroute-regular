@@ -34,6 +34,13 @@ test('Antigravity demanding coding fallback skips inadequate tiny models', async
   assert.deepEqual(f.providers.get('groq')!.calls.map(c=>c.modelId),['big']);
   assert.match(result.attribution.policyDecisions.join(' '),/quality floor/);
 });
+test('Antigravity initially chooses the strongest configured eligible tier across providers',async()=>{
+  const f=fixture(),root=await mkdtemp(join(tmpdir(),'omni-initial-quality-'));
+  for(const m of f.models) if(m.providerId==='groq'&&m.modelId==='big')m.intelligenceTier=4;
+  const router=new OmniRouter({config:f.config,providers:f.providers,registry:async()=>f.snapshot,audit:new AuditStore(join(root,'routes')),logger:new JsonlLogger(join(root,'logs'))});
+  const result=await router.route({prompt:'Refactor the entire multi-file coding architecture.',routingMode:'regular',sourceClient:'antigravity-mcp',hostApplication:'antigravity',hostModel:null,hostModelAuthoritative:false,attachments:[],requestedCapabilities:['coding'],maxOutputTokens:100,privacyMode:null,metadata:{workerTextOnly:'true'}},AbortSignal.timeout(5000));
+  assert.equal(result.attribution.worker.providerId,'gemini');
+});
 
 test("model ladder upgrades to best on the selected provider, exhausts its smaller models, then changes provider", async () => {
   const f = fixture(), calls: string[] = [];
