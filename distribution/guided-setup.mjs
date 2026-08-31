@@ -18,16 +18,16 @@ async function question(label) {
   try {return await input.question(label);} finally {input.close();}
 }
 export async function runGuidedSetup({root,platform=process.platform,node=process.execPath,
-  interactive=!!process.stdin.isTTY,ask=question,tell=console.log,run=runStep}={}) {
+  interactive=!!process.stdin.isTTY,ask=question,tell=console.log,run=runStep,keyEntry='editor'}={}) {
   if(!root||!isAbsolute(root)) throw new Error('Use an absolute installation root. Run the installed Connect script.');
   if(!['win32','linux'].includes(platform)) throw new Error('Windows or Linux is required.');
   if(!interactive) throw new Error('Guided setup requires an interactive terminal. Use Setup -NoWizard / --no-wizard for install only.');
   const active=(await readFile(join(root,'active-version.txt'),'utf8')).trim();
   if(!/^versions\/[a-zA-Z0-9.-]+$/.test(active)) throw new Error('Invalid active version.');
   const launch=join(root,active,'app/distribution/launch.mjs');
-  tell('Step 2/4: Enter keys in Settings. One suitable provider is enough; blank fields keep saved keys.');
+  tell('Step 2/4: Enter keys locally. One suitable free provider is enough; blank fields keep saved keys.');
   tell('Sign in to Antigravity itself separately. Never enter account passwords or cookies here.');
-  const settings=platform==='win32'
+  const settings=keyEntry!=='masked' ? [node,[join(root,active,'app/distribution/key-editor.mjs')]] : platform==='win32'
     ? ['powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(root,'Settings.ps1'),'-InstallRoot',root,'-RequireReady']]
     : ['sh',[join(root,'Settings.sh')]];
   if(await run(...settings)!==0) throw new Error('Key setup cancelled or failed. No workspace was connected. Run Connect to resume.');
@@ -54,6 +54,6 @@ export async function runGuidedSetup({root,platform=process.platform,node=proces
   return {status:'launched',workspace};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href) {
-  try {await runGuidedSetup({root:process.env.OMNIROUTE_REGULAR_ROOT});}
+  try {await runGuidedSetup({root:process.env.OMNIROUTE_REGULAR_ROOT,keyEntry:process.argv.includes('--masked')?'masked':'editor'});}
   catch(error) {console.error(error.message);process.exitCode=1;}
 }

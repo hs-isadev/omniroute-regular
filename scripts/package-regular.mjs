@@ -61,7 +61,7 @@ const npmCli=join(work,nodeFolder,linux?'lib/node_modules/npm/bin/npm-cli.js':'n
 await run(process.execPath,[npmCli,'ci','--omit=dev','--ignore-scripts','--no-audit','--no-fund',`--os=${linux?'linux':'win32'}`,'--cpu=x64'],appStage);
 await cp(appStage,join(payload,'app'),{recursive:true,dereference:true});
 await mkdir(join(payload,'app/distribution'),{recursive:true});
-for(const name of ['launch.mjs','settings.mjs','antigravity.mjs','mcp-regular.mjs','install.mjs','guided-setup.mjs']) await cp(join(root,'distribution',name),join(payload,'app/distribution',name));
+for(const name of ['launch.mjs','settings.mjs','antigravity.mjs','mcp-regular.mjs','install.mjs','guided-setup.mjs','key-editor.mjs','regular-policy.mjs','private-key-path.ps1']) await cp(join(root,'distribution',name),join(payload,'app/distribution',name));
 if(linux) await cp(join(root,'distribution/settings-linux.mjs'),join(payload,'app/distribution/settings-linux.mjs'));
 for(const name of linux?['Settings.sh','Launch.sh','Manage.sh','Connect.sh']:['Settings.ps1','Settings.cmd','Launch.cmd','Launch.ps1','Manage.cmd','Manage.ps1','Connect.cmd','Connect.ps1']) await cp(join(root,'distribution',name),join(payload,name));
 for(const name of linux?['Setup.sh']:['Setup.ps1','Setup.cmd']) await cp(join(root,'distribution',name),join(release,name));

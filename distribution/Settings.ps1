@@ -45,6 +45,7 @@ $boxes = @{}
 for ($i=0; $i -lt $rows.Count; $i++) {
   $label=New-Object Windows.Forms.Label; $label.Text=$rows[$i][0]; $label.SetBounds(0,(3+$i*42),150,25); $panel.Controls.Add($label)
   $box=New-Object Windows.Forms.TextBox; $box.UseSystemPasswordChar=$true; $box.SetBounds(155,($i*42),370,26); $panel.Controls.Add($box); $boxes[$rows[$i][1]]=$box
+  if(-not $ExistingSetup -and $rows[$i][1] -in @('HF_TOKEN','VERCEL_AI_GATEWAY_API_KEY')) {$box.Enabled=$false; $label.Text+=' (disabled)'}
   $link=New-Object Windows.Forms.LinkLabel; $link.Text='Get key'; $link.Tag=$rows[$i][2]; $link.SetBounds(540,(3+$i*42),75,25)
   $link.Add_LinkClicked({param($sender,$eventArgs) Start-Process $sender.Tag}); $panel.Controls.Add($link)
 }
@@ -53,6 +54,7 @@ $confirm.Text='I checked free-tier/evaluation terms. Paid overages, BYOK and aut
 $confirm.SetBounds(15,393,650,38); $form.Controls.Add($confirm)
 $notice=New-Object Windows.Forms.Label
 $notice.Text='Scroll for all 12 providers. NVIDIA/Kilo: no confidential data; evaluation use only. Vercel/HF: monthly credits. Zen: temporary free. Blank keeps saved keys. Reconnect MCP after saving.'
+if(-not $ExistingSetup) {$notice.Text='10 eligible free-plan/evaluation providers. HF/Vercel credit profiles disabled. No billing, paid overages, BYOK or auto top-up. Blank keeps saved keys. Reconnect MCP after saving.'}
 if($ExistingSetup) {$notice.Text+=' Saving valid keys restarts OmniRoute.'}
 $notice.SetBounds(15,433,650,50); $form.Controls.Add($notice)
 $candidates=New-Object Windows.Forms.CheckBox

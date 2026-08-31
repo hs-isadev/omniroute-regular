@@ -7,4 +7,4 @@ export OMNIROUTE_REGULAR_ROOT
 IFS= read -r active < "$OMNIROUTE_REGULAR_ROOT/active-version.txt"
 case "$active" in versions/*) ;; *) exit 2 ;; esac
 case "${active#versions/}" in ''|*[!a-zA-Z0-9.-]*) exit 2 ;; esac
-exec "$OMNIROUTE_REGULAR_ROOT/$active/node/node" "$OMNIROUTE_REGULAR_ROOT/$active/app/distribution/guided-setup.mjs"
+exec "$OMNIROUTE_REGULAR_ROOT/$active/node/node" "$OMNIROUTE_REGULAR_ROOT/$active/app/distribution/guided-setup.mjs" "$@"

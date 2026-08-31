@@ -2,6 +2,7 @@ import { emitKeypressEvents } from 'node:readline';
 import { configure, fields } from './settings.mjs';
 import { getRuntimePaths } from '../packages/config/dist/index.js';
 import { globalRedactor } from '../packages/observability/dist/index.js';
+import { CREDIT_PROVIDERS } from './regular-policy.mjs';
 
 // Raw TTY input: nothing typed (including confirmation) is echoed or stored in
 // shell history. Refuse redirected stdin rather than encouraging key files.
@@ -38,7 +39,7 @@ if (process.argv[1] && new URL(import.meta.url).pathname.endsWith('/settings-lin
     console.log('Never enter passwords, browser cookies or Claude/ChatGPT login sessions.');
     const consent=await hiddenPrompt('Confirm free-only accounts, no paid overages or auto-top-up. Type yes: ');
     if(consent.trim().toLowerCase()!=='yes') throw new Error('Free-only confirmation is required.');
-    for(const names of Object.values(fields)) for(const name of names) keys[name]=await hiddenPrompt(`${name}: `);
+    for(const [id,names] of Object.entries(fields)) if(!CREDIT_PROVIDERS.includes(id)) for(const name of names) keys[name]=await hiddenPrompt(`${name}: `);
     const validateCodingCandidates=(await hiddenPrompt('Test Kimi K2.6 / Qwen3 Coder free candidates? Up to one extra call per supplied key. Type yes: ')).trim().toLowerCase()==='yes';
     console.log('Validating supplied keys with small API requests (uses free quota)…');
     const result=await configure({keys,freeOnlyConfirmed:true,validateCodingCandidates},getRuntimePaths());

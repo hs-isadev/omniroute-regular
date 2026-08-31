@@ -139,5 +139,9 @@ export async function runEditorSetup({paths=getRuntimePaths(),prompt=ask,launch=
   return result;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href) {
-  try {await runEditorSetup();}catch(error){console.error(error.message);process.exitCode=1;}
+  try {
+    const root=process.env.OMNIROUTE_REGULAR_ROOT;
+    if(!root||!isAbsolute(root))throw new Error('Use the installed Connect script; no main-profile credential fallback is allowed.');
+    await runEditorSetup({paths:getRuntimePaths(join(root,'data'))});
+  }catch(error){console.error(error.message);process.exitCode=1;}
 }
