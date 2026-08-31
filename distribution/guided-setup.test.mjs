@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, mkdir, readFile, writeFile, access } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -68,4 +68,12 @@ test('unsafe state, noninteractive use and nonexistent projects fail closed',asy
   f.options.ask=async()=>join(f.root,'missing');
   await assert.rejects(module.runGuidedSetup(f.options),/existing project/i);
   await assert.rejects(module.runGuidedSetup({...f.options,root:'relative'}),/absolute/i);
+  await assert.rejects(module.runGuidedSetup({...f.options,platform:'unsupported'}),/Windows or Linux/i);
+  f.options.ask=async()=>'relative';
+  await assert.rejects(module.runGuidedSetup(f.options),/absolute existing project/i);
+});
+test('real step runner returns exit status and handles spawn failure without shell interpolation',async()=>{
+  assert.equal(await module.runStep(process.execPath,['-e','process.exit(0)']),0);
+  assert.equal(await module.runStep(process.execPath,['-e','process.exit(7)']),7);
+  await assert.rejects(module.runStep(join(tmpdir(),'omni-missing-executable'),[]),/Could not start a setup step/);
 });

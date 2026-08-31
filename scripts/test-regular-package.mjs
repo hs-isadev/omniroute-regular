@@ -27,7 +27,7 @@ if(linux) {
   await run('sh',[join(bundle,'Setup.sh'),'--install-root',install,'--no-wizard']);
   await run('sh',[join(bundle,'Setup.sh'),'--install-root',install,'--no-wizard']);
   assert.equal((await stat(install)).mode&0o777,0o700);
-  for(const name of ['Setup.sh','payload/Launch.sh','payload/Settings.sh','payload/Manage.sh']) await run('sh',['-n',join(bundle,name)]);
+  for(const name of ['Setup.sh','payload/Launch.sh','payload/Settings.sh','payload/Manage.sh','payload/Connect.sh']) await run('sh',['-n',join(bundle,name)]);
 } else {
   const args=['-NoProfile','-ExecutionPolicy','Bypass','-File',join(bundle,'Setup.ps1'),'-InstallRoot',install,'-NoWizard','-NoShortcuts'];
   await run('powershell.exe',args);await run('powershell.exe',args);
@@ -35,6 +35,8 @@ if(linux) {
 }
 const active=(await readFile(join(install,'active-version.txt'),'utf8')).trim();assert.match(active,/^versions\/[a-zA-Z0-9.-]+$/);
 const payload=join(install,active),node=join(payload,linux?'node/node':'node/node.exe'),app=join(payload,'app');
+await access(join(install,linux?'Connect.sh':'Connect.cmd'));
+await access(join(app,'distribution/guided-setup.mjs'));
 const url=p=>pathToFileURL(join(app,p)).href;
 assert.match(await run(node,['--version']),/v22\.23\.2/);await assert.rejects(access(join(payload,'opencode')),/ENOENT/);
 const workspace=join(temp,'Project With Spaces');await mkdir(workspace);

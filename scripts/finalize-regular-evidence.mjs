@@ -10,7 +10,7 @@ for(const platform of ['windows-x64','linux-x64']) {
   const bundle=join(root,'release','OmniRoute-Regular-'+version+'-'+platform);
   const before=await readFile(join(bundle,'manifest.json'));await verifyPackage(bundle,platform);
   await mkdir(join(bundle,'docs/testing'),{recursive:true});await mkdir(join(bundle,'plans'),{recursive:true});
-  for(const path of ['README.md','docs/antigravity-regular.md','docs/free-provider-expansion.md','docs/testing/antigravity-regular.tdd.md','plans/antigravity-regular.md']) await cp(join(root,path),join(bundle,path));
+  for(const path of ['README.md','docs/antigravity-regular.md','docs/free-provider-expansion.md','docs/testing/antigravity-regular.tdd.md','docs/testing/guided-setup.tdd.md','plans/antigravity-regular.md']) await cp(join(root,path),join(bundle,path));
   const linux=platform==='linux-x64',archive=bundle+(linux?'.tar.gz':'.zip');
   await new Promise((res,rej)=>{const p=spawn(process.platform==='win32'?'tar.exe':'tar',[...(linux?['-czf']:['-a','-cf']),archive,'-C',join(root,'release'),basename(bundle)],{stdio:'inherit',windowsHide:true});p.once('error',rej);p.once('exit',c=>c===0?res():rej(Error('Archive failed')));});
   if(!(await readFile(join(bundle,'manifest.json'))).equals(before))throw Error('Runtime manifest changed during documentation finalization');

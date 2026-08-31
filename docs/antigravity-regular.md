@@ -1,6 +1,14 @@
 # Antigravity Regular setup, migration and limits
 
-Implementation snapshot: 2026-08-31. Version 0.2.0.
+Implementation snapshot: 2026-08-31. Version 0.2.1.
+
+## Guided setup
+
+Run Setup.cmd (Windows) or `sh Setup.sh` (Linux). The installer verifies/copies the package, opens the credential editor, then asks for a project folder. Press Enter to create/use a starter workspace under the install root, or enter an absolute existing project directory without surrounding quotes. It previews the integration and requires **yes** before applying workspace MCP/rules and launching the official host. A missing host or integration conflict stops the flow. Key-entry cancellation/failure never connects a workspace.
+
+Resume with Connect.cmd / Connect.sh (Windows also has an **OmniRoute Regular Finish Setup** desktop shortcut). Keys already saved in this install are retained when their fields are blank. Settings.cmd / Settings.sh still edit keys only. Antigravity sign-in remains manual inside the official app/CLI; no passwords, sessions, browser scraping, or automatic account registration are involved. Setup never commits the user's project or credentials to Git.
+
+For unattended installation, use `Setup.ps1 -NoWizard -NoShortcuts` or `sh Setup.sh --no-wizard`. Guided mode requires an interactive terminal. It prints first-test prompts but does not automatically spend worker quota on a second routing test or claim that the host followed a rule. See [guided setup test evidence](testing/guided-setup.tdd.md).
 
 ## Architecture and trust boundaries
 
@@ -66,7 +74,7 @@ Launch.cmd --detach --workspace "C:\path\to\project" --apply
 ./Launch.sh --detach --workspace "/path/to/project" --apply
 ```
 
-Only unchanged package-owned MCP entry/rule/ownership files are removed. Other servers and backups remain. Then run Manage uninstall. Root launchers and install pointers move to an `uninstalled-UUID` folder; binaries and all user data remain recoverable. Delete the two package desktop shortcuts manually if present. No recursive user-data deletion is performed.
+Only unchanged package-owned MCP entry/rule/ownership files are removed. Other servers and backups remain. Then run Manage uninstall. Root launchers and install pointers move to an `uninstalled-UUID` folder; binaries and all user data remain recoverable. Delete the package desktop shortcuts manually if present. No recursive user-data deletion is performed.
 
 ## Troubleshooting and verification boundaries
 

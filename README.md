@@ -10,11 +10,15 @@ This is quota-limited, not unlimited free frontier inference. The host still con
 
 ## Windows x64
 
-1. Download the Windows ZIP and its SHA-256 file from a trusted release source. Check `Get-FileHash .\OmniRoute-Regular-0.2.0-windows-x64.zip -Algorithm SHA256` against it, then extract the ZIP.
+1. Download the Windows ZIP and its SHA-256 file from a trusted release source. Check `Get-FileHash .\OmniRoute-Regular-0.2.1-windows-x64.zip -Algorithm SHA256` against it, then extract the ZIP.
 2. Install/sign in to official Antigravity. Choose a host model your account offers on the free plan; do not enable paid credits/overages.
 3. Run `Setup.cmd`. It installs for your Windows user and opens the **masked Settings window**. Put your own provider keys there—not in chat or shell commands. Any one suitable provider is enough; OpenRouter is optional.
 4. Optionally tick the extra Kimi/Qwen candidate test. Save validates short requests, consuming a little free quota. Blank fields retain saved keys.
-5. Open PowerShell and preview your chosen project:
+5. Setup continues automatically: enter an existing project folder, or press Enter for a starter workspace. Review the preview, then type **yes** to connect and open Antigravity. Closing Settings without saving stops setup. No extra commands are needed.
+
+To resume later, double-click **OmniRoute Regular Finish Setup** on your desktop, or run `%LOCALAPPDATA%\OmniRouteRegular\Connect.cmd`. To add keys only, use **OmniRoute Regular Settings**. Blank fields keep saved keys, so you do not need to paste every key again.
+
+Advanced/manual launch remains available:
 
 ```powershell
 & "$env:LOCALAPPDATA\OmniRouteRegular\Launch.cmd" --workspace "C:\path\to\project"
@@ -28,15 +32,13 @@ The second command merges workspace MCP/rules and opens Antigravity. Restart/rec
 Install official Antigravity separately and sign in. An **unlocked Secret Service keyring**, session D-Bus, and `secret-tool` are required to save credentials. On Ubuntu the packages are `libsecret-tools` and `gnome-keyring`; install them through your system package manager if absent. Never run OmniRoute setup with sudo. ARM, Alpine/musl and headless key storage are unsupported.
 
 ```sh
-sha256sum -c OmniRoute-Regular-0.2.0-linux-x64.tar.gz.sha256
-tar -xzf OmniRoute-Regular-0.2.0-linux-x64.tar.gz
-cd OmniRoute-Regular-0.2.0-linux-x64
+sha256sum -c OmniRoute-Regular-0.2.1-linux-x64.tar.gz.sha256
+tar -xzf OmniRoute-Regular-0.2.1-linux-x64.tar.gz
+cd OmniRoute-Regular-0.2.1-linux-x64
 sh Setup.sh
-"$HOME/.local/share/OmniRouteRegular/Launch.sh" --workspace "/path/to/project"
-"$HOME/.local/share/OmniRouteRegular/Launch.sh" --workspace "/path/to/project" --apply
 ```
 
-If you set XDG_DATA_HOME, use `$XDG_DATA_HOME/OmniRouteRegular` instead. Linux Settings hides all input, including stars; paste each requested API key/token locally. There is no plaintext fallback.
+Setup runs hidden key entry, asks for your project (Enter creates a starter workspace), previews the integration, then asks for **yes** before connecting and launching. Resume with `"$HOME/.local/share/OmniRouteRegular/Connect.sh"`; use `Settings.sh` for keys only. If you set XDG_DATA_HOME, use `$XDG_DATA_HOME/OmniRouteRegular` instead. Linux Settings hides all input, including stars; Enter skips/keeps each key. There is no plaintext fallback. `Setup.ps1 -NoWizard` and `sh Setup.sh --no-wizard` still provide noninteractive install-only mode.
 
 ## First request
 
