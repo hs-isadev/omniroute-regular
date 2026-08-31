@@ -24,6 +24,16 @@ function fixture() {
   const providers = new Map(["groq", "gemini", "openrouter"].map((id) => [id, new LimitProvider(id)]));
   return { config, models, snapshot: registryFixture(models), providers, audit: { fallbackAttempts: [], policyDecisions: [] } };
 }
+test('Antigravity demanding coding fallback skips inadequate tiny models', async()=>{
+  const f=fixture(),root=await mkdtemp(join(tmpdir(),'omni-quality-floor-'));
+  f.config.routing.defaultMode='regular';
+  f.providers.get('groq')!.responses.push({text:'',error:limited()});
+  const router=new OmniRouter({config:f.config,providers:f.providers,registry:async()=>f.snapshot,audit:new AuditStore(join(root,'routes')),logger:new JsonlLogger(join(root,'logs'))});
+  const result=await router.route({prompt:'Refactor the entire multi-file coding architecture.',routingMode:'regular',sourceClient:'antigravity-mcp',hostApplication:'antigravity',hostModel:null,hostModelAuthoritative:false,attachments:[],requestedCapabilities:['coding'],maxOutputTokens:100,privacyMode:null,metadata:{workerTextOnly:'true'}},AbortSignal.timeout(5000));
+  assert.equal(result.attribution.worker.providerId,'gemini');
+  assert.deepEqual(f.providers.get('groq')!.calls.map(c=>c.modelId),['big']);
+  assert.match(result.attribution.policyDecisions.join(' '),/quality floor/);
+});
 
 test("model ladder upgrades to best on the selected provider, exhausts its smaller models, then changes provider", async () => {
   const f = fixture(), calls: string[] = [];
