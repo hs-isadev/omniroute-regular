@@ -39,3 +39,13 @@ test('installer rejects unmarked destinations, unsafe manifests and extra files'
   const manifest=JSON.parse(await readFile(join(f.bundle,'manifest.json')));manifest.files[0].path='../escape';
   await writeFile(join(f.bundle,'manifest.json'),JSON.stringify(manifest));await assert.rejects(verifyPackage(f.bundle),/unsafe/i);
 });
+test('reinstall detects installed payload tampering and upgrade preserves edited launchers',async()=>{
+  const f=await fixture();await installPackage(f.bundle,f.install);
+  const active=(await readFile(join(f.install,'active-version.txt'),'utf8')).trim();
+  await writeFile(join(f.install,active,'app/version.txt'),'tampered');
+  await assert.rejects(installPackage(f.bundle,f.install),/checksum/i);
+  await writeFile(join(f.install,'Launch.cmd'),'user-edited');
+  const next=await fixture('0.2.1');
+  await assert.rejects(installPackage(next.bundle,f.install),/modified/i);
+  assert.equal(await readFile(join(f.install,'Launch.cmd'),'utf8'),'user-edited');
+});
