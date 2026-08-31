@@ -1,6 +1,8 @@
 # Free provider/authentication guide — reviewed 2026-08-31
 
-The masked key editor now exposes **12 providers**: the original seven plus Kilo, Z.AI, NVIDIA, Vercel and OpenCode Zen. Four of these already had opt-in backend profiles; this update exposes them in the portable installer and adds an existing-installation key editor. Kilo is a new backend integration. They are not activated merely by installing the update: add your own key and confirm the applicable free-tier terms first.
+**Regular v0.2.2 exposes 10 eligible providers and disables Hugging Face/Vercel credit-based profiles.** Their existing stored keys are retained but are not used by Regular. The shared/legacy backend still supports the 12 profiles documented below. No provider activates merely by installing: add/reuse your own key and confirm applicable free-plan/evaluation terms. Notepad/Linux editor slots show signup links and saved-provider status without exporting saved keys.
+
+Free access is conditional and quota-limited. [Gemini billing](https://ai.google.dev/gemini-api/docs/billing) distinguishes free projects from billing-enabled paid tiers. [Cloudflare pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/) limits the free plan and requires paid access for some newer models (not included in this package's allowlist). [Cohere](https://docs.cohere.com/docs/rate-limits) distinguishes evaluation and production keys. [Kilo Auto Free](https://kilo.ai/docs/getting-started/rate-limits-and-costs), [Z.AI Flash](https://docs.z.ai/guides/overview/pricing) and [Zen's temporary free list](https://opencode.ai/docs/zen/) are model-specific offers, not permission to use every model. Do not enable billing to pass validation. No API probe can universally prove that your provider account cannot bill.
 
 | Addition | Get a key | Free access and restrictions |
 |---|---|---|

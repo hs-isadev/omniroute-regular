@@ -1,10 +1,10 @@
 # Antigravity Regular setup, migration and limits
 
-Implementation snapshot: 2026-08-31. Version 0.2.1.
+Implementation snapshot: 2026-08-31. Version 0.2.2.
 
 ## Guided setup
 
-Run Setup.cmd (Windows) or `sh Setup.sh` (Linux). The installer verifies/copies the package, opens the credential editor, then asks for a project folder. Press Enter to create/use a starter workspace under the install root, or enter an absolute existing project directory without surrounding quotes. It previews the integration and requires **yes** before applying workspace MCP/rules and launching the official host. A missing host or integration conflict stops the flow. Key-entry cancellation/failure never connects a workspace.
+Run Setup.cmd (Windows) or `sh Setup.sh` (Linux). The installer verifies/copies the package and opens Notepad/the Linux desktop text editor with key slots. Save and close the editor, then confirm free-only accounts and import in the terminal. It next asks for a project folder. Press Enter to create/use a starter workspace under the install root, or enter an absolute existing project directory without surrounding quotes. It previews integration and requires **yes** before applying workspace MCP/rules and launching the official host. A missing host or integration conflict stops the flow. Declining import never connects a workspace.
 
 Resume with Connect.cmd / Connect.sh (Windows also has an **OmniRoute Regular Finish Setup** desktop shortcut). Keys already saved in this install are retained when their fields are blank. Settings.cmd / Settings.sh still edit keys only. Antigravity sign-in remains manual inside the official app/CLI; no passwords, sessions, browser scraping, or automatic account registration are involved. Setup never commits the user's project or credentials to Git.
 
@@ -33,9 +33,13 @@ When host quota runs out, this workflow can stop even with worker quota remainin
 Windows default install: `%LOCALAPPDATA%\OmniRouteRegular`.
 Linux default install: `${XDG_DATA_HOME:-$HOME/.local/share}/OmniRouteRegular`.
 
-Use Settings.cmd / Settings.sh. Fields accept documented API keys/service tokens; Cloudflare also needs its non-secret account ID. Never enter passwords, consumer cookies, OAuth sessions or Claude/ChatGPT/Antigravity login tokens.
+Use Setup/Connect for text-editor slots, or `Connect.cmd --masked` / `Connect.sh --masked` and Settings.cmd / Settings.sh for masked/hidden input. Fields accept documented API keys/service tokens; Cloudflare also needs its non-secret account ID. Never enter passwords, consumer cookies, OAuth sessions or Claude/ChatGPT/Antigravity login tokens.
 
 Windows uses current-user DPAPI. Linux uses Secret Service to protect the vault key; an unlocked desktop keyring and secret-tool are mandatory. Vault/data stay under the install root's `data` directory and are not in release archives. The Windows form sends values to its child over stdin; Linux reads hidden TTY input. Failed replacements keep existing keys. Saving does not modify another install's profile.
+
+The optional masked path avoids an import file. Default editor entry uses a current-user-only `credentials.txt` under `%LOCALAPPDATA%\OmniRouteRegular-KeyEntry\<profile-id>` or `$HOME/.local/share/OmniRouteRegular-KeyEntry/<profile-id>`. It rejects Git, recognized sync-folder, symlink/reparse and hardlink locations. Unknown custom synchronization cannot be detected universally. Only provider-status metadata is shown; stored secrets are never exported. Pending populated edits survive reruns; blank templates refresh saved status. Successful values are removed from this file after vault save, failed values remain for retry, and concurrent edits stop cleanup. Editor backups, clipboard history, RAM copies, filesystem snapshots and malware are outside this protection. Cleanup is not secure erasure. Never distribute this input directory or installed data. No login-time editor startup task is added.
+
+Strict Regular mode disables Hugging Face/Vercel credit profiles while keeping their vault records. It validates enabled endpoints, provider types, credential fields, known model IDs and zero configured prices against bundled allowlists before credential loading. Other profile modes are unchanged. Model allowlists are dated, not a proof of an account's current billing plan; a free-plan/evaluation account with no billing/overages/BYOK/top-up is required. Test evidence: [editor and policy checks](testing/key-editor.tdd.md).
 
 A short completion validates connectivity, not billing status or coding correctness. At most three baseline model attempts per supplied provider plus an optional extra coding candidate check are made. Reconnect MCP after saving. Enabling an account free tier or disabling billing is the user's action on the provider website.
 

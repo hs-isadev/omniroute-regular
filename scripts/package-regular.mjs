@@ -73,6 +73,7 @@ await cp(join(root,'docs/antigravity-regular.md'),join(release,'docs/antigravity
 await mkdir(join(release,'docs/testing'),{recursive:true});
 await cp(join(root,'docs/testing/antigravity-regular.tdd.md'),join(release,'docs/testing/antigravity-regular.tdd.md'));
 await cp(join(root,'docs/testing/guided-setup.tdd.md'),join(release,'docs/testing/guided-setup.tdd.md'));
+await cp(join(root,'docs/testing/key-editor.tdd.md'),join(release,'docs/testing/key-editor.tdd.md'));
 await mkdir(join(release,'plans'),{recursive:true});
 await cp(join(root,'plans/antigravity-regular.md'),join(release,'plans/antigravity-regular.md'));
 const lock=JSON.parse(await readFile(join(root,'package-lock.json'),'utf8'));

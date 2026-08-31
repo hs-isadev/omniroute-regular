@@ -52,6 +52,21 @@ await configure({keys:{GROQ_API_KEY:'fixture-package-only-not-real'},freeOnlyCon
 `],{env});
 const rawVault=await readFile(join(install,'data/vault/vault.json'),'utf8');assert.ok(!rawVault.includes('fixture-package-only-not-real'));
 const config=JSON.parse(await readFile(join(install,'data/config.json'),'utf8'));assert.deepEqual(config.providers.filter(p=>p.enabled).map(p=>p.id),['groq']);
+// Editor import with a fake key/provider, never an actual GUI or live account.
+await run(node,['--input-type=module','-e',`
+import assert from 'node:assert/strict';
+import {mkdtemp,readFile,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';import {join} from 'node:path';
+import {prepareKeyFile,importKeyFile} from ${JSON.stringify(url('distribution/key-editor.mjs'))};
+import {getRuntimePaths} from ${JSON.stringify(url('packages/config/dist/index.js'))};
+import {InMemoryKeyProtector} from ${JSON.stringify(url('packages/vault/dist/index.js'))};
+const dir=await mkdtemp(join(tmpdir(),'omni-package-editor-')),paths=getRuntimePaths(join(dir,'runtime'));
+const options={dir:join(dir,'input'),paths,protector:new InMemoryKeyProtector(Buffer.alloc(32,8)),factory:()=>({generate:async()=>({text:'OK'})})};
+const file=await prepareKeyFile(options);await writeFile(file,'GROQ_API_KEY=fixture-package-editor\\n');
+await importKeyFile({...options,file,freeOnlyConfirmed:true});
+assert.ok(!(await readFile(file,'utf8')).includes('fixture-package-editor'));
+assert.ok(!(await readFile(paths.vault,'utf8')).includes('fixture-package-editor'));
+`],{env});
 
 // Genuine stdio + production router, FAKE provider. Not an Antigravity host test.
 async function protocol() {

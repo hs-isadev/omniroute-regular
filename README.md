@@ -10,13 +10,15 @@ This is quota-limited, not unlimited free frontier inference. The host still con
 
 ## Windows x64
 
-1. Download the Windows ZIP and its SHA-256 file from a trusted release source. Check `Get-FileHash .\OmniRoute-Regular-0.2.1-windows-x64.zip -Algorithm SHA256` against it, then extract the ZIP.
+1. Download the Windows ZIP and its SHA-256 file from a trusted release source. Check `Get-FileHash .\OmniRoute-Regular-0.2.2-windows-x64.zip -Algorithm SHA256` against it, then extract the ZIP.
 2. Install/sign in to official Antigravity. Choose a host model your account offers on the free plan; do not enable paid credits/overages.
-3. Run `Setup.cmd`. It installs for your Windows user and opens the **masked Settings window**. Put your own provider keys there—not in chat or shell commands. Any one suitable provider is enough; OpenRouter is optional.
-4. Optionally tick the extra Kimi/Qwen candidate test. Save validates short requests, consuming a little free quota. Blank fields retain saved keys.
-5. Setup continues automatically: enter an existing project folder, or press Enter for a starter workspace. Review the preview, then type **yes** to connect and open Antigravity. Closing Settings without saving stops setup. No extra commands are needed.
+3. Run `Setup.cmd`. It installs for your Windows user and opens **Notepad with API key slots and signup links**. Providers already saved in this installation are marked; their secret values are never shown. One suitable free provider is enough. Blank slots retain saved keys.
+4. Fill only the keys you want to add/change, **save and close Notepad**, then return to setup. Type **yes** to confirm free-plan accounts (no billing/overages/BYOK/top-up) and import. Optionally test Kimi/Qwen candidates. Short validation requests use free quota; successful keys are encrypted and removed from the text file. Failed entries stay for retry.
+5. Enter an existing project folder, or press Enter for a starter workspace. Review the preview, then type **yes** to connect and open Antigravity. Declining import stops setup. No extra commands are needed.
 
 To resume later, double-click **OmniRoute Regular Finish Setup** on your desktop, or run `%LOCALAPPDATA%\OmniRouteRegular\Connect.cmd`. To add keys only, use **OmniRoute Regular Settings**. Blank fields keep saved keys, so you do not need to paste every key again.
+
+**Text-file risk:** Notepad/editor session backups, clipboard history, disk snapshots and malware can retain plaintext. Disable editor session recovery before entering keys. Cleanup is not secure erasure. For less exposure, use `Connect.cmd --masked` or the Settings shortcut instead. Files are created under `%LOCALAPPDATA%\OmniRouteRegular-KeyEntry\<profile-id>\credentials.txt`, outside the package/project, with current-user-only permissions. Cancelled/failed imports leave pending plaintext there. No OS-login startup task is added.
 
 Advanced/manual launch remains available:
 
@@ -32,13 +34,13 @@ The second command merges workspace MCP/rules and opens Antigravity. Restart/rec
 Install official Antigravity separately and sign in. An **unlocked Secret Service keyring**, session D-Bus, and `secret-tool` are required to save credentials. On Ubuntu the packages are `libsecret-tools` and `gnome-keyring`; install them through your system package manager if absent. Never run OmniRoute setup with sudo. ARM, Alpine/musl and headless key storage are unsupported.
 
 ```sh
-sha256sum -c OmniRoute-Regular-0.2.1-linux-x64.tar.gz.sha256
-tar -xzf OmniRoute-Regular-0.2.1-linux-x64.tar.gz
-cd OmniRoute-Regular-0.2.1-linux-x64
+sha256sum -c OmniRoute-Regular-0.2.2-linux-x64.tar.gz.sha256
+tar -xzf OmniRoute-Regular-0.2.2-linux-x64.tar.gz
+cd OmniRoute-Regular-0.2.2-linux-x64
 sh Setup.sh
 ```
 
-Setup runs hidden key entry, asks for your project (Enter creates a starter workspace), previews the integration, then asks for **yes** before connecting and launching. Resume with `"$HOME/.local/share/OmniRouteRegular/Connect.sh"`; use `Settings.sh` for keys only. If you set XDG_DATA_HOME, use `$XDG_DATA_HOME/OmniRouteRegular` instead. Linux Settings hides all input, including stars; Enter skips/keeps each key. There is no plaintext fallback. `Setup.ps1 -NoWizard` and `sh Setup.sh --no-wizard` still provide noninteractive install-only mode.
+Setup opens the system desktop text editor (via xdg-open when available) with the same key slots. Save and close it, then confirm import in the terminal. It asks for your project, previews integration, and requires **yes** before launch. Resume with `"$HOME/.local/share/OmniRouteRegular/Connect.sh"`; use `Connect.sh --masked` or `Settings.sh` for hidden terminal key entry. If you set XDG_DATA_HOME, use `$XDG_DATA_HOME/OmniRouteRegular` for the install; text input stays under `$HOME/.local/share/OmniRouteRegular-KeyEntry/<profile-id>/credentials.txt` with directory 0700/file 0600. There is no plaintext **vault** fallback; the editor file is temporary plaintext input. `Setup.ps1 -NoWizard` and `sh Setup.sh --no-wizard` still provide noninteractive install-only mode.
 
 ## First request
 
@@ -50,7 +52,9 @@ Then try a bounded coding task with relevant code and requirements. The host mus
 
 ## Providers and routing
 
-The local editor supports 12 opt-in providers, with different access conditions. See [provider/authentication guide](docs/free-provider-expansion.md). Stronger candidates include NVIDIA Kimi K2.6 and OpenRouter Qwen3 Coder free; their individual connectivity check must pass before activation. Coding quality is not certified by that check. No 120B ceiling is imposed.
+Regular offers **10 opt-in free-plan/free-endpoint/evaluation providers**. Hugging Face and Vercel credit-based profiles are disabled, even when their keys are retained. Separate legacy integrations still have 12 profiles. See [provider/authentication guide](docs/free-provider-expansion.md). Stronger candidates include NVIDIA Kimi K2.6 and OpenRouter Qwen3 Coder free; their individual connectivity check must pass before activation. Coding quality is not certified by that check. No 120B ceiling is imposed.
+
+Runtime enforces compiled provider endpoints and free-model IDs before loading keys; editing prices to zero cannot admit an unlisted model. Account free-plan eligibility is still your responsibility: connectivity does not prove billing status, and there is no universal billing-status API. Limits stop/fallback only among eligible free workers. No claim of unlimited access, zero security risk, or superiority over every installer is made. See [security/test evidence](docs/testing/key-editor.tdd.md).
 
 Simple worker questions use a lightweight preference; coding uses a quality preference. Complex coding has a conservative configured-tier floor across fallbacks. Provider-first fallback tries adequate alternatives on the same provider before another. Model tiers/order are provisional, not a benchmark leaderboard. Host-model choice stays in Antigravity.
 
