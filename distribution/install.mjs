@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const platform=()=>process.platform==='win32'?'windows-x64':'linux-x64';
 const json=async path=>JSON.parse((await readFile(path,'utf8')).replace(/^\uFEFF/,''));
-const wrappers=['Launch.cmd','Launch.ps1','Launch.sh','Settings.cmd','Settings.ps1','Settings.sh','Manage.cmd','Manage.ps1','Manage.sh'];
+const wrappers=['Launch.cmd','Launch.ps1','Launch.sh','Settings.cmd','Settings.ps1','Settings.sh','Manage.cmd','Manage.ps1','Manage.sh','Connect.cmd','Connect.ps1','Connect.sh'];
 async function noLinks(path) {
   for(let p=resolve(path);;p=dirname(p)) {
     try {if((await lstat(p)).isSymbolicLink()) throw new Error('Symlink/reparse installation paths are not supported.');}

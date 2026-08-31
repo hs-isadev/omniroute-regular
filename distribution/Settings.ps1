@@ -1,6 +1,7 @@
 [CmdletBinding()]
-param([string]$InstallRoot,[string]$AppRoot,[string]$NodePath,[string]$RuntimeRoot,[switch]$ExistingSetup,[switch]$SmokeTest)
+param([string]$InstallRoot,[string]$AppRoot,[string]$NodePath,[string]$RuntimeRoot,[switch]$ExistingSetup,[switch]$SmokeTest,[switch]$RequireReady)
 $ErrorActionPreference = 'Stop'
+$script:setupReady=$false
 if(-not $InstallRoot) {$InstallRoot=$PSScriptRoot}
 if(-not $AppRoot -and (Test-Path -LiteralPath (Join-Path $InstallRoot 'active-version.txt'))) {
   $active=(Get-Content -LiteralPath (Join-Path $InstallRoot 'active-version.txt') -Raw).Trim()
@@ -76,14 +77,15 @@ $save.Add_Click({
     $outputTask=$process.StandardOutput.ReadToEndAsync()
     while(-not $process.HasExited) { [Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 100 }
     $result=$outputTask.Result | ConvertFrom-Json
-    if(-not $result.ready) { [Windows.Forms.MessageBox]::Show($result.error,'Setup needs attention'); return }
+    if($process.ExitCode -ne 0 -or -not $result.ready) { [Windows.Forms.MessageBox]::Show($result.error,'Setup needs attention'); return }
     foreach($box in $boxes.Values) {$box.Clear()}; $keys.Clear()
     $message='Saved. Open the OmniRoute Regular desktop shortcut.'
+    if($RequireReady) {$message='Saved. Next, return to the setup terminal to choose your project folder.'}
     if($ExistingSetup) {$message='Saved for your existing OmniRoute setup. Modes, port and existing keys were preserved.'}
     if($result.restartNeeded) {$message+=' Restart OmniRoute with omni service stop, then omni service start.'}
     if($result.failed.Count -gt 0) {$message+=' Some supplied keys failed validation: '+($result.failed -join ', ')+'. Existing keys were kept. Reopen Settings to retry.'}
     foreach($candidate in $result.codingCandidates) {$message+=[Environment]::NewLine+$candidate.provider+'/'+$candidate.model+': '+$candidate.status}
-    [Windows.Forms.MessageBox]::Show($message,'Ready'); $form.Close()
+    [Windows.Forms.MessageBox]::Show($message,'Ready'); $script:setupReady=$true; $form.Close()
   } catch { [Windows.Forms.MessageBox]::Show('Setup could not finish. Check your connection and try again. No key values were logged.','Setup error') }
   finally { $save.Enabled=$true; $save.Text='Validate and save' }
 })
@@ -93,3 +95,4 @@ if($SmokeTest) {
   $form.Dispose(); Write-Output 'PASS: masked Windows Forms key-entry controls'; return
 }
 [void]$form.ShowDialog()
+if($RequireReady -and -not $script:setupReady) {exit 2}
