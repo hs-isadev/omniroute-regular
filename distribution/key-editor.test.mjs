@@ -74,3 +74,28 @@ test('Linux template permissions are private',{skip:process.platform==='win32'},
   requireEditor();const f=await fixture();const file=await editor.prepareKeyFile(f);
   assert.equal((await stat(f.dir)).mode&0o777,0o700);assert.equal((await stat(file)).mode&0o777,0o600);
 });
+test('editor workflow opens slots, waits for consent and imports without real providers',async()=>{
+  requireEditor();const f=await fixture();const messages=[],questions=[];
+  const result=await editor.runEditorSetup({...f,interactive:true,tell:text=>messages.push(text),
+    chooseEditor:async file=>({command:'fixture-editor',args:[file]}),
+    launch:async spec=>writeFile(spec.args[0],'GROQ_API_KEY=fixture-editor-input\n'),
+    prompt:async text=>{questions.push(text);return questions.length===1?'yes':'';}});
+  assert.equal(result.ready,true);assert.equal(questions.length,2);
+  assert.ok(messages.some(text=>text.includes('Successful plaintext')));
+  assert.ok(!messages.join('\n').includes('fixture-editor-input'));
+});
+test('editor failure and declined import never save a vault',async()=>{
+  requireEditor();
+  for(const fail of [true,false]) {
+    const f=await fixture();
+    await assert.rejects(editor.runEditorSetup({...f,interactive:true,tell:()=>{},chooseEditor:async file=>({command:'fixture',args:[file]}),
+      launch:async()=>{if(fail)throw Error('fixture-private-error');},prompt:async()=> 'no'}),fail?/Editor could not open/:/cancelled/);
+    await assert.rejects(access(f.paths.vault),/ENOENT/);
+  }
+});
+test('blank template refreshes saved-provider metadata without exporting a key',async()=>{
+  requireEditor();const f=await fixture();const file=await editor.prepareKeyFile(f);
+  await configure({keys:{GROQ_API_KEY:'fixture-updated-status'},freeOnlyConfirmed:true},f.paths,f);
+  await editor.prepareKeyFile(f);const text=await readFile(file,'utf8');
+  assert.match(text,/# groq: saved/);assert.doesNotMatch(text,/fixture-updated-status/);
+});
