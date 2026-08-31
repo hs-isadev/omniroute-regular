@@ -162,8 +162,12 @@ export class OmniRouter {
     this.validateRequest(request);
     const signals = classifyTask(request);
     const modelPreference: ModelPreference = this.#config.routing.freeOnly && this.#config.routing.intentRoutingEnabled && ["casual_question", "light_task"].includes(signals.intent) ? "lightweight" : "quality";
-    const snapshot = await this.#registry();
     const mode = request.routingMode ?? this.#config.routing.defaultMode;
+    const registered = await this.#registry();
+    const demandingWorker = mode === 'regular' && request.sourceClient === 'antigravity-mcp' && signals.requiredCapabilities.includes('coding') && ['complex_task','high_risk'].includes(signals.intent);
+    // A conservative configured tier floor, not a claim of benchmark superiority.
+    // Filter the immutable route snapshot so EVERY retry observes the same floor.
+    const snapshot = demandingWorker ? {...registered,models:registered.models.filter(model=>(model.intelligenceTier??0)>=4)} : registered;
     const freePlanner = mode === "orchestrator" && this.#config.routing.freeOnly && this.#config.routing.freeModelFailoverEnabled ? this.#freeFailover.candidates({ providerId: this.#config.routing.orchestratorProviderId, modelId: this.#config.routing.orchestratorModelId, reasoningEffort: modelPreference === "lightweight" ? "none" : this.orchestratorEffort(signals), maxOutputTokens: 4000 }, snapshot, ["text", "structured_output"], 0, modelPreference)[0] : undefined;
     const orchestratorModel = mode === "orchestrator" ? snapshot.models.find((model) => model.providerId === (freePlanner?.providerId ?? this.#config.routing.orchestratorProviderId) && model.modelId === (freePlanner?.modelId ?? this.#config.routing.orchestratorModelId) && model.enabled && model.allowed && model.health.status === "healthy" && model.capabilities.structuredOutput === true) ?? null : null;
     if (mode === "orchestrator" && !orchestratorModel) throw new SafeError("ORCHESTRATION_UNAVAILABLE", `Configured orchestrator ${this.#config.routing.orchestratorProviderId}/${this.#config.routing.orchestratorModelId} is not enabled, healthy, allowed, free-policy compliant, and structured-output capable`, 503);
@@ -174,6 +178,7 @@ export class OmniRouter {
     const state: ExecutionState = { modelPreference, orchestrator: mode === "regular" ? { providerId: "omniroute", modelId: "deterministic-direct", reasoningEffort: "none" } : { providerId: orchestratorModel!.providerId, modelId: orchestratorModel!.modelId, reasoningEffort: orchestratorEffort }, usage: { ...emptyUsage(), estimatedCostUsd: 0 }, worker: initialWorker, reviewers: [], fallbackAttempts: [], reservedBudgetUsd: 0, policyDecisions: [
       `deterministic signals suggested ${signals.suggestedClass}`,
       `intent ${signals.intent}; ${modelPreference} model preference`,
+      ...(demandingWorker ? ['coding quality floor: configured tier >=4; rankings provisional pending executable benchmarks'] : []),
       mode === "regular" ? "regular mode bypassed model orchestration" : `orchestrator effort ${orchestratorEffort}`,
       this.#config.routing.freeOnly ? "free-only provider policy enforced" : "configured provider policy enforced",
       request.privacyMode ?? this.#config.privacy.privacyMode ? "privacy envelope enabled" : "standard compact envelope",
@@ -573,6 +578,8 @@ export class OmniRouter {
     automatic = false,
   ): Promise<string> {
     const model = modelFrom(snapshot, selection);
+    const settings = this.#config.providers.find(item=>item.id===selection.providerId);
+    if(!settings?.enabled || !model.enabled || !model.allowed || (this.#config.routing.freeOnly && (!settings.freeTierOnly || model.pricing.inputPerMillionUsd !== 0 || model.pricing.outputPerMillionUsd !== 0))) throw new SafeError('WORKER_POLICY_REJECTED','Final dispatch rejected a disabled, paid or unknown-price worker');
     this.assertContextLimit(model, prompt, selection.maxOutputTokens);
     const provider = this.#providers.get(selection.providerId);
     if (!provider) throw new SafeError("WORKER_PROVIDER_UNAVAILABLE", `Worker provider ${selection.providerId} is unavailable`);
