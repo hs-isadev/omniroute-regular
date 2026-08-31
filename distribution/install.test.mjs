@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { installPackage, rollbackPackage, verifyPackage } from './install.mjs';
+import { installPackage, rollbackPackage, verifyPackage, uninstallPackage } from './install.mjs';
 
 async function fixture(version='0.2.0') {
   const root=await mkdtemp(join(tmpdir(),'omni-install-v2-')),bundle=join(root,'bundle');
@@ -48,4 +48,15 @@ test('reinstall detects installed payload tampering and upgrade preserves edited
   const next=await fixture('0.2.1');
   await assert.rejects(installPackage(next.bundle,f.install),/modified/i);
   assert.equal(await readFile(join(f.install,'Launch.cmd'),'utf8'),'user-edited');
+});
+test('recoverable uninstall preserves data and rejects user-modified launchers',async()=>{
+  const f=await fixture();await installPackage(f.bundle,f.install);
+  await mkdir(join(f.install,'data'));await writeFile(join(f.install,'data/keep'),'user data');
+  await assert.rejects(rollbackPackage(f.install),/No previous/);
+  const original=await readFile(join(f.install,'Launch.cmd'));await writeFile(join(f.install,'Launch.cmd'),'user modification');
+  await assert.rejects(uninstallPackage(f.install),/modified/);
+  await writeFile(join(f.install,'Launch.cmd'),original);
+  const result=await uninstallPackage(f.install);
+  assert.equal(await readFile(join(f.install,'data/keep'),'utf8'),'user data');
+  assert.equal(await readFile(join(result.retired,'Launch.cmd'),'utf8'),'fixture launcher');
 });
