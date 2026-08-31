@@ -51,6 +51,21 @@ export async function verifyPackage(bundle,expectedPlatform=platform()) {
 function validateRoot(root) {
   if(!isAbsolute(root)||resolve(root)===resolve('/')||resolve(root)===resolve(homedir())||/[\r\n\0]/.test(root)) throw new Error('Unsafe installation root.');
 }
+async function verifyInstalled(stage,manifest) {
+  await noLinks(stage);
+  for(const entry of manifest.files) {
+    if(!validRelative(entry.path))throw new Error('Unsafe installed manifest');
+    const path=join(stage,entry.path);await noLinks(path);
+    if(hash(await readFile(path))!==entry.sha256) throw new Error('Installed payload checksum failed: '+entry.path);
+  }
+}
+async function checkLaunchers(root,marker) {
+  for(const [name,digest] of Object.entries(marker?.launcherHashes??{})) {
+    if(!wrappers.includes(name)) throw new Error('Invalid launcher ownership record.');
+    await noLinks(join(root,name));
+    if(hash(await readFile(join(root,name)))!==digest) throw new Error('User-modified launcher retained; manual migration required.');
+  }
+}
 export async function installPackage(bundle,root) {
   validateRoot(root);await noLinks(root);
   const manifest=await verifyPackage(bundle);
@@ -63,7 +78,8 @@ export async function installPackage(bundle,root) {
     const id=manifest.version+'-'+hash(JSON.stringify(manifest)).slice(0,12),active='versions/'+id;
     const versions=join(root,'versions');await noLinks(versions);await mkdir(versions,{recursive:true,mode:0o700});
     const stage=join(versions,id);
-    if(old?.active===active) return {root,version:manifest.version,changed:false};
+    await checkLaunchers(root,old);
+    if(old?.active===active) {await verifyInstalled(stage,manifest);return {root,version:manifest.version,changed:false};}
     // Refuse to reuse an incomplete prior stage; it remains available for inspection.
     await mkdir(stage,{mode:0o700});
     for(const entry of manifest.files) {
@@ -76,18 +92,28 @@ export async function installPackage(bundle,root) {
     await writeFile(join(stage,'package-manifest.json'),JSON.stringify(manifest),{mode:0o600});
     // Back up root launchers (including v0.1.x) before installing owned wrappers.
     const backup=join(root,'installer-backups',randomUUID());await mkdir(backup,{recursive:true,mode:0o700});
-    const launcherHashes={};
+    const launcherHashes={},undo=[];
+    try {
     for(const name of wrappers.filter(name=>manifest.files.some(file=>file.path===name))) {
       const dest=join(root,name);await noLinks(dest);
-      try {await copyFile(dest,join(backup,name));}catch(error){if(error.code!=='ENOENT')throw error;}
-      const bytes=await readFile(join(stage,name));await atomic(dest,bytes);launcherHashes[name]=hash(bytes);
+      let previous=null;try {previous=await readFile(dest);await copyFile(dest,join(backup,name));}catch(error){if(error.code!=='ENOENT')throw error;}
+      const bytes=await readFile(join(stage,name));await atomic(dest,bytes);undo.push({dest,previous,written:bytes});launcherHashes[name]=hash(bytes);
       if(process.platform!=='win32'&&name.endsWith('.sh')) await chmod(dest,0o700);
     }
     if(old) await writeFile(join(backup,'installed.json'),JSON.stringify(old),{mode:0o600});
     const marker={version:manifest.version,platform:manifest.platform,host:'antigravity',active,previous:old?.active??null,launcherHashes,backup};
-    await atomic(join(root,'active-version.txt'),active+'\n');
-    await atomic(join(root,'installed.json'),JSON.stringify(marker,null,2)+'\n');
+    for(const [name,text] of [['active-version.txt',active+'\n'],['installed.json',JSON.stringify(marker,null,2)+'\n']]) {
+      const dest=join(root,name);let previous=null;try {previous=await readFile(dest);}catch(e){if(e.code!=='ENOENT')throw e;}
+      const written=Buffer.from(text);await atomic(dest,written);undo.push({dest,previous,written});
+    }
     return {root,version:manifest.version,changed:true,backup};
+    } catch(error) {
+      for(const item of undo.reverse()) {
+        if(hash(await readFile(item.dest))!==hash(item.written)) continue;
+        if(item.previous===null)await unlink(item.dest);else await atomic(item.dest,item.previous);
+      }
+      throw error;
+    }
   } finally {await rmdir(lock);}
 }
 export async function rollbackPackage(root) {
