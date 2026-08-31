@@ -36,3 +36,5 @@ Context: protocol smoke is not a real host test. Test Antigravity in isolated wo
 Steps are sequential because distribution/runtime ownership overlaps. Native agents are not authorized; bounded OmniRoute review was used. Route `00MTGV0D9GV5XXJYKV2E_5IG` raised useful conflict/rollback/host-testing concerns; invented `router:write` permission and speculative deadlock requirements were rejected. No paid fallback.
 
 Progress and RED/GREEN evidence will be recorded in `docs/testing/antigravity-regular.tdd.md`.
+
+Final local status: Steps 1–3 implemented. Windows ZIP and Linux tar.gz built and extracted-install/MCP tests passed on Windows 11 x64 and Ubuntu 24.04.3 WSL2 respectively. Full regression suite: 146/146; Regular distribution coverage: 81.99% lines, 80.85% branches. Step 4 local evidence complete; actual Antigravity/account tests, live installation and publication remain explicitly unapproved/not performed. Linux real desktop-keyring acceptance and executable model-quality comparisons remain unverified. See evidence report for exact boundaries.

@@ -1,4 +1,4 @@
-# Free provider expansion — checked 2026-08-30
+# Free provider/authentication guide — reviewed 2026-08-31
 
 The masked key editor now exposes **12 providers**: the original seven plus Kilo, Z.AI, NVIDIA, Vercel and OpenCode Zen. Four of these already had opt-in backend profiles; this update exposes them in the portable installer and adds an existing-installation key editor. Kilo is a new backend integration. They are not activated merely by installing the update: add your own key and confirm the applicable free-tier terms first.
 
@@ -10,7 +10,29 @@ The masked key editor now exposes **12 providers**: the original seven plus Kilo
 | Vercel AI Gateway | [Gateway dashboard](https://vercel.com/ai-gateway) → API keys | $5 included monthly on eligible free-tier accounts, not unlimited free model pricing. Buying credits ends the monthly free tier. No purchased balance, paid BYOK or auto top-up. [Pricing](https://vercel.com/docs/ai-gateway/pricing). |
 | OpenCode Zen | [Sign in](https://opencode.ai/auth) → API key | Big Pickle, MiMo-V2.5 Free and Nemotron 3 Ultra Free only. Temporary free availability; free-period data can improve models. Do not add billing just to use this integration; stop if your account requires payment. Disable auto-reload. This is a provider, not another installed harness. [Free models and billing](https://opencode.ai/docs/zen/). |
 
-All additions are available as workers in either mode of an existing OmniRoute installation, once enabled and validated. The brother's portable launcher remains regular-only. Its **OpenCode host still uses OpenRouter**: extra worker providers do not automatically replace the host if OpenRouter's quota runs out.
+All additions are opt-in workers. The v0.2 portable launcher is Antigravity plus local MCP, regular-only; **OpenRouter is no longer required**. The separate existing orchestrator setup is preserved. Antigravity host quota remains independent of worker quotas.
+
+## All credential entry points
+
+| Provider | Official key/token page | Access category |
+|---|---|---|
+| Groq | [Console keys](https://console.groq.com/keys) | Account free tier, quota-limited |
+| Gemini | [AI Studio](https://aistudio.google.com/apikey) | Eligible-region/account free tier; do not enable paid billing |
+| OpenRouter | [Keys](https://openrouter.ai/settings/keys) | Explicit free model endpoints, shared account limits |
+| Mistral | [Studio keys](https://console.mistral.ai/api-keys/) | Free Studio evaluation/prototyping plan, not Scale |
+| Cohere | [Dashboard keys](https://dashboard.cohere.com/api-keys) | Trial/evaluation restrictions, not production entitlement |
+| Cloudflare | [Dashboard](https://dash.cloudflare.com/) | Workers AI free allocation; service token plus account ID |
+| Hugging Face | [Access tokens](https://huggingface.co/settings/tokens) | Inference permission, small recurring credit; no paid balance/BYOK |
+
+The five remaining providers and conditions are in the table above. No browser passwords or consumer login tokens are accepted. Model prices/terms may change; the configured zero-price allowlist is not an account-billing guarantee.
+
+## Additional coding candidates in Regular v0.2
+
+- [NVIDIA Kimi K2.6](https://build.nvidia.com/moonshotai/kimi-k2.6?nim=hosted): official hosted free evaluation candidate, exact ID `moonshotai/kimi-k2.6`. Adapter uses text completion; multimodal support is not enabled. Context is capped at 262,144, output at 4,096. NVIDIA restrictions above apply.
+- [OpenRouter Qwen3 Coder free](https://openrouter.ai/qwen/qwen3-coder:free): exact ID `qwen/qwen3-coder:free`, conservative 131,072 context / 4,096 output caps. Never substitute its paid sibling. Upstream supports coding/tool use; this worker path requests only text.
+- [OpenCode Zen](https://opencode.ai/docs/zen/): the existing Big Pickle, MiMo-V2.5 Free and Nemotron 3 Ultra Free profiles remain independent of the removed OpenCode harness. Promotional availability and privacy terms must be rechecked.
+
+Kimi/Qwen start disabled. Tick the extra candidate check in Settings and supply that provider's key to attempt a bounded completion; only a responding candidate is activated. That proves connectivity, not executable code correctness, reliable streaming on your account, or a frontier-quality ranking. No live comparative benchmark is claimed. Model ladders are provisional. Third-party gateways can share upstream capacity.
 
 ## Not added
 

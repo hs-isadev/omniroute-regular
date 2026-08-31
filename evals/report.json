@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-08-30T15:38:39.428Z",
+  "generatedAt": "2026-08-31T07:10:08.912Z",
   "mode": "deterministic pre-route policy evaluation; no provider calls",
   "fixtures": 15,
   "passed": 15,
   "routeAccuracy": 1,
   "unnecessarySolWorkerRate": 0,
-  "averageLatencyMs": 0.6488933333333496,
+  "averageLatencyMs": 0.6182933333333457,
   "totalEstimatedWorkerCostUsd": 0.8343809999999999,
   "rows": [
     {
@@ -21,7 +21,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.00036219999999999997,
-      "latencyMs": 4.54260000000005
+      "latencyMs": 5.453700000000026
     },
     {
       "id": "micro-extract",
@@ -37,7 +37,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.00036260000000000003,
-      "latencyMs": 1.8752999999999815
+      "latencyMs": 1.7090000000000032
     },
     {
       "id": "small-explain",
@@ -52,7 +52,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.0012042,
-      "latencyMs": 0.22879999999997835
+      "latencyMs": 0.19930000000005066
     },
     {
       "id": "small-code",
@@ -68,7 +68,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.0012028,
-      "latencyMs": 0.07900000000000773
+      "latencyMs": 0.06389999999998963
     },
     {
       "id": "medium-files",
@@ -83,7 +83,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.036042,
-      "latencyMs": 0.06979999999998654
+      "latencyMs": 0.06209999999998672
     },
     {
       "id": "medium-research",
@@ -99,7 +99,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.036048,
-      "latencyMs": 0.26120000000003074
+      "latencyMs": 0.0655999999999608
     },
     {
       "id": "medium-schema",
@@ -114,7 +114,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.036042,
-      "latencyMs": 0.129099999999994
+      "latencyMs": 0.05639999999999645
     },
     {
       "id": "large-repo",
@@ -129,7 +129,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.120128,
-      "latencyMs": 0.7515999999999963
+      "latencyMs": 0.5243000000000393
     },
     {
       "id": "large-debug",
@@ -144,7 +144,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.120116,
-      "latencyMs": 0.186300000000017
+      "latencyMs": 0.10720000000003438
     },
     {
       "id": "large-synthesis",
@@ -159,7 +159,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.12012,
-      "latencyMs": 0.11430000000001428
+      "latencyMs": 0.06040000000001555
     },
     {
       "id": "critical-security",
@@ -174,7 +174,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.120132,
-      "latencyMs": 0.6042000000000485
+      "latencyMs": 0.3342999999999847
     },
     {
       "id": "critical-medical",
@@ -189,7 +189,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.120096,
-      "latencyMs": 0.2897000000000389
+      "latencyMs": 0.1594000000000051
     },
     {
       "id": "critical-delete",
@@ -204,7 +204,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.120116,
-      "latencyMs": 0.09430000000003247
+      "latencyMs": 0.045200000000022555
     },
     {
       "id": "vision-small",
@@ -219,7 +219,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.0012054000000000001,
-      "latencyMs": 0.4267000000000394
+      "latencyMs": 0.35450000000003
     },
     {
       "id": "web-current",
@@ -235,7 +235,7 @@
       "workerTierAccepted": true,
       "unnecessarySolWorker": false,
       "estimatedCostUsd": 0.0012037999999999999,
-      "latencyMs": 0.0805000000000291
+      "latencyMs": 0.07910000000003947
     }
   ]
 }
