@@ -1,12 +1,14 @@
 import { mkdir, mkdtemp, cp, readdir, readFile, writeFile, access, chmod } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { resolve, join, relative } from 'node:path';
 
 if(!['win32','linux'].includes(process.platform) || process.arch!=='x64') throw new Error('Build on Windows or Linux x64.');
-const linux=process.platform==='linux';
+const target=process.argv.find(arg=>arg.startsWith('--target='))?.slice(9)??(process.platform==='linux'?'linux-x64':'windows-x64');
+if(!['linux-x64','windows-x64'].includes(target)) throw new Error('Unsupported target');
+const linux=target==='linux-x64';
 const platform=linux?'linux-x64':'windows-x64';
-const tar=linux?'tar':'tar.exe';
+const tar=process.platform==='linux'?'tar':'tar.exe';
 const root=resolve(import.meta.dirname,'..');
 const version=JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
 const cache=join(root,'.cache'); await mkdir(cache,{recursive:true});
@@ -40,14 +42,9 @@ else await run('powershell.exe',['-NoProfile','-Command',`Expand-Archive -Litera
 await mkdir(join(payload,'node'));
 await cp(join(work,nodeFolder,linux?'bin/node':'node.exe'),join(payload,'node',linux?'node':'node.exe'));
 await cp(join(work,nodeFolder,'LICENSE'),join(payload,'node/LICENSE'));
-const openCodePackage=linux?'opencode-linux-x64':'opencode-windows-x64';
-const openCode=await download(`https://registry.npmjs.org/${openCodePackage}/-/${openCodePackage}-1.18.25.tgz`,`${openCodePackage}-1.18.25.tgz`,'sha512',linux?'bdRSJ6gbK/EnLNWxROOQYXFXiUeqeFxGz8DIO8LCqnii99A2OWFAyZ3Da5gpvfT1Yrp9/lYL55n/tM3ale5smg==':'xW5wtSxWYbI7DcmQWMlNWIiDBdMJON1vDiEmVWo88R9tT/PaahOhWKgp7FoWDqJKf89jS3ZIzkqnkU3F2dio7A==','base64');
-const extraction=join(work,'opencode'); await mkdir(extraction);
-await run(tar,['-xzf',openCode,'-C',extraction]);
-await mkdir(join(payload,'opencode'));
-await cp(join(extraction,'package/bin',linux?'opencode':'opencode.exe'),join(payload,'opencode',linux?'opencode':'opencode.exe'));
-if(linux) for(const path of ['node/node','opencode/opencode']) await chmod(join(payload,path),0o755);
-await cp(join(root,'distribution/OPENCODE-LICENSE.txt'),join(payload,'opencode/LICENSE.txt'));
+// Antigravity is installed and signed in through Google's official application.
+// Do not redistribute its binary or bundle any alternative harness.
+if(linux) await chmod(join(payload,'node/node'),0o755);
 // Build a production-only workspace, then dereference npm workspace junctions.
 const appStage=join(work,'app'); await mkdir(appStage);
 for(const name of ['package.json','package-lock.json','LICENSE']) await cp(join(root,name),join(appStage,name));
@@ -61,19 +58,23 @@ for(const group of ['apps','packages']) {
   }
 }
 const npmCli=join(work,nodeFolder,linux?'lib/node_modules/npm/bin/npm-cli.js':'node_modules/npm/bin/npm-cli.js');
-await run(join(payload,'node',linux?'node':'node.exe'),[npmCli,'ci','--omit=dev','--ignore-scripts','--no-audit','--no-fund'],appStage);
+await run(process.execPath,[npmCli,'ci','--omit=dev','--ignore-scripts','--no-audit','--no-fund',`--os=${linux?'linux':'win32'}`,'--cpu=x64'],appStage);
 await cp(appStage,join(payload,'app'),{recursive:true,dereference:true});
 await mkdir(join(payload,'app/distribution'),{recursive:true});
-for(const name of ['launch.mjs','settings.mjs','skills']) await cp(join(root,'distribution',name),join(payload,'app/distribution',name),{recursive:true});
-if(linux) for(const name of ['settings-linux.mjs','install-linux.mjs']) await cp(join(root,'distribution',name),join(payload,'app/distribution',name));
-await mkdir(join(payload,'app/docs/integrations'),{recursive:true});
-await cp(join(root,'docs/integrations/opencode-regular-instructions.md'),join(payload,'app/docs/integrations/opencode-regular-instructions.md'));
-for(const name of linux?['Settings.sh','Launch.sh']:['Settings.ps1','Settings.cmd','Launch.cmd']) await cp(join(root,'distribution',name),join(payload,name));
+for(const name of ['launch.mjs','settings.mjs','antigravity.mjs','mcp-regular.mjs','install.mjs']) await cp(join(root,'distribution',name),join(payload,'app/distribution',name));
+if(linux) await cp(join(root,'distribution/settings-linux.mjs'),join(payload,'app/distribution/settings-linux.mjs'));
+for(const name of linux?['Settings.sh','Launch.sh','Manage.sh']:['Settings.ps1','Settings.cmd','Launch.cmd','Launch.ps1','Manage.cmd','Manage.ps1']) await cp(join(root,'distribution',name),join(payload,name));
 for(const name of linux?['Setup.sh']:['Setup.ps1','Setup.cmd']) await cp(join(root,'distribution',name),join(release,name));
-if(linux) for(const path of [join(release,'Setup.sh'),join(payload,'Settings.sh'),join(payload,'Launch.sh')]) await chmod(path,0o755);
+if(linux) for(const path of [join(release,'Setup.sh'),join(payload,'Settings.sh'),join(payload,'Launch.sh'),join(payload,'Manage.sh')]) await chmod(path,0o755);
 await cp(join(root,'README.md'),join(release,'README.md'));
 await mkdir(join(release,'docs'),{recursive:true});
 await cp(join(root,'docs/free-provider-expansion.md'),join(release,'docs/free-provider-expansion.md'));
+await cp(join(root,'docs/antigravity-regular.md'),join(release,'docs/antigravity-regular.md'));
+const lock=JSON.parse(await readFile(join(root,'package-lock.json'),'utf8'));
+const dependencies=Object.entries(lock.packages).filter(([name,item])=>name&&(!item.dev||item.devOptional===false)).map(([name,item])=>({path:name,version:item.version??null,license:item.license??'See package LICENSE',integrity:item.integrity??null,resolved:item.resolved??null}));
+await writeFile(join(payload,'dependencies.json'),JSON.stringify({node:{version:'22.23.2',license:'node/LICENSE'},packages:dependencies},null,2)+'\n');
+const git=(args)=>execFileSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true}).trim();
+await writeFile(join(payload,'provenance.json'),JSON.stringify({version,host:'antigravity',target:platform,builtAt:new Date().toISOString(),sourceCommit:git(['rev-parse','HEAD']),dirty:!!git(['status','--porcelain']),lockSha256:createHash('sha256').update(await readFile(join(root,'package-lock.json'))).digest('hex'),builderPlatform:process.platform,signature:'unsigned; verify archive checksum from a trusted source'},null,2)+'\n');
 const files=[];
 async function walk(directory) {
   for(const entry of await readdir(directory,{withFileTypes:true})) {
@@ -89,7 +90,7 @@ async function walk(directory) {
   }
 }
 await walk(payload); files.sort((a,b)=>a.path.localeCompare(b.path));
-await writeFile(join(release,'manifest.json'),JSON.stringify({version,platform,node:'22.23.2',opencode:'1.18.25',files},null,2)+'\n');
+await writeFile(join(release,'manifest.json'),JSON.stringify({version,platform,host:'antigravity',node:'22.23.2',files},null,2)+'\n');
 console.log('Compressing portable package...');
 const extension=linux?'.tar.gz':'.zip';
 await run(tar,[...(linux?['-czf']:['-a','-cf']),release+extension,'-C',join(root,'release'),relative(join(root,'release'),release)]);

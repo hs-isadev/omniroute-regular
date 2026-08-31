@@ -2,6 +2,12 @@
 param([string]$InstallRoot,[string]$AppRoot,[string]$NodePath,[string]$RuntimeRoot,[switch]$ExistingSetup,[switch]$SmokeTest)
 $ErrorActionPreference = 'Stop'
 if(-not $InstallRoot) {$InstallRoot=$PSScriptRoot}
+if(-not $AppRoot -and (Test-Path -LiteralPath (Join-Path $InstallRoot 'active-version.txt'))) {
+  $active=(Get-Content -LiteralPath (Join-Path $InstallRoot 'active-version.txt') -Raw).Trim()
+  if($active -notmatch '^versions/[a-zA-Z0-9.-]+$') {throw 'Invalid active version'}
+  $AppRoot=Join-Path $InstallRoot ($active+'/app')
+  if(-not $NodePath) {$NodePath=Join-Path $InstallRoot ($active+'/node/node.exe')}
+}
 if(-not $AppRoot) {$AppRoot=Join-Path $InstallRoot 'app'}
 if(-not $NodePath) {$NodePath=Join-Path $InstallRoot 'node\node.exe'}
 if(-not $RuntimeRoot) {$RuntimeRoot=Join-Path $InstallRoot 'data'}
@@ -15,12 +21,12 @@ $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
 $intro = New-Object Windows.Forms.Label
-$intro.Text = 'OpenRouter is required. Other providers are optional. Keys stay on this Windows account.'
+$intro.Text = 'Any one suitable free provider is enough. Keys stay on this Windows account. Antigravity sign-in stays in Antigravity.'
 $intro.SetBounds(15,12,650,36)
 $form.Controls.Add($intro)
 $panel=New-Object Windows.Forms.Panel; $panel.SetBounds(15,52,650,330); $panel.AutoScroll=$true; $form.Controls.Add($panel)
 $rows = @(
-  @('OpenRouter *','OPENROUTER_API_KEY','https://openrouter.ai/settings/keys'),
+  @('OpenRouter','OPENROUTER_API_KEY','https://openrouter.ai/settings/keys'),
   @('Groq','GROQ_API_KEY','https://console.groq.com/keys'),
   @('Gemini','GEMINI_API_KEY','https://aistudio.google.com/apikey'),
   @('Mistral','MISTRAL_API_KEY','https://console.mistral.ai/api-keys/'),
@@ -45,7 +51,7 @@ $confirm=New-Object Windows.Forms.CheckBox
 $confirm.Text='I checked free-tier/evaluation terms. Paid overages, BYOK and auto top-up are off.'
 $confirm.SetBounds(15,393,650,38); $form.Controls.Add($confirm)
 $notice=New-Object Windows.Forms.Label
-$notice.Text='Scroll for all 12 providers. NVIDIA/Kilo: no confidential data; evaluation use only. Vercel/HF: monthly credits. Zen: temporary free models. Blank keeps saved keys. Close OpenCode first.'
+$notice.Text='Scroll for all 12 providers. NVIDIA/Kilo: no confidential data; evaluation use only. Vercel/HF: monthly credits. Zen: temporary free. Blank keeps saved keys. Reconnect MCP after saving.'
 if($ExistingSetup) {$notice.Text+=' Saving valid keys restarts OmniRoute.'}
 $notice.SetBounds(15,433,650,50); $form.Controls.Add($notice)
 $save=New-Object Windows.Forms.Button; $save.Text='Validate and save'; $save.SetBounds(235,492,190,35); $form.Controls.Add($save)

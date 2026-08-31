@@ -33,7 +33,7 @@ if (process.argv[1] && new URL(import.meta.url).pathname.endsWith('/settings-lin
   try {
     if(process.platform!=='linux' || process.getuid?.()===0) throw new Error('Run as your normal Linux desktop user.');
     console.log('OmniRoute Regular — API key setup (input is hidden, not even stars).');
-    console.log('OpenRouter is required; other providers are optional. Enter skips/keeps a saved key.');
+    console.log('Any one suitable free provider is enough. Enter skips/keeps a saved key. Antigravity sign-in stays in Antigravity.');
     console.log('Key links and free-access conditions: see README.md and docs/free-provider-expansion.md.');
     console.log('Never enter passwords, browser cookies or Claude/ChatGPT login sessions.');
     const consent=await hiddenPrompt('Confirm free-only accounts, no paid overages or auto-top-up. Type yes: ');

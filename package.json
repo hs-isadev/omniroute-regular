@@ -1,6 +1,6 @@
 {
   "name": "omniroute",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "description": "Local-first, policy-validated multi-model routing with explicit attribution",
   "license": "MIT",
@@ -19,7 +19,7 @@
     "clean": "node scripts/clean.mjs",
     "build": "tsc -b && node scripts/copy-assets.mjs && node scripts/build-mcpb.mjs",
     "build:mcpb": "node scripts/build-mcpb.mjs",
-    "test:regular": "node --test distribution/settings.test.mjs distribution/linux.test.mjs",
+    "test:regular": "node --test distribution/*.test.mjs",
     "package:regular": "npm run build && node scripts/package-regular.mjs",
     "test:package": "node scripts/test-regular-package.mjs",
     "typecheck": "tsc -b --pretty false",
