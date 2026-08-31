@@ -245,7 +245,12 @@ export class OmniRouter {
 
   private selectDirectWorker(snapshot: RegistrySnapshot, signals: TaskSignals, request: RouteRequest, preference: ModelPreference): ModelSelection {
     if (this.#config.routing.freeOnly && this.#config.routing.freeModelFailoverEnabled) {
-      const selected = this.#freeFailover.candidates({ providerId: this.#config.routing.directProviderOrder[0] ?? "", modelId: "", reasoningEffort: preference === "lightweight" ? "none" : "low", maxOutputTokens: request.maxOutputTokens ?? (preference === "lightweight" ? Math.min(2048, this.#config.routing.maxOutputTokensPerRequest) : this.#config.routing.maxOutputTokensPerRequest) }, snapshot, signals.requiredCapabilities, signals.estimatedInputTokens, preference)[0];
+      const candidates = this.#freeFailover.candidates({ providerId: this.#config.routing.directProviderOrder[0] ?? "", modelId: "", reasoningEffort: preference === "lightweight" ? "none" : "low", maxOutputTokens: request.maxOutputTokens ?? (preference === "lightweight" ? Math.min(2048, this.#config.routing.maxOutputTokensPerRequest) : this.#config.routing.maxOutputTokensPerRequest) }, snapshot, signals.requiredCapabilities, signals.estimatedInputTokens, preference);
+      if(request.sourceClient==='antigravity-mcp') {
+        const tier=(s:ModelSelection)=>snapshot.models.find(m=>m.providerId===s.providerId&&m.modelId===s.modelId)?.intelligenceTier;
+        candidates.sort((a,b)=>preference==='lightweight' ? (tier(a)??999)-(tier(b)??999) : (tier(b)??0)-(tier(a)??0));
+      }
+      const selected=candidates[0];
       if (!selected) throw new SafeError("DIRECT_MODEL_UNAVAILABLE", "No eligible free worker meets capability/context requirements outside its cooldown", 503);
       return selected;
     }
