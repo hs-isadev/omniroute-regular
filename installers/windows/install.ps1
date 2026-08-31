@@ -55,9 +55,19 @@ $appBackedUp = $false
 $appPromoted = $false
 $serviceTouched = $false
 try {
-  $excludedDirectories = @('.git', 'node_modules', 'dist', 'runtime', 'logs', 'backups', 'state', '.runtime-test')
+  $excludedDirectories = @('.git', 'node_modules', 'dist', 'runtime', 'logs', 'backups', 'state', '.runtime-test', '.build', '.cache', 'release', 'test-artifacts', 'artifacts', 'coverage', '.codex', '.agents')
   $secretPatterns = @('credentials.txt', 'credentials.*.txt', '*.credentials', '*.credentials.*', '*.secrets', '*.secrets.*', 'secret*.txt', '*.key', '*.pem', '*.p12', '*.pfx', 'vault.json', '*.vault', '.env', '.env.*')
-  foreach ($file in Get-ChildItem -LiteralPath $sourceRoot -Recurse -File) {
+  # Prune before traversal; generated payloads contain bundled runtimes and may
+  # be very large. Never copy them or traverse a reparse point into staging.
+  $directories = New-Object 'Collections.Generic.Stack[string]'
+  $directories.Push($sourceRoot)
+  while ($directories.Count -gt 0) {
+  foreach ($file in Get-ChildItem -LiteralPath $directories.Pop()) {
+    if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+    if ($file.PSIsContainer) {
+      if ($excludedDirectories -notcontains $file.Name) {$directories.Push($file.FullName)}
+      continue
+    }
     $relative = $file.FullName.Substring($sourceRoot.Length).TrimStart('\', '/')
     $parts = $relative -split '[\\/]'
     if ($parts | Where-Object { $excludedDirectories -contains $_ }) { continue }
@@ -65,6 +75,7 @@ try {
     $destination = Join-Path $stagingRoot $relative
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
     Copy-Item -LiteralPath $file.FullName -Destination $destination
+  }
   }
 
   Push-Location $stagingRoot
