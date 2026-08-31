@@ -44,7 +44,11 @@ export function estimateTokens(text: string): number {
 }
 
 export function classifyTask(request: RouteRequest): TaskSignals {
-  const prompt = request.prompt;
+  // Only the isolated Antigravity worker path opts into these local Malay cues.
+  // This is intent normalization, not translation of the worker's actual prompt.
+  const boundedWorker = request.sourceClient === "antigravity-mcp" && request.metadata?.workerTextOnly === "true";
+  const malay: Record<string, string> = { "seni bina": "architecture", "berbilang fail": "multi-file", "keseluruhan": "entire", "tulis": "write", "fungsi": "function", "kod": "code", "baiki": "fix", "bina": "build", "uji": "test", "ringkaskan": "summarize", "terjemah": "translate", "keselamatan": "security", "padam": "delete" };
+  const prompt = boundedWorker ? request.prompt.replace(/\b(?:seni bina|berbilang fail|keseluruhan|tulis|fungsi|kod|baiki|bina|uji|ringkaskan|terjemah|keselamatan|padam)\b/gi, word => malay[word.toLowerCase()] ?? word) : request.prompt;
   const lower = prompt.toLowerCase();
   const attachmentBytes = request.attachments.reduce((total, item) => total + Math.max(0, item.size), 0);
   const attachmentText = request.attachments.map((item) => item.text ?? "").join("\n");
@@ -61,7 +65,7 @@ export function classifyTask(request: RouteRequest): TaskSignals {
   const inferred: Capability[] = ["text"];
   if (request.attachments.some((item) => item.mediaType.startsWith("image/")) || /\b(?:image|screenshot|diagram|photo|vision)\b/i.test(prompt)) inferred.push("vision");
   if (/\b(?:code|coding|implement|repository|typescript|javascript|python|sql|rust|kotlin|bug|test|compile|refactor)\b/i.test(prompt) || /```/.test(prompt) || /\b(?:write|implement|debug|refactor|review|fix)\b[\s\S]*\b(?:function|class|component|script|query)\b/i.test(prompt)) inferred.push("coding");
-  if (requiresTools) inferred.push("tool_calling");
+  if (requiresTools && !boundedWorker) inferred.push("tool_calling");
   if (/\b(?:browse|web|internet|latest|current|research|source|citation)\b/i.test(prompt)) inferred.push("web");
   if (/\b(?:json|schema|structured|csv|table|xml)\b/i.test(prompt)) inferred.push("structured_output");
   if (estimatedInputTokens > 80_000 || attachmentBytes > 2_000_000) inferred.push("long_context");

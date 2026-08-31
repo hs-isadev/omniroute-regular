@@ -8,6 +8,7 @@ export const MCP_INSTRUCTIONS = `OmniRoute enforces a free-only model policy and
 export interface McpBackend {
   route(input: {
     prompt: string;
+    parentTask?: string | undefined;
     requiredCapabilities: string[];
     hostApplication: string;
     hostModel: string | null;
@@ -31,6 +32,7 @@ export function createOmniMcpServer(backend: McpBackend, options: { regularOnly?
       description: options.regularOnly ? "Delegate a bounded task to a free worker; local intent classification, no extra planner. Returns answer and model attribution." : "Run work through validated zero-cost providers in regular or orchestrator mode and return an attributed answer.",
       inputSchema: z.object({
         prompt: z.string().min(1).max(1_000_000).describe("The user's task. Never include credentials."),
+        ...(options.regularOnly ? {parentTask: z.string().max(100_000).optional().describe("Bounded parent requirements for continue/teruskan. Ignored for a new task.")} : {}),
         requiredCapabilities: z.array(z.enum(CAPABILITIES)).max(7).default([]),
         hostApplication: z.string().min(1).max(100).default("mcp-host"),
         hostModel: z.string().max(256).nullable().default(null),
@@ -41,7 +43,7 @@ export function createOmniMcpServer(backend: McpBackend, options: { regularOnly?
     },
     async (input, context) => {
       try {
-        const result = await backend.route(input, context.mcpReq.signal);
+        const result = await backend.route({...input,parentTask:typeof input.parentTask === 'string' ? input.parentTask : undefined}, context.mcpReq.signal);
         return {
           content: [{ type: "text" as const, text: `${result.answer}\n\n${result.badge}\nAttribution applies to OmniRoute-produced content; the host may relay or rephrase it.` }],
           structuredContent: { routeId: result.routeId, answer: result.answer, badge: result.badge, attribution: result.attribution },

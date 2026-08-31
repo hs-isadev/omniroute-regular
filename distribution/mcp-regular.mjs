@@ -39,12 +39,18 @@ export async function createRegularBackend(options={}) {
     async route(input,signal) {
       if(input.routingMode && input.routingMode!=='regular') throw new Error('This MCP server is locked to regular mode.');
       if(typeof input.prompt!=='string'||!input.prompt.trim()||Buffer.byteLength(input.prompt)>config.daemon.maxRequestBytes) throw new Error('Invalid or oversized worker prompt.');
+      let prompt=input.prompt;
+      if(/^\s*(?:please\s+)?(?:continue|carry on|go on|teruskan|sambung)(?:\s+(?:please|tolong))?[.!?\s]*$/i.test(prompt)) {
+        if(typeof input.parentTask!=='string'||!input.parentTask.trim()) throw new Error('A continuation needs bounded parentTask context; workers have no conversation history.');
+        prompt=`Parent task and requirements:\n${input.parentTask}\n\nContinuation: ${prompt}`;
+        if(Buffer.byteLength(prompt)>config.daemon.maxRequestBytes) throw new Error('Parent context exceeds the worker prompt limit.');
+      }
       if(signal?.aborted) throw signal.reason;
       if(busy) throw new Error('Worker busy; wait for the previous tool request before retrying.');
       busy=true;
       routeSignal=AbortSignal.any([...(signal?[signal]:[]),AbortSignal.timeout(Math.min(config.daemon.routeTimeoutMs,300_000))]);
       try {
-        return await router.route({prompt:input.prompt,routingMode:'regular',sourceClient:'antigravity-mcp',hostApplication:input.hostApplication??'antigravity',hostModel:input.hostModelAuthoritative?input.hostModel??null:null,hostModelAuthoritative:input.hostModelAuthoritative===true,attachments:[],requestedCapabilities:input.requiredCapabilities??[],maxOutputTokens:null,privacyMode:null,metadata:{}},routeSignal);
+        return await router.route({prompt,routingMode:'regular',sourceClient:'antigravity-mcp',hostApplication:input.hostApplication??'antigravity',hostModel:input.hostModelAuthoritative?input.hostModel??null:null,hostModelAuthoritative:input.hostModelAuthoritative===true,attachments:[],requestedCapabilities:input.requiredCapabilities??[],maxOutputTokens:null,privacyMode:null,metadata:{workerTextOnly:'true'}},routeSignal);
       } catch(error) {throw new Error(globalRedactor.redactText(error instanceof Error?error.message:'Worker request failed'));}
       finally {busy=false;routeSignal=undefined;}
     },
