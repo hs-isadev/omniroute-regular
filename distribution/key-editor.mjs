@@ -83,12 +83,28 @@ async function privateRead(file) {
     return {text:await handle.readFile('utf8'),info};
   }finally{await handle.close();}
 }
+async function rewriteUnchanged(file,snapshot,text) {
+  await checkPrivateLocation(file);
+  const handle=await open(file,constants.O_RDWR|(constants.O_NOFOLLOW??0));
+  try {
+    const now=await handle.stat();
+    if(now.nlink!==1||now.dev!==snapshot.info.dev||now.ino!==snapshot.info.ino||await handle.readFile('utf8')!==snapshot.text)throw new Error('Key file changed during validation. Plaintext cleanup stopped to preserve your edits; encrypted keys may already be saved.');
+    const bytes=Buffer.from(text);await handle.write(bytes,0,bytes.length,0);await handle.truncate(bytes.length);await handle.sync();
+  }finally{await handle.close();}
+}
 export async function prepareKeyFile({dir,paths}) {
   await checkPrivateLocation(dir);await mkdir(dir,{recursive:true,mode:0o700});await restrict(dir,true);
   const file=join(dir,'credentials.txt');await checkPrivateLocation(file);
   const saved=await savedProviders(paths);
   try {const handle=await open(file,'wx',0o600);try {await handle.writeFile(template(saved));}finally{await handle.close();}}
-  catch(error){if(error.code!=='EEXIST')throw error;await privateRead(file);}
+  catch(error){
+    if(error.code!=='EEXIST')throw error;
+    const snapshot=await privateRead(file);
+    // Refresh status only if the file contains no supplied keys. Invalid or
+    // populated edits remain untouched, including comments and spacing.
+    let empty=false;try {empty=Object.keys(parseKeyFile(snapshot.text)).length===0;}catch{}
+    if(empty)await rewriteUnchanged(file,snapshot,template(saved));
+  }
   await restrict(file);return file;
 }
 export async function importKeyFile({file,paths,freeOnlyConfirmed,validateCodingCandidates=false,protector,factory}) {
@@ -99,14 +115,8 @@ export async function importKeyFile({file,paths,freeOnlyConfirmed,validateCoding
     const result=await configure({keys,freeOnlyConfirmed,validateCodingCandidates},paths,{protector,factory});
     const saved=await savedProviders(paths),remaining={};
     for(const id of result.failed)for(const name of supported[id]??[])if(keys[name])remaining[name]=keys[name];
-    await checkPrivateLocation(file);
-    const handle=await open(file,constants.O_RDWR|(constants.O_NOFOLLOW??0));
-    try {
-      const now=await handle.stat();
-      if(now.nlink!==1||now.dev!==snapshot.info.dev||now.ino!==snapshot.info.ino||await handle.readFile('utf8')!==snapshot.text)throw new Error('Key file changed during validation. Encrypted keys were saved, but plaintext cleanup stopped to preserve your edits.');
-      // Rewrite only this owned file. Do not hunt/delete editor recovery files.
-      const bytes=Buffer.from(template(saved,remaining));await handle.write(bytes,0,bytes.length,0);await handle.truncate(bytes.length);await handle.sync();
-    }finally{await handle.close();}
+    // Rewrite only this owned file. Do not hunt/delete editor recovery files.
+    await rewriteUnchanged(file,snapshot,template(saved,remaining));
     return result;
   }finally{for(const name of Object.keys(keys))keys[name]='';}
 }
@@ -119,23 +129,24 @@ export async function editorCommand(file,platform=process.platform) {
   }
   throw new Error('No Linux desktop text editor found. Run Settings.sh for hidden terminal entry.');
 }
-export async function runEditorSetup({paths=getRuntimePaths(),prompt=ask,launch=async spec=>execute(spec.command,spec.args,{windowsHide:true}),dir}={}) {
-  if(!process.stdin.isTTY)throw new Error('Key editor setup needs an interactive terminal.');
+export async function runEditorSetup({paths=getRuntimePaths(),prompt=ask,launch=async spec=>execute(spec.command,spec.args,{windowsHide:true}),dir,
+  interactive=!!process.stdin.isTTY,protector,factory,tell=console.log,chooseEditor=editorCommand}={}) {
+  if(!interactive)throw new Error('Key editor setup needs an interactive terminal.');
   const base=process.platform==='win32'?process.env.LOCALAPPDATA:join(homedir(),'.local/share');
   if(!base||!isAbsolute(base))throw new Error('Cannot locate private local application storage.');
   dir??=join(base,'OmniRouteRegular-KeyEntry',createHash('sha256').update(paths.root).digest('hex').slice(0,16));
   const file=await prepareKeyFile({dir,paths});
-  console.log('Opening key slots. Saved provider names are marked; their keys are never exported.');
-  console.log('File: '+file+'\nPlaintext warning: disable editor session backups; save and CLOSE the editor before importing.');
-  const spec=await editorCommand(file);await launch(spec).catch(()=>{throw new Error('Editor could not open. Your pending file is preserved; use masked Settings if needed.');});
+  tell('Opening key slots. Saved provider names are marked; their keys are never exported.');
+  tell('File: '+file+'\nPlaintext warning: disable editor session backups; save and CLOSE the editor before importing.');
+  const spec=await chooseEditor(file);await launch(spec).catch(()=>{throw new Error('Editor could not open. Your pending file is preserved; use masked Settings if needed.');});
   const confirmation=await prompt('After saving and closing: confirm FREE accounts, no billing/overages/BYOK/top-up, and import? Type yes: ');
   if(confirmation.trim().toLowerCase()!=='yes')throw new Error('Import cancelled. Any pending plaintext stays in the displayed file; remove it locally if no longer needed.');
   const validateCodingCandidates=(await prompt('Also test Kimi/Qwen candidates (extra free quota)? Type yes, or Enter to skip: ')).trim().toLowerCase()==='yes';
-  console.log('Validating small requests against trusted free-provider profiles...');
-  const result=await importKeyFile({file,paths,freeOnlyConfirmed:true,validateCodingCandidates});
-  console.log('Ready. Saved: '+(result.accepted.join(', ')||'existing keys retained')+'. Successful plaintext values removed.');
-  if(result.failed.length)console.log('Not updated: '+result.failed.join(', ')+'. These values remain in the file for retry; existing saved keys were kept.');
-  console.log('Editor backups, clipboard history and storage snapshots are outside this cleanup.');
+  tell('Validating small requests against trusted free-provider profiles...');
+  const result=await importKeyFile({file,paths,freeOnlyConfirmed:true,validateCodingCandidates,protector,factory});
+  tell('Ready. Saved: '+(result.accepted.join(', ')||'existing keys retained')+'. Successful plaintext values removed.');
+  if(result.failed.length)tell('Not updated: '+result.failed.join(', ')+'. These values remain in the file for retry; existing saved keys were kept.');
+  tell('Editor backups, clipboard history and storage snapshots are outside this cleanup.');
   return result;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href) {
