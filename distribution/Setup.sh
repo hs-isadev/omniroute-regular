@@ -7,6 +7,8 @@ if [ "$(uname -s)" != Linux ] || [ "$(uname -m)" != x86_64 ] || [ "$(id -u)" = 0
   printf '%s\n' 'Requires Linux x86_64 glibc, normal desktop user; do not use sudo.' >&2
   exit 1
 fi
+# Cross-built archives may not preserve Unix execute bits. No root privileges.
+chmod u+x "$bundle/payload/node/node"
 install_root="${XDG_DATA_HOME:-$HOME/.local/share}/OmniRouteRegular"
 wizard=yes
 while [ "$#" -gt 0 ]; do
