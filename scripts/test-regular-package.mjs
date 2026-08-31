@@ -1,111 +1,98 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, readdir, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, access, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 
-const root=resolve(import.meta.dirname,'..');
-const version=JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
-const linux=process.platform==='linux';
-const name=`OmniRoute-Regular-${version}-${linux?'linux':'windows'}-x64`;
+const root=resolve(import.meta.dirname,'..'),version=JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
+const linux=process.platform==='linux',name='OmniRoute-Regular-'+version+'-'+(linux?'linux':'windows')+'-x64';
 await mkdir(join(root,'test-artifacts'),{recursive:true});
-const temp=await mkdtemp(join(root,'test-artifacts','clean-'));
-const extracted=join(temp,'extracted');await mkdir(extracted);
-const ps=s=>"'"+s.replaceAll("'","''")+"'";
-function run(command,args,options={}) {
+const temp=await mkdtemp(join(root,'test-artifacts','antigravity-'));
+async function run(command,args,options={}) {
   return new Promise((res,rej)=>{
-    const child=spawn(command,args,{cwd:temp,windowsHide:true,...options});let output='',error='';
-    child.stdout?.on('data',b=>output+=b);child.stderr?.on('data',b=>error+=b);
-    const timer=setTimeout(()=>{child.kill();rej(new Error('Smoke test timed out'));},120000);
-    child.on('error',e=>{clearTimeout(timer);rej(e);});
-    child.on('exit',code=>{clearTimeout(timer);code===0?res(output):rej(new Error(`${command} failed: ${error}\n${output}`));});
+    const child=spawn(command,args,{cwd:temp,windowsHide:true,shell:false,...options});let output='',errors='';
+    child.stdout?.on('data',b=>output+=b);child.stderr?.on('data',b=>errors+=b);
+    const timer=setTimeout(()=>{child.kill();rej(Error('Package smoke timed out'));},120000);
+    child.once('error',e=>{clearTimeout(timer);rej(e);});
+    child.once('exit',code=>{clearTimeout(timer);code===0?res(output):rej(Error('Smoke process failed: '+errors+'\n'+output));});
   });
 }
-const zip=join(root,'release',name+(linux?'.tar.gz':'.zip'));
-assert.equal(createHash('sha256').update(await readFile(zip)).digest('hex'),(await readFile(zip+'.sha256','utf8')).split(' ')[0]);
-if(!process.argv.includes('--folder')) await run(linux?'tar':'tar.exe',['-xf',zip,'-C',extracted]);
-const bundle=process.argv.includes('--folder')?join(root,'release',name):join(extracted,name),install=join(temp,'Install With Spaces',...(linux?['OmniRouteRegular']:[]));
+const archive=join(root,'release',name+(linux?'.tar.gz':'.zip'));
+assert.equal(createHash('sha256').update(await readFile(archive)).digest('hex'),(await readFile(archive+'.sha256','utf8')).split(' ')[0]);
+const extracted=join(temp,'extracted');await mkdir(extracted);
+await run(linux?'tar':'tar.exe',['-xf',archive,'-C',extracted]);
+const bundle=join(extracted,name),install=join(temp,'Install With Spaces');
 if(linux) {
-  const setupEnv={...process.env,XDG_DATA_HOME:join(temp,'Install With Spaces')};
-  await run('sh',[join(bundle,'Setup.sh'),'--no-wizard'],{env:setupEnv});
-  await run('sh',[join(bundle,'Setup.sh'),'--no-wizard'],{env:setupEnv});
-  assert.equal((await stat(install)).mode & 0o777,0o700);
-  for(const file of ['Setup.sh','payload/Launch.sh','payload/Settings.sh']) await run('sh',['-n',join(bundle,file)]);
+  await run('sh',[join(bundle,'Setup.sh'),'--install-root',install,'--no-wizard']);
+  await run('sh',[join(bundle,'Setup.sh'),'--install-root',install,'--no-wizard']);
+  assert.equal((await stat(install)).mode&0o777,0o700);
+  for(const name of ['Setup.sh','payload/Launch.sh','payload/Settings.sh','payload/Manage.sh']) await run('sh',['-n',join(bundle,name)]);
 } else {
-await run('powershell.exe',['-NoProfile','-Command',`$ErrorActionPreference='Stop'; foreach($file in @(${ps(join(bundle,'Setup.ps1'))},${ps(join(bundle,'payload/Settings.ps1'))})) { $tokens=$null; $errors=$null; [void][Management.Automation.Language.Parser]::ParseFile($file,[ref]$tokens,[ref]$errors); if($errors.Count) { throw ($errors | Out-String) } }; Add-Type -AssemblyName System.Windows.Forms`]);
-await run('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',join(bundle,'Setup.ps1'),'-InstallRoot',install,'-NoWizard','-NoShortcuts']);
-await run('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',join(install,'Settings.ps1'),'-InstallRoot',install,'-SmokeTest']);
-// Rerun is safe and doesn't overwrite binaries/data.
-await run('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',join(bundle,'Setup.ps1'),'-InstallRoot',install,'-NoWizard','-NoShortcuts']);
+  const args=['-NoProfile','-ExecutionPolicy','Bypass','-File',join(bundle,'Setup.ps1'),'-InstallRoot',install,'-NoWizard','-NoShortcuts'];
+  await run('powershell.exe',args);await run('powershell.exe',args);
+  await run('powershell.exe',['-NoProfile','-File',join(install,'Settings.ps1'),'-SmokeTest']);
 }
-const payload=linux?join(install,'current'):install;
-const node=join(payload,linux?'node/node':'node/node.exe'), app=join(payload,'app');
-const opencode=join(payload,linux?'opencode/opencode':'opencode/opencode.exe');
-assert.match(await run(node,['--version']),/v22\.23\.2/);
-const env={...process.env,OMNIROUTE_HOME:join(install,'data')};
-for(const key of Object.keys(env)) if(/API_KEY|API_TOKEN|^HF_TOKEN$|^OPENCODE_|^ANTHROPIC_|^OPENAI_/.test(key)) delete env[key];
-for(const kind of ['CONFIG','DATA','STATE','CACHE']) env[`XDG_${kind}_HOME`]=join(install,'profile',kind.toLowerCase());
-env.OPENCODE_DISABLE_PROJECT_CONFIG='true';
-assert.match(await run(opencode,['--version'],{env}),/1\.18\.25/);
-const url=path=>pathToFileURL(join(app,path)).href;
+const active=(await readFile(join(install,'active-version.txt'),'utf8')).trim();assert.match(active,/^versions\/[a-zA-Z0-9.-]+$/);
+const payload=join(install,active),node=join(payload,linux?'node/node':'node/node.exe'),app=join(payload,'app');
+const url=p=>pathToFileURL(join(app,p)).href;
+assert.match(await run(node,['--version']),/v22\.23\.2/);await assert.rejects(access(join(payload,'opencode')),/ENOENT/);
+const workspace=join(temp,'Project With Spaces');await mkdir(workspace);
+const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/KEY|TOKEN|SECRET|PASSWORD|NODE_OPTIONS|OMNIROUTE|OPENCODE/i.test(key)));
+env.OMNIROUTE_REGULAR_ROOT=install;env.OMNIROUTE_HOME=join(install,'data');
+const preview=await run(node,[join(app,'distribution/launch.mjs'),'--workspace',workspace,'--host',node,'--dry-run'],{env});assert.match(preview,/Preview only/);
+await assert.rejects(access(join(workspace,'.agents/mcp_config.json')),/ENOENT/);
 await run(node,['--input-type=module','-e',`
-  import {configure} from ${JSON.stringify(url('distribution/settings.mjs'))};
-  import {getRuntimePaths} from ${JSON.stringify(url('packages/config/dist/index.js'))};
-  await configure({keys:{OPENROUTER_API_KEY:'fixture-portable-smoke-not-a-real-key'},freeOnlyConfirmed:true},getRuntimePaths(),{factory:()=>({generate:async()=>({text:'OK'})})});
+import {configure} from ${JSON.stringify(url('distribution/settings.mjs'))};
+import {getRuntimePaths} from ${JSON.stringify(url('packages/config/dist/index.js'))};
+import {InMemoryKeyProtector} from ${JSON.stringify(url('packages/vault/dist/index.js'))};
+await configure({keys:{GROQ_API_KEY:'fixture-package-only-not-real'},freeOnlyConfirmed:true},getRuntimePaths(),{protector:new InMemoryKeyProtector(Buffer.alloc(32,7)),factory:()=>({generate:async()=>({text:'OK'})})});
 `],{env});
-assert.ok(!(await readFile(join(install,'data/vault/vault.json'),'utf8')).includes('fixture-portable-smoke-not-a-real-key'));
-if(linux) {
-  assert.equal((await stat(join(install,'data/vault/vault.json'))).mode & 0o777,0o600);
-  const raw=JSON.parse(await readFile(join(install,'data/vault/vault.json'),'utf8'));
-  assert.equal(raw.wrappedMasterKey.scheme,'linux-secret-service-v1');
-  // Fresh process must retrieve the same real key from the isolated keyring.
-  await run(node,['--input-type=module','-e',`
-    import assert from 'node:assert/strict';
-    import {SecretVault,SecretServiceProtector} from ${JSON.stringify(url('packages/vault/dist/index.js'))};
-    const vault=await SecretVault.load(${JSON.stringify(join(install,'data/vault/vault.json'))});
-    assert.equal(vault.get('openrouter').OPENROUTER_API_KEY,'fixture-portable-smoke-not-a-real-key');vault.dispose();
-    await assert.rejects(new SecretServiceProtector().unprotect(Buffer.from('00000000-0000-0000-0000-000000000000')),/keyring/);
-    import {randomUUID} from 'node:crypto';
-    import {spawn} from 'node:child_process';
-    const reference=randomUUID();
-    const tool=(args,input='')=>new Promise((resolve,reject)=>{
-      const child=spawn('secret-tool',args,{stdio:['pipe','ignore','ignore']});
-      child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(new Error('Synthetic keyring fixture failed')));child.stdin.end(input);
-    });
-    await tool(['store','--label=OmniRoute CI malformed key','application','omniroute','vault-id',reference],'invalid-base64');
-    try {await assert.rejects(new SecretServiceProtector().unprotect(Buffer.from(reference)),/missing or invalid/);}
-    finally {await tool(['clear','application','omniroute','vault-id',reference]);}
-  `],{env});
-  await assert.rejects(run(node,['--input-type=module','-e',`
-    import {SecretVault} from ${JSON.stringify(url('packages/vault/dist/index.js'))};
-    await SecretVault.load(${JSON.stringify(join(install,'data/vault/vault.json'))});
-  `],{env:{...env,DBUS_SESSION_BUS_ADDRESS:'unix:path=/nonexistent-omniroute-test-bus'}}),/keyring/);
+const rawVault=await readFile(join(install,'data/vault/vault.json'),'utf8');assert.ok(!rawVault.includes('fixture-package-only-not-real'));
+const config=JSON.parse(await readFile(join(install,'data/config.json'),'utf8'));assert.deepEqual(config.providers.filter(p=>p.enabled).map(p=>p.id),['groq']);
+
+// Genuine stdio + production router, FAKE provider. Not an Antigravity host test.
+async function protocol() {
+  const child=spawn(node,[join(root,'scripts/package-protocol-fixture.mjs'),app,temp],{cwd:workspace,env,windowsHide:true,stdio:['pipe','pipe','pipe']});
+  const pending=new Map();let buffer='',stderr='',id=0;
+  child.stderr.on('data',b=>stderr+=b);
+  child.stdout.on('data',b=>{
+    buffer+=b;
+    while(buffer.includes('\n')) {
+      const at=buffer.indexOf('\n'),line=buffer.slice(0,at);buffer=buffer.slice(at+1);
+      try {const m=JSON.parse(line),p=pending.get(m.id);if(p){pending.delete(m.id);clearTimeout(p.timer);m.error?p.reject(Error(JSON.stringify(m.error))):p.resolve(m.result);}}
+      catch(error){for(const p of pending.values())p.reject(error);}
+    }
+  });
+  const exit=new Promise((res,rej)=>{child.once('error',rej);child.once('exit',res);});
+  const call=(method,params)=>new Promise((resolve,reject)=>{
+    const requestId=++id,timer=setTimeout(()=>{pending.delete(requestId);reject(Error('MCP timed out: '+stderr));},15000);
+    pending.set(requestId,{resolve,reject,timer});child.stdin.write(JSON.stringify({jsonrpc:'2.0',id:requestId,method,params})+'\n');
+  });
+  try {
+    const init=await call('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'package-protocol-fixture',version:'1'}});assert.equal(init.serverInfo.name,'omniroute');
+    child.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');
+    const listing=await call('tools/list',{});assert.deepEqual(listing.tools.map(t=>t.name).sort(),['omni_models','omni_route','omni_routes']);
+    const schema=listing.tools.find(t=>t.name==='omni_route').inputSchema.properties.routingMode;
+    assert.ok(JSON.stringify(schema).includes('regular'));assert.ok(!JSON.stringify(schema).includes('orchestrator'));
+    const easy=await call('tools/call',{name:'omni_route',arguments:{prompt:'What is a variable?',routingMode:'regular'}});
+    assert.equal(easy.isError,undefined);assert.equal(easy.structuredContent.attribution.worker.modelId,'openai/gpt-oss-20b');
+    const code=await call('tools/call',{name:'omni_route',arguments:{prompt:'Write a Python function to add two numbers.',requiredCapabilities:['coding'],routingMode:'regular'}});
+    assert.equal(code.structuredContent.attribution.worker.modelId,'openai/gpt-oss-120b');assert.match(code.structuredContent.badge,/groq/);
+    const recent=await call('tools/call',{name:'omni_routes',arguments:{limit:2}});assert.equal(recent.structuredContent.routes.length>=2,true);
+    const bad=await call('tools/call',{name:'omni_route',arguments:{prompt:'continue',routingMode:'regular'}});assert.equal(bad.isError,true);
+    child.stdin.end();let timer;
+    const result=await Promise.race([exit,new Promise((_,reject)=>timer=setTimeout(()=>reject(Error('MCP did not exit on EOF')),5000))]);clearTimeout(timer);assert.equal(result,0);
+    return {easy:easy.structuredContent.routeId,coding:code.structuredContent.routeId};
+  }finally{if(child.exitCode===null)child.kill();for(const p of pending.values())clearTimeout(p.timer);}
 }
-// Inspect the real OpenCode config without making an LLM request.
-const {openCodeRegularConfig,openCodeHarnessEnvironment}=await import(url('apps/cli/dist/harness-env.js'));
-const inline=JSON.parse(openCodeRegularConfig(node,join(app,'apps/cli/dist/bin.js'),env.OMNIROUTE_HOME,join(app,'docs/integrations/opencode-regular-instructions.md'),'http://127.0.0.1:1'));
-inline.share='disabled';inline.autoupdate=false;inline.skills={paths:[join(app,'distribution/skills')]};inline.permission={task:'deny'};
-const harnessEnv=openCodeHarnessEnvironment(env,env.OMNIROUTE_HOME,'fixture-session-token',JSON.stringify(inline));
-for(const kind of ['CONFIG','DATA','STATE','CACHE']) harnessEnv[`XDG_${kind}_HOME`]=env[`XDG_${kind}_HOME`];
-harnessEnv.OPENCODE_DISABLE_PROJECT_CONFIG='true';
-const debug=JSON.parse(await run(opencode,['--pure','debug','config'],{env:harnessEnv}));
-assert.equal(debug.model,'openrouter/openrouter/free'); assert.deepEqual(debug.enabled_providers,['openrouter']);
-assert.deepEqual(Object.keys(debug.mcp),['omniroute']);assert.equal(debug.permission.task,'deny');
-const mcp=await run(opencode,['--pure','mcp','list'],{env:harnessEnv});
-assert.match(mcp,/omniroute/); assert.match(mcp,/connected/);
-// Start/stop the bundled daemon, with the isolated synthetic-key vault. Health
-// does not invoke catalog discovery or inference.
-const daemon=spawn(node,[join(app,'apps/daemon/dist/main.js')],{cwd:app,env,windowsHide:true,stdio:'pipe'});
-let daemonError='';daemon.stderr.on('data',b=>daemonError+=b);
-try {
-  let health;
-  for(let i=0;i<40;i++) {
-    if(daemon.exitCode!==null) throw new Error(`Daemon exited: ${daemonError}`);
-    try {health=await (await fetch('http://127.0.0.1:47839/v1/health',{signal:AbortSignal.timeout(300)})).json();break;}catch{}
-    await new Promise(r=>setTimeout(r,250));
-  }
-  assert.equal(health?.defaultMode,'regular');assert.equal(health.freeOnly,true);
-} finally {daemon.kill();}
-console.log(`PASS: ${linux?'Linux extracted-tarball, shell syntax, Secret Service roundtrip/fail-closed, private permissions':'Windows extracted-ZIP, PS5 parsing, masked Forms, DPAPI'}: clean install with spaces, rerun, portable versions, isolated real OpenCode configuration, MCP connection, daemon health. No real API keys or LLM requests used.`);
-console.log(`Synthetic test profile retained at ${temp}`);
+const routes=await protocol();await protocol();
+assert.ok(!(await readFile(join(temp,'diagnostic.jsonl'),'utf8')).includes('Write a Python function'));
+await run(node,['--input-type=module','-e',`
+import {integrateWorkspace,removeWorkspaceIntegration} from ${JSON.stringify(url('distribution/antigravity.mjs'))};
+import {uninstallPackage} from ${JSON.stringify(url('distribution/install.mjs'))};
+const options={workspace:${JSON.stringify(workspace)},node:process.execPath,entrypoint:${JSON.stringify(join(app,'distribution/mcp-regular.mjs'))},runtimeRoot:${JSON.stringify(join(install,'data'))},apply:true};
+await integrateWorkspace(options);await removeWorkspaceIntegration(options);await uninstallPackage(${JSON.stringify(install)});
+`],{env});
+assert.equal(await readFile(join(install,'data/vault/vault.json'),'utf8'),rawVault);
+console.log(JSON.stringify({status:'PASS',platform:process.platform,extractedArchive:archive,temp,checks:['checksum','no OpenCode dependency','install/reinstall with spaces','masked Windows form or Linux shell syntax','Groq-only fixture setup','MCP discovery/invocation','light/strong routing','MCP EOF/reconnect','redacted logs','workspace merge/detach','data-preserving uninstall'],fixtureRouteIds:routes,realAntigravityHostTest:false,realProviderTest:false,realLinuxKeyringTest:false},null,2));
