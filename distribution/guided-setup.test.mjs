@@ -21,7 +21,7 @@ test('guided setup saves keys, previews, confirms then launches with argument ar
   assert.equal(typeof module.runGuidedSetup,'function','guided setup is not implemented');
   const f=await fixture();const result=await module.runGuidedSetup(f.options);
   assert.equal(result.status,'launched');assert.equal(f.calls.length,3);
-  assert.equal(f.calls[0].command,'powershell.exe');assert.ok(f.calls[0].args.includes('-RequireReady'));
+  assert.equal(f.calls[0].command,'fixture-node');assert.match(f.calls[0].args[0],/key-editor.mjs$/);
   assert.ok(f.calls[1].args.includes('--dry-run'));assert.ok(!f.calls[1].args.includes('--apply'));
   assert.ok(f.calls[2].args.includes('--apply'));
   assert.equal(f.calls[2].args.at(-2),join(f.root,'workspace'));
@@ -39,7 +39,7 @@ test('declining preview never applies integration',async()=>{
   assert.equal(typeof module.runGuidedSetup,'function');
   const f=await fixture('linux',['','no']);
   assert.equal((await module.runGuidedSetup(f.options)).status,'cancelled');
-  assert.equal(f.calls.length,2);assert.equal(f.calls[0].command,'sh');
+  assert.equal(f.calls.length,2);assert.match(f.calls[0].args[0],/key-editor.mjs$/);
 });
 test('preview and launch failures stop with stage-specific errors',async()=>{
   assert.equal(typeof module.runGuidedSetup,'function');
@@ -76,4 +76,10 @@ test('real step runner returns exit status and handles spawn failure without she
   assert.equal(await module.runStep(process.execPath,['-e','process.exit(0)']),0);
   assert.equal(await module.runStep(process.execPath,['-e','process.exit(7)']),7);
   await assert.rejects(module.runStep(join(tmpdir(),'omni-missing-executable'),[]),/Could not start a setup step/);
+});
+test('masked key entry remains an explicit alternative on both platforms',async()=>{
+  for(const platform of ['win32','linux']) {
+    const f=await fixture(platform);f.options.keyEntry='masked';await module.runGuidedSetup(f.options);
+    assert.equal(f.calls[0].command,platform==='win32'?'powershell.exe':'sh');
+  }
 });
