@@ -83,3 +83,20 @@ test('provider validation falls back within its free models before rejecting a k
   const result=await configure({keys:{OPENROUTER_API_KEY:fixture,ZAI_API_KEY:'fixture-zai'},freeOnlyConfirmed:true},paths,{protector,factory:settings=>settings.id==='zai'?{generate:async request=>{attempts.push(request.modelId);if(attempts.length===1) throw Error('model unavailable');return {text:'OK'};}}:success()});
   assert.ok(result.accepted.includes('zai'));assert.deepEqual(attempts,['glm-4.7-flash','glm-4.5-flash']);
 });
+
+test('Antigravity setup accepts Groq alone without OpenRouter',async()=>{
+  const {paths,protector}=await context();
+  const result=await configure({keys:{GROQ_API_KEY:fixture},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  assert.equal(result.ready,true);assert.deepEqual(result.accepted,['groq']);
+  assert.deepEqual((await loadConfig(paths)).providers.filter(p=>p.enabled).map(p=>p.id),['groq']);
+});
+
+test('validation never invokes a disabled, forbidden or unknown-price model',async()=>{
+  const {paths,protector}=await context();const calls=[];
+  const result=await configure({keys:{GROQ_API_KEY:fixture},freeOnlyConfirmed:true},paths,{protector,factory:settings=>({generate:async request=>{
+    const model=settings.models.find(m=>m.modelId===request.modelId);calls.push(request.modelId);
+    assert.ok(model.enabled&&model.allowed);assert.equal(model.inputPerMillionUsd,0);assert.equal(model.outputPerMillionUsd,0);
+    return {text:'OK'};
+  }})});
+  assert.equal(result.ready,true);assert.ok(calls.length);
+});
