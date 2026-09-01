@@ -73,6 +73,8 @@ test('consumer autostart is per-user, background, and contains no account data',
   const text=await readFile(result.file,'utf8');
   assert.match(text,/X-GNOME-Autostart-enabled=true/);
   assert.match(text,/--background/);
+  assert.match(text,/--profile/);
+  assert.match(text,/claude-consumer-profile/);
   assert.doesNotMatch(text,/cookie|token|password/i);
 });
 
