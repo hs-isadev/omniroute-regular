@@ -61,8 +61,10 @@ test('incomplete Cloudflare replacement keeps the existing provider enabled',asy
   const vault=await SecretVault.load(paths.vault,protector);assert.equal(vault.get('cloudflare').CLOUDFLARE_API_TOKEN,'fixture-cloudflare');vault.dispose();
 });
 test('all hosted free profiles have key-entry fields',()=>{
-  assert.equal(Object.keys(fields).length,12);
+  assert.equal(Object.keys(fields).length,14);
   for(const profile of EXTRA_FREE_PROVIDERS) assert.ok(fields[profile.id].includes(profile.credentialField));
+  assert.deepEqual(fields.cerebras,['CEREBRAS_API_KEY']);
+  assert.deepEqual(fields.sambanova,['SAMBANOVA_API_KEY']);
 });
 test('existing setup preserves orchestrator mode, port, disabled providers and old keys',async()=>{
   const {paths,protector}=await context();

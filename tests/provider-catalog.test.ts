@@ -9,6 +9,22 @@ import { configureProvider } from "../apps/cli/src/provider-management.js";
 
 const request = (modelId: string) => ({ modelId, prompt: "Hi", instructions: "Reply briefly", reasoningEffort: "none" as const, maxOutputTokens: 16, jsonSchema: null, schemaName: null, safetyIdentifier: null, signal: AbortSignal.timeout(5000) });
 
+test("strict-free catalog includes current no-card Cerebras and SambaNova API tiers", () => {
+  const expected = [
+    { id: "cerebras", field: "CEREBRAS_API_KEY", base: "https://api.cerebras.ai/", models: ["gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "zai-glm-4.7"] },
+    { id: "sambanova", field: "SAMBANOVA_API_KEY", base: "https://api.sambanova.ai/", models: ["gpt-oss-120b"] },
+  ];
+  for (const item of expected) {
+    const profile = EXTRA_FREE_PROVIDERS.find((candidate) => candidate.id === item.id);
+    assert.ok(profile, `${item.id} profile missing`);
+    assert.equal(profile.credentialField, item.field);
+    assert.equal(profile.baseUrl, item.base);
+    assert.deepEqual(profile.modelIds, item.models);
+    assert.equal(profile.access, "free-tier");
+  }
+  assert.equal(EXTRA_FREE_PROVIDERS.some((profile) => profile.id === "github-models"), false, "retired GitHub Models must not be offered");
+});
+
 test("all hosted profiles require confirmation and missing keys never create adapters", () => {
   const config = structuredClone(DEFAULT_CONFIG);
   assert.equal(createProviders(config, { credentials: {} }).size, 0);

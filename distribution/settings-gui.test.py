@@ -29,8 +29,10 @@ class KeyFormTests(unittest.TestCase):
             self.assertNotIn('fixture-secret', str(result))
 
     def test_shortlist_and_partial_success(self):
-        self.assertEqual(len(gui.PROVIDERS), 11)
+        self.assertEqual(len(gui.PROVIDERS), 13)
         self.assertTrue(any(row[0] == 'zai' for row in gui.PROVIDERS))
+        self.assertTrue(any(row[0] == 'cerebras' for row in gui.PROVIDERS))
+        self.assertTrue(any(row[0] == 'sambanova' for row in gui.PROVIDERS))
         self.assertFalse(any(row[0] in ('huggingface', 'vercel', 'longcat') for row in gui.PROVIDERS))
         with patch.object(gui.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, '{"ready":true,"accepted":["groq"],"failed":["zai"]}')):
             result = gui.submit('/node', '/app', '/runtime', {'GROQ_API_KEY': 'fixture'}, True)

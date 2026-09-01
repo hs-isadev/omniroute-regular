@@ -7,6 +7,13 @@ test('default packages bundle MCP but not OpenCode and include provenance',async
   assert.doesNotMatch(build,/const openCodePackage|opencode:.*1\.18/);
   for(const name of ['antigravity.mjs','mcp-regular.mjs','install.mjs','provenance.json','dependencies.json','docs/testing/antigravity-regular.tdd.md']) assert.ok(build.includes(name),name);
 });
+test('dual release preserves upstream MIT attribution',async()=>{
+  const build=await source('../scripts/package-dual.mjs');
+  assert.match(build,/THIRD-PARTY-NOTICES\.md/);
+  const notice=await source('../THIRD-PARTY-NOTICES.md');
+  assert.match(notice,/Copyright \(c\) 2026 diegosouzapw/);
+  assert.match(notice,/MIT License/);
+});
 test('both platform launchers forward project arguments through versioned installs',async()=>{
   assert.match(await source('Launch.sh'),/active-version.txt/);
   assert.match(await source('Launch.sh'),/"\$@"/);

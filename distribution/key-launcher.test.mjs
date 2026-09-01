@@ -13,6 +13,7 @@ test('simple GUI contains masked shortlisted provider fields without opening a w
   const ui=fileURLToPath(new URL('./Settings.ps1',import.meta.url));
   const {stdout}=await run('powershell.exe',['-NoProfile','-STA','-NonInteractive','-ExecutionPolicy','Bypass','-File',ui,'-Simple','-SmokeTest'],{timeout:15000,windowsHide:true});
   assert.match(stdout,/PASS: masked Windows Forms/);
+  assert.match(stdout,/13 masked/);
 });
 for(const marker of [null,'versions/missing','../../invalid']) test('key launcher preflight does not require installation marker: '+marker,{skip:process.platform!=='win32'||!existsSync(launcher)},async()=>{
   const local=await mkdtemp(join(tmpdir(),'omni-launcher-'));
