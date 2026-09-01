@@ -10,6 +10,7 @@ export { CODING_CANDIDATES } from './regular-policy.mjs';
 export const fields = {
   openrouter: ['OPENROUTER_API_KEY'], groq: ['GROQ_API_KEY'], gemini: ['GEMINI_API_KEY'],
   mistral: ['MISTRAL_API_KEY'], cohere: ['COHERE_API_KEY'],
+  cerebras: ['CEREBRAS_API_KEY'], sambanova: ['SAMBANOVA_API_KEY'],
   cloudflare: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'], huggingface: ['HF_TOKEN'],
   kilo: ['KILO_API_KEY'], zai: ['ZAI_API_KEY'], nvidia: ['NVIDIA_API_KEY'],
   vercel: ['VERCEL_AI_GATEWAY_API_KEY'], 'opencode-zen': ['OPENCODE_ZEN_API_KEY'],
@@ -19,7 +20,7 @@ export function regularConfig() {
   const existing = structuredClone(DEFAULT_CONFIG);
   existing.routing.defaultMode = 'regular'; existing.routing.freeOnly = true;
   existing.routing.orchestratorProviderId = 'openrouter'; existing.routing.orchestratorModelId = 'openrouter/free';
-  existing.routing.directProviderOrder = ['groq','gemini','mistral','cohere','cloudflare','huggingface','zai','kilo','nvidia','vercel','opencode-zen','openrouter'];
+  existing.routing.directProviderOrder = ['groq','cerebras','sambanova','gemini','mistral','cohere','cloudflare','huggingface','zai','kilo','nvidia','vercel','opencode-zen','openrouter'];
   existing.daemon.port = 47839; existing.daemon.allowedOrigins = ['http://127.0.0.1:47839'];
   existing.reliability.retryLimit=0;
   for (const provider of existing.providers) {

@@ -27,6 +27,14 @@ OmniRoute runtime, connects MCP, and creates launchers. OS security, admin,
 desktop-keyring, and Antigravity onboarding prompts can still require approval.
 See the release's `VERIFICATION.md` for the exact tests and limitations.
 
+## Unreleased 0.4.0 source
+
+The next source release adds opt-in Cerebras and SambaNova free-tier API-key
+profiles, 12-provider graphical key entry, and an upstream MIT notice. Their
+adapters pass mock-backed discovery, completion, and streaming tests, but they
+have not yet passed a live owner-key check. The published 0.3.0 download remains
+the tested release until 0.4.0 is packaged, independently reviewed, and sealed.
+
 ## Legacy Antigravity-only 0.2.x documentation
 
 Preview release: Windows/Linux installer and MCP protocol checks pass. Real Antigravity account/tool-adherence testing and a Linux desktop-keyring round trip are still pending. See the included test evidence before relying on this for important work.
@@ -81,7 +89,7 @@ Then try a bounded coding task with relevant code and requirements. The host mus
 
 ## Providers and routing
 
-Regular offers **10 opt-in free-plan/free-endpoint/evaluation providers**. Hugging Face and Vercel credit-based profiles are disabled, even when their keys are retained. Separate legacy integrations still have 12 profiles. See [provider/authentication guide](docs/free-provider-expansion.md). Stronger candidates include NVIDIA Kimi K2.6 and OpenRouter Qwen3 Coder free; their individual connectivity check must pass before activation. Coding quality is not certified by that check. No 120B ceiling is imposed.
+Published Regular 0.3.0 offers **10 opt-in free-plan/free-endpoint/evaluation providers**. Unreleased 0.4.0 source offers 12 by adding Cerebras and SambaNova. Hugging Face and Vercel credit-based profiles are disabled, even when their keys are retained. See [provider/authentication guide](docs/free-provider-expansion.md). Stronger candidates include NVIDIA Kimi K2.6 and OpenRouter Qwen3 Coder free; their individual connectivity check must pass before activation. Coding quality is not certified by that check. No 120B ceiling is imposed.
 
 Runtime enforces compiled provider endpoints and free-model IDs before loading keys; editing prices to zero cannot admit an unlisted model. Account free-plan eligibility is still your responsibility: connectivity does not prove billing status, and there is no universal billing-status API. Limits stop/fallback only among eligible free workers. No claim of unlimited access, zero security risk, or superiority over every installer is made. See [security/test evidence](docs/testing/key-editor.tdd.md).
 

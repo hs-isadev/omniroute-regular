@@ -36,10 +36,12 @@ or `sh Launch.sh opencode /path/to/project`). Normal tool approval prompts remai
 
 ## Your own keys, free models only
 
-Slots: Groq, Gemini, Cohere, Cloudflare, Mistral, OpenRouter, Kilo, Z.AI Flash,
-NVIDIA evaluation and OpenCode Zen free models. Cloudflare needs both an API
-token and account ID. Each slot has its acquisition link. You bring your own
-provider keys to OmniRoute; this does not enable paid gateway BYOK fallbacks.
+Slots: Groq, Cerebras, SambaNova, Gemini, Cohere, Cloudflare, Mistral,
+OpenRouter, Kilo, Z.AI Flash, NVIDIA evaluation and OpenCode Zen free models.
+Cloudflare needs both an API token and account ID. Each slot has its acquisition
+link. You bring your own provider keys to OmniRoute; this does not enable paid
+gateway BYOK fallbacks. Cerebras and SambaNova are initially text/coding workers;
+tool-call promotion requires a successful live compatibility check.
 
 Blank fields keep keys already saved in this profile. Nothing is copied from
 someone else's profile or machine. Windows uses its user-bound encrypted vault;
@@ -64,8 +66,10 @@ If none work, the form stays open so you can retry or use another free provider.
 Latest owner-account checks: Groq, Gemini, Mistral, Cohere, Cloudflare, OpenRouter,
 Kilo and OpenCode Zen have passed inference. Kilo's Auto Free returned 503 but
 its free fallback worked. Z.AI returned 429 / a timeout; it remains an available
-slot for your own account. NVIDIA is untested with a live key. These results
-are not guarantees for another account or proof of large-project coding quality.
+slot for your own account. NVIDIA, Cerebras and SambaNova are untested with a
+live owner key. Their adapters have mock-backed protocol tests only. These
+results are not guarantees for another account or proof of large-project coding
+quality.
 
 ## Platform requirements and verification
 

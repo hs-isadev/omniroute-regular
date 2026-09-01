@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {join,resolve,relative,basename,dirname} from 'node:path';
 import {verifyPackage} from '../distribution/install.mjs';
-const repo=resolve(import.meta.dirname,'..'),version='0.3.0';
+const repo=resolve(import.meta.dirname,'..'),version='0.4.0';
 const release=join(repo,'release','OmniRoute-Dual-'+version);
 try{await access(release);throw new Error('Release folder exists; preserve it before making a new preview.');}catch(e){if(e.code!=='ENOENT')throw e;}
 await mkdir(release,{recursive:true});
@@ -33,6 +33,7 @@ for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']])
   await mkdir(join(payload,'opencode'));
   await cp(join(extracted,'package/bin',windows?'opencode.exe':'opencode'),join(payload,'opencode',windows?'opencode.exe':'opencode'));
   await cp(join(repo,'distribution/OPENCODE-LICENSE.txt'),join(payload,'opencode/LICENSE.txt'));
+  await cp(join(repo,'THIRD-PARTY-NOTICES.md'),join(payload,'app/THIRD-PARTY-NOTICES.md'));
   if(!windows)await chmod(join(payload,'opencode/opencode'),0o755);
   await writeFile(join(payload,'dual-provenance.json'),JSON.stringify({version,hosts:['opencode','antigravity'],status:'local-shareable-package',node:'22.23.2',opencode:'1.18.25',opencodeIntegrity:'sha512-'+integrity[platform],personalDataIncluded:false,sourceBaseline:'OmniRoute Regular 0.2.2 plus dual-host and graphical setup modules',antigravity:'Downloaded directly from Google during setup; not redistributed'},null,2)+'\n');
   const files=[];
@@ -49,6 +50,7 @@ for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']])
   await verifyPackage(target,platform);console.log('Verified '+label+': '+files.length+' payload files');
 }
 await cp(join(repo,'distribution/dual/README.md'),join(release,'README.md'));
+await cp(join(repo,'THIRD-PARTY-NOTICES.md'),join(release,'THIRD-PARTY-NOTICES.md'));
 await cp(join(repo,'distribution/dual/Install-Windows.cmd'),join(release,'Install-Windows.cmd'));
 await cp(join(repo,'distribution/dual/Install-Linux.sh'),join(release,'Install-Linux.sh'));
 await writeFile(join(release,'LOCAL-PACKAGE.txt'),'Shareable local package. No API keys or account sessions are included. Z.AI remains available despite owner-account rate limits/timeouts; this is not a claim all providers work for every account. GitHub publication is a separate action.\n');

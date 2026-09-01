@@ -14,6 +14,8 @@ PROVIDERS = [
     ('cloudflare', 'Cloudflare API token', 'CLOUDFLARE_API_TOKEN', 'https://dash.cloudflare.com/'),
     ('cloudflare', 'Cloudflare account ID', 'CLOUDFLARE_ACCOUNT_ID', 'https://dash.cloudflare.com/'),
     ('mistral', 'Mistral (free plan)', 'MISTRAL_API_KEY', 'https://console.mistral.ai/api-keys/'),
+    ('cerebras', 'Cerebras (free tier)', 'CEREBRAS_API_KEY', 'https://cloud.cerebras.ai/'),
+    ('sambanova', 'SambaNova (free tier)', 'SAMBANOVA_API_KEY', 'https://cloud.sambanova.ai/apis'),
     ('openrouter', 'OpenRouter (free models)', 'OPENROUTER_API_KEY', 'https://openrouter.ai/settings/keys'),
     ('kilo', 'Kilo (free models)', 'KILO_API_KEY', 'https://app.kilo.ai/'),
     ('zai', 'Z.AI (Flash only)', 'ZAI_API_KEY', 'https://z.ai/manage-apikey/apikey-list'),
@@ -109,9 +111,9 @@ def main():
     window.protocol('WM_DELETE_WINDOW', close)
     if args.smoke_test:
         window.update()
-        assert len(boxes) == 11 and all(box.cget('show') == '*' for box in boxes.values())
+        assert len(boxes) == 13 and all(box.cget('show') == '*' for box in boxes.values())
         assert 'ZAI_API_KEY' in boxes and 'HF_TOKEN' not in boxes
-        window.destroy(); print('PASS: 11 masked Linux fields, free shortlist, responsive form'); return 0
+        window.destroy(); print('PASS: 13 masked Linux fields, free shortlist, responsive form'); return 0
     window.after(100, poll); window.mainloop()
     return 0 if state['ready'] else 2
 

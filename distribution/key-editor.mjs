@@ -72,7 +72,7 @@ function template(saved,remaining={}) {
     '# One key per provider, not per model. Leave providers you do not want blank.',
     '# LongCat excluded: current API is paid; old free models were retired.',
     '# Hugging Face and Vercel credit-based providers are disabled in Regular mode.',''];
-  for(const id of ['groq','gemini','cohere','cloudflare','mistral','openrouter','kilo','zai','nvidia','opencode-zen']) {
+  for(const id of ['groq','cerebras','sambanova','gemini','cohere','cloudflare','mistral','openrouter','kilo','zai','nvidia','opencode-zen']) {
     const names=supported[id];
     lines.push('# '+id+': '+(saved.has(id)?'saved (blank keeps it)':'not configured'),'# Get key: '+links[id]);
     const note=EXTRA_FREE_PROVIDERS.find(p=>p.id===id)?.note;

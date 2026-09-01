@@ -46,6 +46,8 @@ $rows = @(
   @('Groq','GROQ_API_KEY','https://console.groq.com/keys'),
   @('Gemini','GEMINI_API_KEY','https://aistudio.google.com/apikey'),
   @('Mistral','MISTRAL_API_KEY','https://console.mistral.ai/api-keys/'),
+  @('Cerebras free tier','CEREBRAS_API_KEY','https://cloud.cerebras.ai/'),
+  @('SambaNova free tier','SAMBANOVA_API_KEY','https://cloud.sambanova.ai/apis'),
   @('Cohere','COHERE_API_KEY','https://dashboard.cohere.com/api-keys'),
   @('Cloudflare token','CLOUDFLARE_API_TOKEN','https://dash.cloudflare.com/'),
   @('Cloudflare account ID','CLOUDFLARE_ACCOUNT_ID','https://dash.cloudflare.com/'),
@@ -70,7 +72,7 @@ $confirm.Text='I checked free-tier/evaluation terms. Paid overages, BYOK and aut
 $confirm.SetBounds(15,393,650,38); $form.Controls.Add($confirm)
 $notice=New-Object Windows.Forms.Label
 $notice.Text='Scroll for all 12 providers. NVIDIA/Kilo: no confidential data; evaluation use only. Vercel/HF: monthly credits. Zen: temporary free. Blank keeps saved keys. Reconnect MCP after saving.'
-if(-not $ExistingSetup) {$notice.Text='10 eligible free-plan/evaluation providers. HF/Vercel credit profiles disabled. No billing, paid overages, BYOK or auto top-up. Blank keeps saved keys. Reconnect MCP after saving.'}
+if(-not $ExistingSetup) {$notice.Text='12 eligible free-plan/evaluation providers. HF/Vercel credit profiles disabled. No billing, paid overages, BYOK or auto top-up. Blank keeps saved keys. Reconnect MCP after saving.'}
 if($ExistingSetup) {$notice.Text+=' Saving valid keys restarts OmniRoute.'}
 $notice.SetBounds(15,433,650,50); $form.Controls.Add($notice)
 $candidates=New-Object Windows.Forms.CheckBox
@@ -115,11 +117,11 @@ $save.Add_Click({
   finally { $save.Enabled=$true; $save.Text='Validate and save'; if($Simple){$save.Text='Save and test'} }
 })
 if($SmokeTest) {
-  $expected=13; if($Simple){$expected=11}
+  $expected=15; if($Simple){$expected=13}
   if($boxes.Count -ne $expected -or -not $panel.AutoScroll) {throw 'Missing credential fields or scrolling'}
   if($Simple -and ($boxes.ContainsKey('HF_TOKEN') -or $boxes.ContainsKey('VERCEL_AI_GATEWAY_API_KEY') -or $save.Text -ne 'Save and test')) {throw 'Simple form has unexpected controls'}
   foreach($box in $boxes.Values) {if(-not $box.UseSystemPasswordChar) {throw 'Unmasked credential field'}}
-  $form.Dispose(); Write-Output 'PASS: masked Windows Forms key-entry controls'; return
+  $count=$boxes.Count; $form.Dispose(); Write-Output "PASS: masked Windows Forms key-entry controls ($count masked)"; return
 }
 [void]$form.ShowDialog()
 if($RequireReady -and -not $script:setupReady) {exit 2}

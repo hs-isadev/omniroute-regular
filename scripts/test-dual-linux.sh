@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-bundle="$repo/release/OmniRoute-Dual-0.3.0/Linux"
+bundle="$repo/release/OmniRoute-Dual-0.4.0/Linux"
 stage=$(mktemp -d /tmp/omniroute-dual-linux-XXXXXX)
 sh "$bundle/Setup.sh" --install-root "$stage/install" --install-only
 sh "$bundle/Setup.sh" --install-root "$stage/install" --install-only
