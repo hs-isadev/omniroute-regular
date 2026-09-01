@@ -11,12 +11,12 @@ if($active -notmatch '^versions/[a-zA-Z0-9.-]+$'){throw 'Invalid active version'
 & (Join-Path $InstallRoot ($active+'/app/distribution/dual/bootstrap.ps1')) -InstallRoot $InstallRoot
 $shell=New-Object -ComObject WScript.Shell
 $desktop=[Environment]::GetFolderPath('Desktop')
-foreach($item in @(@('OmniRoute OpenCode','opencode'),@('OmniRoute Antigravity','antigravity'),@('OmniRoute API Keys','keys'))){
+foreach($item in @(@('OmniRoute OpenCode','opencode'),@('OmniRoute Antigravity','antigravity'),@('OmniRoute API Keys','keys'),@('OmniRoute Usage','usage'))){
   $shortcut=$shell.CreateShortcut((Join-Path $desktop ($item[0]+'.lnk')))
   $shortcut.TargetPath=Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
   $shortcut.Arguments='-NoLogo -NoProfile -STA -ExecutionPolicy Bypass -File "'+(Join-Path $InstallRoot 'Launch.ps1')+'" -Action '+$item[1]
   $shortcut.WorkingDirectory=$InstallRoot
-  if($item[1] -ne 'opencode'){$shortcut.WindowStyle=7}
+  if($item[1] -notin @('opencode','usage')){$shortcut.WindowStyle=7}
   $shortcut.Save()
 }
 $env:OMNIROUTE_REGULAR_ROOT=$InstallRoot

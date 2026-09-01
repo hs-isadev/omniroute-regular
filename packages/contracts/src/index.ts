@@ -151,6 +151,19 @@ export interface Usage {
   outputTokens: number;
   cachedInputTokens: number;
   estimatedCostUsd: number | null;
+  measurement?: "provider-reported" | "estimated" | "unavailable" | "mixed";
+}
+
+export interface TokenSavingsSummary {
+  routes: number;
+  providerReportedRoutes: number;
+  routesWithoutProviderUsage: number;
+  providerReportedInputTokens: number;
+  providerReportedOutputTokens: number;
+  providerReportedTokensOffloaded: number;
+  actualHostTokensSaved: null;
+  savingsStatus: "counterfactual-host-usage-unavailable";
+  explanation: string;
 }
 
 export interface ProviderErrorShape {

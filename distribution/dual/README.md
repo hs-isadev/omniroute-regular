@@ -1,4 +1,4 @@
-# OmniRoute — OpenCode + Antigravity
+# OmniRoute — OpenCode + Antigravity + Codex + Claude Code
 
 One download for Windows 10/11 x64 and Linux x64 desktops. No Codex subscription
 needed. No API keys, accounts, vaults or personal projects are included.
@@ -11,7 +11,9 @@ needed. No API keys, accounts, vaults or personal projects are included.
 3. In the **API Keys** window, click **Get key**, get your own provider key, and
    paste it beside that provider. Tick the free-account confirmation and click
    **Save and test**. Leave other fields blank. One working provider is enough.
-4. Sign in to Antigravity when its official app opens after key setup.
+4. Sign in to Antigravity when its official app opens after key setup. Existing
+   Codex and Claude Code installations are connected automatically; the package
+   does not install or sign into those optional hosts.
 
 No editing config files, copying commands between apps, or manual MCP setup.
 Setup installs bundled Node/OpenCode/OmniRoute, obtains official Antigravity,
@@ -23,10 +25,13 @@ require approval. Antigravity may show its own first-run onboarding.
 - **OmniRoute OpenCode:** OmniRoute is the main model. Small questions prefer
   lightweight workers; coding/complex requests prefer stronger eligible workers.
   Same-provider free fallbacks are tried before moving to another provider.
-- **OmniRoute Antigravity:** Antigravity's own model is the main agent; OmniRoute
-  provides MCP workers. Rules encourage delegation but cannot guarantee every
-  host call uses a worker. Antigravity's own account/model quota still applies.
+- **OmniRoute Antigravity, Codex, and Claude Code:** each host's own model is the
+  main agent; OmniRoute provides MCP workers. Rules encourage delegation but
+  cannot guarantee every host call uses a worker. Each host's own quota applies.
 - **OmniRoute API Keys:** open the same masked form to add or replace keys later.
+- **OmniRoute Usage:** shows exact provider-reported worker tokens offloaded.
+  Actual host tokens saved stays unavailable because a counterfactual host-only
+  run cannot be observed.
 
 Windows launchers appear on the Desktop; Linux launchers appear in the app menu.
 Restart a host after changing keys. Neither host is registered for autostart.
@@ -86,5 +91,6 @@ OpenCode routing is text/code only; image/audio input is rejected. Responses
 are buffered to allow fallback before tool calls are delivered. This is a
 coding harness, not an isolation sandbox. See **VERIFICATION.md** for checks
 actually run. The package is unsigned; hashes and scans do not guarantee the
-absence of every security defect. This ZIP can be shared locally; no GitHub
+absence of every security defect. Codex/Claude integration preserves unrelated
+configuration and refuses unmanaged OmniRoute conflicts. This ZIP can be shared locally; no GitHub
 upload is performed by setup.

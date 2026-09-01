@@ -20,6 +20,7 @@ for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']])
   const target=join(release,label),payload=join(target,'payload');await mkdir(target);
   console.log('Copying verified '+platform+' production payload');
   await cp(join(source,'payload'),payload,{recursive:true,errorOnExist:true,force:false});
+  for(const name of ['config','contracts','core','integrations','mcp-server','observability','providers'])await cp(join(repo,'packages',name,'dist'),join(payload,'app/packages',name,'dist'),{recursive:true,force:true});
   for(const name of ['dual-chat.mjs','dual-setup.mjs','gui-keys.mjs','settings-gui.py','Settings.ps1','settings.mjs','key-editor.mjs'])await cp(join(repo,'distribution',name),join(payload,'app/distribution',name));
   await cp(join(repo,'distribution/dual'),join(payload,'app/distribution/dual'),{recursive:true});
   const windows=platform==='windows-x64';
@@ -35,7 +36,7 @@ for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']])
   await cp(join(repo,'distribution/OPENCODE-LICENSE.txt'),join(payload,'opencode/LICENSE.txt'));
   await cp(join(repo,'THIRD-PARTY-NOTICES.md'),join(payload,'app/THIRD-PARTY-NOTICES.md'));
   if(!windows)await chmod(join(payload,'opencode/opencode'),0o755);
-  await writeFile(join(payload,'dual-provenance.json'),JSON.stringify({version,hosts:['opencode','antigravity'],status:'local-shareable-package',node:'22.23.2',opencode:'1.18.25',opencodeIntegrity:'sha512-'+integrity[platform],personalDataIncluded:false,sourceBaseline:'OmniRoute Regular 0.2.2 plus dual-host and graphical setup modules',antigravity:'Downloaded directly from Google during setup; not redistributed'},null,2)+'\n');
+  await writeFile(join(payload,'dual-provenance.json'),JSON.stringify({version,hosts:['opencode','antigravity','codex','claude-code'],status:'local-shareable-package',node:'22.23.2',opencode:'1.18.25',opencodeIntegrity:'sha512-'+integrity[platform],personalDataIncluded:false,sourceBaseline:'OmniRoute Regular 0.2.2 plus four-host, graphical setup, strict-free provider, and usage-accounting modules',antigravity:'Downloaded directly from Google during setup; not redistributed',codex:'Uses an existing user installation; not redistributed',claudeCode:'Uses an existing user installation; not redistributed'},null,2)+'\n');
   const files=[];
   async function walk(dir){for(const item of await readdir(dir,{withFileTypes:true})){
     const path=join(dir,item.name),rel=relative(payload,path).replaceAll('\\','/');
@@ -46,7 +47,7 @@ for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']])
     }
   }}
   await walk(payload);files.sort((a,b)=>a.path.localeCompare(b.path));
-  await writeFile(join(target,'manifest.json'),JSON.stringify({version,platform,host:'antigravity',hosts:['opencode','antigravity'],files},null,2)+'\n');
+  await writeFile(join(target,'manifest.json'),JSON.stringify({version,platform,host:'multi',hosts:['opencode','antigravity','codex','claude-code'],files},null,2)+'\n');
   await verifyPackage(target,platform);console.log('Verified '+label+': '+files.length+' payload files');
 }
 await cp(join(repo,'distribution/dual/README.md'),join(release,'README.md'));

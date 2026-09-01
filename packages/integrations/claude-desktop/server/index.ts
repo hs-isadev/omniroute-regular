@@ -1,5 +1,5 @@
 import { getRuntimePaths, loadConfig } from "@omniroute/config";
-import type { ModelEntry, RouteRequest, RouteResult } from "@omniroute/contracts";
+import type { ModelEntry, RouteRequest, RouteResult, TokenSavingsSummary } from "@omniroute/contracts";
 import { serveOmniMcp } from "@omniroute/mcp-server";
 import { ensureLocalDaemonToken } from "@omniroute/vault";
 
@@ -50,4 +50,5 @@ await serveOmniMcp({
   },
   models: async () => (await request<{ models: ModelEntry[] }>("/v1/models")).models,
   recentRoutes: async (limit) => (await request<{ routes: unknown[] }>(`/v1/routes?limit=${Math.max(1, Math.min(100, limit))}`)).routes,
+  usageSummary: async () => (await request<{ summary: TokenSavingsSummary }>("/v1/usage")).summary,
 });

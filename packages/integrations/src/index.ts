@@ -134,11 +134,12 @@ function defaultHostPaths(home = homedir()): HostPaths {
   };
 }
 
-function codexTomlBlock(nodePath: string, cliPath: string): string {
+function codexTomlBlock(nodePath: string, cliPath: string, runtimeRoot: string): string {
   return [
     "[mcp_servers.omniroute]",
     `command = ${JSON.stringify(nodePath)}`,
     `args = [${JSON.stringify(cliPath)}, "mcp"]`,
+    `env = { OMNIROUTE_HOME = ${JSON.stringify(runtimeRoot)}, OMNIROUTE_ROUTING_MODE = "regular", OMNIROUTE_MANAGED = "1" }`,
     "enabled = true",
     "required = false",
     "startup_timeout_sec = 15",
@@ -152,6 +153,9 @@ function codexTomlBlock(nodePath: string, cliPath: string): string {
     'approval_mode = "approve"',
     "",
     "[mcp_servers.omniroute.tools.omni_routes]",
+    'approval_mode = "approve"',
+    "",
+    "[mcp_servers.omniroute.tools.omni_usage]",
     'approval_mode = "approve"',
   ].join("\n");
 }
@@ -301,7 +305,7 @@ export class IntegrationManager {
     const parsed = config.text.trim() ? parseToml(config.text) as Record<string, unknown> : {};
     const existingMcp = parsed.mcp_servers && typeof parsed.mcp_servers === "object" ? (parsed.mcp_servers as Record<string, unknown>).omniroute : undefined;
     if (action === "install" && existingMcp && !config.text.includes(TOML_START)) throw new SafeError("INTEGRATION_CONFLICT", "Codex already has an unmanaged mcp_servers.omniroute entry");
-    const afterConfig = replaceManagedBlock(config.text, TOML_START, TOML_END, action === "install" ? codexTomlBlock(this.#nodePath, this.#cliPath) : null);
+    const afterConfig = replaceManagedBlock(config.text, TOML_START, TOML_END, action === "install" ? codexTomlBlock(this.#nodePath, this.#cliPath, this.#runtimePaths.root) : null);
     if (afterConfig.trim()) parseToml(afterConfig);
     this.addChange(changes, this.#hostPaths.codexConfig, config, afterConfig);
 
@@ -335,7 +339,7 @@ export class IntegrationManager {
     const existing = servers.omniroute;
     const managed = existing && typeof existing === "object" && (existing as { env?: Record<string, unknown> }).env?.OMNIROUTE_MANAGED === "1";
     if (action === "install" && existing && !managed) throw new SafeError("INTEGRATION_CONFLICT", "Claude Code already has an unmanaged omniroute MCP server");
-    if (action === "install") servers.omniroute = { type: "stdio", command: this.#nodePath, args: [this.#cliPath, "mcp"], env: { OMNIROUTE_MANAGED: "1" } };
+    if (action === "install") servers.omniroute = { type: "stdio", command: this.#nodePath, args: [this.#cliPath, "mcp"], env: { OMNIROUTE_MANAGED: "1", OMNIROUTE_HOME: this.#runtimePaths.root, OMNIROUTE_ROUTING_MODE: "regular" } };
     else if (managed) delete servers.omniroute;
     if (Object.keys(servers).length === 0) delete root.mcpServers;
     const afterConfig = Object.keys(root).length > 0 ? prettyJson(root) : "";

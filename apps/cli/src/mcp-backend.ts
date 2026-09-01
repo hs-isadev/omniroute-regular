@@ -3,7 +3,7 @@ import type { McpBackend } from "@omniroute/mcp-server";
 import { SafeError } from "@omniroute/observability";
 import type { DaemonClient } from "./client.js";
 
-export function createCliMcpBackend(client: Pick<DaemonClient, "request" | "models" | "recentRoutes">, enforcedMode = process.env.OMNIROUTE_ROUTING_MODE as RouteRequest["routingMode"] | undefined): McpBackend {
+export function createCliMcpBackend(client: Pick<DaemonClient, "request" | "models" | "recentRoutes" | "usageSummary">, enforcedMode = process.env.OMNIROUTE_ROUTING_MODE as RouteRequest["routingMode"] | undefined): McpBackend {
   return {
     route: (request, signal) => {
       if (enforcedMode && request.routingMode && request.routingMode !== enforcedMode) {
@@ -27,5 +27,6 @@ export function createCliMcpBackend(client: Pick<DaemonClient, "request" | "mode
     },
     models: () => client.models(),
     recentRoutes: (limit) => client.recentRoutes(limit),
+    usageSummary: () => client.usageSummary(),
   };
 }

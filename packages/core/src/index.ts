@@ -120,10 +120,14 @@ interface ExecutionState {
 }
 
 function addUsage(total: Usage, next: Usage): void {
+  const before = total.inputTokens + total.outputTokens;
   total.inputTokens += next.inputTokens;
   total.outputTokens += next.outputTokens;
   total.cachedInputTokens += next.cachedInputTokens;
   total.estimatedCostUsd = total.estimatedCostUsd === null || next.estimatedCostUsd === null ? null : total.estimatedCostUsd + next.estimatedCostUsd;
+  const incoming = next.measurement ?? "unavailable";
+  const current = total.measurement ?? "unavailable";
+  total.measurement = before === 0 && current === "unavailable" ? incoming : current === incoming ? current : "mixed";
 }
 
 function modelFrom(snapshot: RegistrySnapshot, selection: Pick<ModelSelection, "providerId" | "modelId">): ModelEntry {

@@ -62,7 +62,7 @@ test("Anthropic adapter uses Messages API headers and normalizes usage", async (
   const provider = new AnthropicProvider({ id: "anthropic", baseUrl: "https://api.anthropic.com", apiKey: "sk-ant-fake-test", fetchImpl, skipDnsValidationForTests: true });
   const result = await provider.generate({ modelId: "claude-test", prompt: "hello", instructions: "help", reasoningEffort: "none", maxOutputTokens: 50, jsonSchema: null, schemaName: null, signal: new AbortController().signal, safetyIdentifier: null });
   assert.match(url, /v1\/messages$/); assert.equal(headers["anthropic-version"], "2023-06-01"); assert.equal(body.model, "claude-test");
-  assert.equal(result.text, "anthropic answer"); assert.deepEqual(result.usage, { inputTokens: 9, outputTokens: 4, cachedInputTokens: 3, estimatedCostUsd: null });
+  assert.equal(result.text, "anthropic answer"); assert.deepEqual(result.usage, { inputTokens: 9, outputTokens: 4, cachedInputTokens: 3, estimatedCostUsd: null, measurement: "provider-reported" });
 });
 
 test("OpenAI-compatible adapter streams chat deltas and usage", async () => {

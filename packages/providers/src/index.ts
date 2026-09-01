@@ -70,7 +70,7 @@ export interface ProviderAdapter {
 export type FetchLike = typeof fetch;
 
 function emptyUsage(): Usage {
-  return { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, estimatedCostUsd: null };
+  return { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, estimatedCostUsd: null, measurement: "unavailable" };
 }
 
 function parseRetryAfter(value: string | null): number | null {
@@ -345,7 +345,7 @@ export class OpenAIProvider extends BaseProvider {
       usage?: { input_tokens?: number; output_tokens?: number; input_tokens_details?: { cached_tokens?: number } };
     };
     const text = data.output_text ?? data.output?.flatMap((item) => item.content ?? []).filter((item) => item.type === "output_text").map((item) => item.text ?? "").join("") ?? "";
-    return { text, responseId: data.id ?? null, usage: { inputTokens: data.usage?.input_tokens ?? 0, outputTokens: data.usage?.output_tokens ?? 0, cachedInputTokens: data.usage?.input_tokens_details?.cached_tokens ?? 0, estimatedCostUsd: null } };
+    return { text, responseId: data.id ?? null, usage: { inputTokens: data.usage?.input_tokens ?? 0, outputTokens: data.usage?.output_tokens ?? 0, cachedInputTokens: data.usage?.input_tokens_details?.cached_tokens ?? 0, estimatedCostUsd: null, measurement: data.usage ? "provider-reported" : "unavailable" } };
   }
 
   async *stream(request: GenerateRequest): AsyncGenerator<ProviderStreamEvent> {
@@ -367,7 +367,7 @@ export class OpenAIProvider extends BaseProvider {
         completed = true;
         const completedResponse = data.response as { id?: string; usage?: { input_tokens?: number; output_tokens?: number; input_tokens_details?: { cached_tokens?: number } } } | undefined;
         responseId = completedResponse?.id ?? responseId;
-        yield { type: "usage", usage: { inputTokens: completedResponse?.usage?.input_tokens ?? 0, outputTokens: completedResponse?.usage?.output_tokens ?? 0, cachedInputTokens: completedResponse?.usage?.input_tokens_details?.cached_tokens ?? 0, estimatedCostUsd: null } };
+        yield { type: "usage", usage: { inputTokens: completedResponse?.usage?.input_tokens ?? 0, outputTokens: completedResponse?.usage?.output_tokens ?? 0, cachedInputTokens: completedResponse?.usage?.input_tokens_details?.cached_tokens ?? 0, estimatedCostUsd: null, measurement: completedResponse?.usage ? "provider-reported" : "unavailable" } };
       }
       if (type === "error" || type === "response.failed") throw new SafeError("PROVIDER_STREAM_FAILED", `${this.id} stream failed after partial output`);
     }
@@ -438,7 +438,7 @@ export class AnthropicProvider extends BaseProvider {
     if (request.jsonSchema) throw new SafeError("PROVIDER_CAPABILITY_MISMATCH", "Anthropic adapter does not claim Responses structured-output compatibility");
     const response = await this.#http.request(this.id, "v1/messages", { method: "POST", signal: request.signal, body: JSON.stringify(this.body(request, false)) });
     const data = await response.json() as { id?: string; content?: Array<{ type?: string; text?: string }>; usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number } };
-    return { text: data.content?.filter((item) => item.type === "text").map((item) => item.text ?? "").join("") ?? "", responseId: data.id ?? null, usage: { inputTokens: data.usage?.input_tokens ?? 0, outputTokens: data.usage?.output_tokens ?? 0, cachedInputTokens: data.usage?.cache_read_input_tokens ?? 0, estimatedCostUsd: null } };
+    return { text: data.content?.filter((item) => item.type === "text").map((item) => item.text ?? "").join("") ?? "", responseId: data.id ?? null, usage: { inputTokens: data.usage?.input_tokens ?? 0, outputTokens: data.usage?.output_tokens ?? 0, cachedInputTokens: data.usage?.cache_read_input_tokens ?? 0, estimatedCostUsd: null, measurement: data.usage ? "provider-reported" : "unavailable" } };
   }
 
   async *stream(request: GenerateRequest): AsyncGenerator<ProviderStreamEvent> {
@@ -462,7 +462,7 @@ export class AnthropicProvider extends BaseProvider {
       }
       if (event.event === "message_delta") {
         const usage = data.usage as { output_tokens?: number } | undefined;
-        yield { type: "usage", usage: { inputTokens, outputTokens: usage?.output_tokens ?? 0, cachedInputTokens: 0, estimatedCostUsd: null } };
+        yield { type: "usage", usage: { inputTokens, outputTokens: usage?.output_tokens ?? 0, cachedInputTokens: 0, estimatedCostUsd: null, measurement: usage ? "provider-reported" : "unavailable" } };
       }
       if (event.event === "message_stop") completed = true;
       if (event.event === "error") throw new SafeError("PROVIDER_STREAM_FAILED", `${this.id} stream failed after partial output`);
@@ -559,7 +559,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
     const data = await response.json() as { error?: unknown; id?: string; choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } };
     throwCompatiblePayloadError(this.id, data.error);
     if (!data.choices?.[0]?.message) throw new SafeError("PROVIDER_RESPONSE_INVALID", `${this.id} returned no completion`);
-    return { text: data.choices?.[0]?.message?.content ?? "", responseId: data.id ?? null, usage: { inputTokens: data.usage?.prompt_tokens ?? 0, outputTokens: data.usage?.completion_tokens ?? 0, cachedInputTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? 0, estimatedCostUsd: null } };
+    return { text: data.choices?.[0]?.message?.content ?? "", responseId: data.id ?? null, usage: { inputTokens: data.usage?.prompt_tokens ?? 0, outputTokens: data.usage?.completion_tokens ?? 0, cachedInputTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? 0, estimatedCostUsd: null, measurement: data.usage ? "provider-reported" : "unavailable" } };
   }
 
   async *stream(request: GenerateRequest): AsyncGenerator<ProviderStreamEvent> {
@@ -575,7 +575,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
       if (data.id && data.id !== responseId) { responseId = data.id; yield { type: "start", responseId }; }
       const text = data.choices?.[0]?.delta?.content;
       if (text) yield { type: "delta", text };
-      if (data.usage) yield { type: "usage", usage: { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0, cachedInputTokens: 0, estimatedCostUsd: null } };
+      if (data.usage) yield { type: "usage", usage: { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0, cachedInputTokens: 0, estimatedCostUsd: null, measurement: "provider-reported" } };
     }
     if (!completed) throw new SafeError("PROVIDER_STREAM_TRUNCATED", `${this.id} stream ended without [DONE]`);
     yield { type: "done", responseId };

@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
-import { CAPABILITIES, type ModelEntry, type RouteResult } from "@omniroute/contracts";
+import { CAPABILITIES, type ModelEntry, type RouteResult, type TokenSavingsSummary } from "@omniroute/contracts";
 
 export const MCP_INSTRUCTIONS = `OmniRoute enforces a free-only model policy and returns explicit worker attribution. routingMode=regular deterministically selects a healthy free worker without an LLM planner. routingMode=orchestrator uses the configured free planner. When Claude Code is launched in host-orchestrator mode, Claude should decompose work itself and call omni_route with routingMode=regular for bounded delegations. Preserve attribution verbatim. Never send credentials to any tool.`;
 
@@ -17,6 +17,7 @@ export interface McpBackend {
   }, signal?: AbortSignal): Promise<RouteResult>;
   models(): Promise<ModelEntry[]>;
   recentRoutes(limit: number): Promise<unknown[]>;
+  usageSummary?(): Promise<TokenSavingsSummary>;
 }
 
 export function createOmniMcpServer(backend: McpBackend, options: { regularOnly?: boolean } = {}): McpServer {
@@ -65,6 +66,25 @@ export function createOmniMcpServer(backend: McpBackend, options: { regularOnly?
     async () => {
       const models = await backend.models();
       return { content: [{ type: "text" as const, text: JSON.stringify(models, null, 2) }], structuredContent: { models } };
+    },
+  );
+
+  server.registerTool(
+    "omni_usage",
+    {
+      title: "Inspect OmniRoute token offload",
+      description: "Summarize exact provider-reported worker tokens and explicitly distinguish them from unknowable counterfactual host-token savings.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async () => {
+      const summary = backend.usageSummary ? await backend.usageSummary() : {
+        routes: 0, providerReportedRoutes: 0, routesWithoutProviderUsage: 0,
+        providerReportedInputTokens: 0, providerReportedOutputTokens: 0, providerReportedTokensOffloaded: 0,
+        actualHostTokensSaved: null, savingsStatus: "counterfactual-host-usage-unavailable" as const,
+        explanation: "This backend does not expose persistent usage accounting.",
+      };
+      return { content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) }], structuredContent: { summary } };
     },
   );
 

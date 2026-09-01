@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile, rename, stat } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { AttributionRecord } from "@omniroute/contracts";
+import type { AttributionRecord, TokenSavingsSummary } from "@omniroute/contracts";
 
 const STATIC_SECRET_PATTERNS: RegExp[] = [
   /\bsk-[A-Za-z0-9_-]{12,}\b/g,
@@ -110,5 +110,28 @@ export class AuditStore {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
       throw error;
     }
+  }
+
+  async tokenSavingsSummary(): Promise<TokenSavingsSummary> {
+    let records: AttributionRecord[] = [];
+    try {
+      records = (await readFile(this.path, "utf8")).split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as AttributionRecord);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const reported = records.filter((record) => record.usage.measurement === "provider-reported");
+    const input = reported.reduce((sum, record) => sum + record.usage.inputTokens, 0);
+    const output = reported.reduce((sum, record) => sum + record.usage.outputTokens, 0);
+    return {
+      routes: records.length,
+      providerReportedRoutes: reported.length,
+      routesWithoutProviderUsage: records.length - reported.length,
+      providerReportedInputTokens: input,
+      providerReportedOutputTokens: output,
+      providerReportedTokensOffloaded: input + output,
+      actualHostTokensSaved: null,
+      savingsStatus: "counterfactual-host-usage-unavailable",
+      explanation: "Offloaded tokens are provider-reported worker usage. Actual host tokens saved require the unknowable counterfactual usage of the same task without OmniRoute, so no exact savings number is claimed.",
+    };
   }
 }

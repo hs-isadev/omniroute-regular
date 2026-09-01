@@ -117,6 +117,7 @@ export class OmniDaemonServer {
       }
       if (request.method === "GET" && url.pathname === "/v1/models") { this.json(response, 200, await this.#runtime.registry.current(url.searchParams.get("refresh") === "1")); return; }
       if (request.method === "GET" && url.pathname === "/v1/routes") { this.json(response, 200, { routes: await this.#runtime.audit.recent(Number(url.searchParams.get("limit") ?? 50)) }); return; }
+      if (request.method === "GET" && url.pathname === "/v1/usage") { this.json(response, 200, { summary: await this.#runtime.audit.tokenSavingsSummary() }); return; }
       if (request.method === "GET" && url.pathname === "/v1/config") { this.json(response, 200, this.#runtime.config); return; }
       if (request.method === "POST" && url.pathname === "/v1/service/stop") {
         this.json(response, 202, { status: "stopping" });

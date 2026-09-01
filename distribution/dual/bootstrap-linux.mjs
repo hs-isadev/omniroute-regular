@@ -24,9 +24,9 @@ try{await access(app);}catch{
 await writeFile(join(root,'antigravity-path.txt'),app+'\n',{mode:0o600});
 const applications=join(process.env.XDG_DATA_HOME??join(homedir(),'.local/share'),'applications');await safe(applications);await mkdir(applications,{recursive:true});
 const quote=value=>'"'+value.replaceAll('\\','\\\\').replaceAll('"','\\"').replaceAll('`','\\`').replaceAll('$','\\$').replaceAll('%','%%')+'"';
-for(const [label,action] of [['OpenCode','opencode'],['Antigravity','antigravity'],['API Keys','keys']]){
+for(const [label,action] of [['OpenCode','opencode'],['Antigravity','antigravity'],['API Keys','keys'],['Usage','usage']]){
   const file=join(applications,'omniroute-'+action+'.desktop');await safe(file);
-  const content='[Desktop Entry]\nType=Application\nName=OmniRoute '+label+'\nExec=sh '+quote(join(root,'Launch.sh'))+' '+action+'\nTerminal='+(action==='opencode')+'\nCategories=Development;\n';
+  const content='[Desktop Entry]\nType=Application\nName=OmniRoute '+label+'\nExec=sh '+quote(join(root,'Launch.sh'))+' '+action+'\nTerminal='+(action==='opencode'||action==='usage')+'\nCategories=Development;\n';
   let old;try{old=await readFile(file,'utf8');}catch(e){if(e.code!=='ENOENT')throw e;}
   if(old&&!old.includes('Name=OmniRoute '+label+'\n'))throw new Error('Unrelated desktop launcher preserved');
   await writeFile(file,content,{mode:0o600});

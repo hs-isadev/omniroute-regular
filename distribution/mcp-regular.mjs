@@ -18,7 +18,7 @@ export async function createRegularBackend(options={}) {
   if(config.routing.defaultMode!=='regular') throw new Error('Antigravity MCP requires an isolated regular profile, not an orchestrator profile.');
   // Check before loading/decrypting any credentials, not only during key entry.
   assertRegularProviderPolicy(config);
-  let router=options.router,registry=options.registry,recent=options.recent;
+  let router=options.router,registry=options.registry,recent=options.recent,usageSummary=options.usageSummary;
   let routeSignal,cache,loadedAt=0;
   if(!router) {
     await ensureRuntimeDirectories(paths);
@@ -38,6 +38,7 @@ export async function createRegularBackend(options={}) {
     // the caller, but persist only a generic error plus routing metadata.
     const logger={write:(level,event,data)=>sink.write(level,event,event==='route.failed'?{...data,error:'Worker failed; details returned to the host, not persisted.'}:data)};
     recent=limit=>audit.recent(limit);
+    usageSummary=()=>audit.tokenSavingsSummary();
     router=new OmniRouter({config,providers,registry,audit,logger});
   }
   let busy=false;
@@ -62,10 +63,17 @@ export async function createRegularBackend(options={}) {
     },
     async models() {return (await registry()).models.filter(model=>model.enabled&&model.allowed);},
     async recentRoutes(limit) {return recent(Math.max(1,Math.min(100,Number.isFinite(limit)?limit:20)));},
+    async usageSummary() {return usageSummary?usageSummary():{routes:0,providerReportedRoutes:0,routesWithoutProviderUsage:0,providerReportedInputTokens:0,providerReportedOutputTokens:0,providerReportedTokensOffloaded:0,actualHostTokensSaved:null,savingsStatus:'counterfactual-host-usage-unavailable',explanation:'No persistent audit store is attached to this backend.'};},
   };
 }
 
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
-  try {await serveOmniMcp(await createRegularBackend(),{regularOnly:true});}
+  try {
+    if(process.argv[2]==='hook') {
+      let raw='';for await(const chunk of process.stdin){raw+=chunk.toString();if(raw.length>1_000_000)throw new Error('Hook input too large');}
+      let prompt='';try{const input=JSON.parse(raw);prompt=typeof input.prompt==='string'?input.prompt:'';}catch{}
+      if(prompt)process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:'UserPromptSubmit',additionalContext:'OmniRoute Regular is available for bounded non-sensitive delegation through omni_route with routingMode=regular. Use omni_usage for exact provider-reported offload; do not claim exact host-token savings. Preserve attribution and verify worker output.'}}));
+    } else await serveOmniMcp(await createRegularBackend(),{regularOnly:true});
+  }
   catch(error) {process.stderr.write(globalRedactor.redactText(`OmniRoute Regular: ${error.message}. Check Settings and the isolated regular profile.\n`));process.exitCode=1;}
 }

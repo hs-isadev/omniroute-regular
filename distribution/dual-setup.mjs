@@ -5,6 +5,8 @@ import {randomUUID} from 'node:crypto';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {spawn} from 'node:child_process';
 import {getRuntimePaths,saveConfig} from '../packages/config/dist/index.js';
+import {IntegrationManager,defaultHostPaths} from '../packages/integrations/dist/index.js';
+import {AuditStore} from '../packages/observability/dist/index.js';
 import {regularConfig} from './settings.mjs';
 import {openKeyForm} from './gui-keys.mjs';
 import {RULES,findAntigravity} from './antigravity.mjs';
@@ -42,6 +44,13 @@ export async function connectAntigravity({home=homedir(),root,node=process.execP
   const next=JSON.stringify({entry},null,2)+'\n';if(ownerRaw!==next)await atomic(ownerFile,next,ownerRaw);
   return {file,ruleFile};
 }
+export async function connectDeveloperHosts({home=homedir(),root,node=process.execPath,entrypoint=fileURLToPath(new URL('./mcp-regular.mjs',import.meta.url))}) {
+  for(const path of [home,root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute paths required');
+  const manager=new IntegrationManager({hostPaths:defaultHostPaths(home),runtimePaths:getRuntimePaths(join(root,'data')),nodePath:node,cliPath:entrypoint});
+  const connected=[];
+  for(const target of ['codex','claude-code']){const plan=await manager.plan(target,'install');if(plan.changed)await manager.apply(plan);connected.push(target);}
+  return {connected};
+}
 export function openCodeEnvironment(base,root,inline) {
   const env=claudeHarnessEnvironment(base,'regular',join(root,'data'));
   Object.assign(env,{XDG_CONFIG_HOME:join(root,'opencode/config'),XDG_DATA_HOME:join(root,'opencode/share'),XDG_CACHE_HOME:join(root,'opencode/cache'),XDG_STATE_HOME:join(root,'opencode/state'),OPENCODE_CONFIG_DIR:join(root,'opencode/config'),OPENCODE_CONFIG_CONTENT:inline,OPENCODE_DISABLE_AUTOUPDATE:'true',OPENCODE_DISABLE_MODELS_FETCH:'true',OPENCODE_DISABLE_LSP_DOWNLOAD:'true',OPENCODE_DISABLE_CLAUDE_CODE:'true',OPENCODE_DISABLE_DEFAULT_PLUGINS:'true'});
@@ -65,14 +74,19 @@ export async function launchAntigravity(root) {
   if(!app)throw new Error('Antigravity desktop is not installed. Rerun Setup to download the official app.');
   const child=spawn(app,[],{detached:true,stdio:'ignore',windowsHide:false});child.once('error',()=>console.error('Could not open Antigravity. Use its desktop shortcut.'));child.unref();
 }
+export async function showUsage(root) {
+  const summary=await new AuditStore(getRuntimePaths(join(root,'data')).routes).tokenSavingsSummary();
+  console.log(JSON.stringify(summary,null,2));return summary;
+}
 export async function setupBoth(root,{noKeys=false,noLaunch=false,home=homedir()}={}) {
   const paths=getRuntimePaths(join(root,'data'));
   if(await optional(paths.config)===null){const config=regularConfig();for(const p of config.providers){p.enabled=false;p.freeTierConfirmed=false;}await saveConfig(config,paths);}
   await connectAntigravity({root,home});
-  console.log('Both hosts configured: OpenCode = OmniRoute main model; Antigravity = OmniRoute MCP workers.');
+  await connectDeveloperHosts({root,home});
+  console.log('Four hosts configured: OpenCode = OmniRoute main model; Antigravity, Codex and Claude Code = OmniRoute MCP workers.');
   if(!noKeys)await openKeyForm(root);
   if(!noLaunch)await launchAntigravity(root).catch(e=>console.log(e.message));
-  console.log('Setup complete. Use the OpenCode or Antigravity shortcuts. Restart Antigravity after changing keys.');
+  console.log('Setup complete. Use OpenCode or open Antigravity, Codex, or Claude Code normally. Restart open hosts after changing keys.');
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   try{
@@ -81,6 +95,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
     if(action==='opencode')await launchOpenCode(root,args);
     else if(action==='antigravity')await launchAntigravity(root);
     else if(action==='keys')await openKeyForm(root);
+    else if(action==='usage')await showUsage(root);
     else if(action==='setup')await setupBoth(root,{noKeys:args.includes('--no-keys'),noLaunch:args.includes('--no-launch')});
     else throw new Error('Unknown setup action');
   }catch(e){console.error(e.message);process.exitCode=1;}

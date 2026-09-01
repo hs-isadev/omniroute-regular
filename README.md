@@ -1,10 +1,12 @@
-# OmniRoute Dual — OpenCode + Antigravity
+# OmniRoute — OpenCode + Antigravity + Codex + Claude Code
 
 The current `0.3.0` release is one download for Windows 10/11 x64 and Linux
-x64 desktops. It installs both modes:
+x64 desktops. It installs or connects four host modes:
 
 - OpenCode uses OmniRoute as its main model/router.
 - Antigravity stays the main agent and calls OmniRoute workers through MCP.
+- Codex and Claude Code stay the main agents and call OmniRoute workers through
+  MCP when those hosts are already installed.
 
 No API keys, login sessions, vaults, or personal projects are included. You
 bring your own free/evaluation provider keys and sign into the official Google
@@ -30,10 +32,11 @@ See the release's `VERIFICATION.md` for the exact tests and limitations.
 ## Unreleased 0.4.0 source
 
 The next source release adds opt-in Cerebras and SambaNova free-tier API-key
-profiles, 12-provider graphical key entry, and an upstream MIT notice. Their
+profiles, 12-provider graphical key entry, Codex/Claude Code integration,
+provider-reported token-offload accounting, and an upstream MIT notice. Their
 adapters pass mock-backed discovery, completion, and streaming tests, but they
 have not yet passed a live owner-key check. The published 0.3.0 download remains
-the tested release until 0.4.0 is packaged, independently reviewed, and sealed.
+the tested release until 0.4.0 is packaged, reviewed, and sealed.
 
 ## Legacy Antigravity-only 0.2.x documentation
 

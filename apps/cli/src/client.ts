@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { OmniConfig, RuntimePaths } from "@omniroute/config";
 import { getRuntimePaths, loadConfig } from "@omniroute/config";
-import type { ModelEntry, RouteRequest, RouteResult } from "@omniroute/contracts";
+import type { ModelEntry, RouteRequest, RouteResult, TokenSavingsSummary } from "@omniroute/contracts";
 import { SafeError } from "@omniroute/observability";
 import { ensureLocalDaemonToken, type KeyProtector } from "@omniroute/vault";
 
@@ -94,6 +94,10 @@ export class DaemonClient {
 
   async recentRoutes(limit = 20): Promise<unknown[]> {
     return (await this.request<{ routes: unknown[] }>(`/v1/routes?limit=${Math.max(1, Math.min(limit, 100))}`)).routes;
+  }
+
+  async usageSummary(): Promise<TokenSavingsSummary> {
+    return (await this.request<{ summary: TokenSavingsSummary }>("/v1/usage")).summary;
   }
 
   async state(): Promise<{ pid: number; host: string; port: number; startedAt: string } | null> {
