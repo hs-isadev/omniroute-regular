@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AnthropicProvider, buildRegistry, OpenAICompatibleProvider, OpenAIProvider, ProviderHttpError, retryProviderCall } from "@omniroute/providers";
+import { AnthropicProvider, buildRegistry, ClaudeConsumerProvider, OpenAICompatibleProvider, OpenAIProvider, ProviderHttpError, retryProviderCall } from "@omniroute/providers";
 import { MockProvider } from "@omniroute/testing";
 import { configFixture } from "./helpers.js";
 
@@ -123,4 +123,43 @@ test("Gemini model discovery normalizes resource prefixes without rewriting othe
     const provider = new OpenAICompatibleProvider({ id, baseUrl: "https://example.com", skipDnsValidationForTests: true, fetchImpl: async () => Response.json({ data: [{ id: "models/gemini-3.7-flash" }] }) });
     assert.equal((await provider.listModels())[0]?.id, id === "gemini" ? "gemini-3.7-flash" : "models/gemini-3.7-flash");
   }
+});
+
+test("Claude consumer adapter sends the request as natural user text without a system-like wrapper", async () => {
+  const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+  const provider = new ClaudeConsumerProvider({
+    id: "claude-consumer",
+    command: "node",
+    args: ["adapter.js", "mcp"],
+    callTool: async (_spec, name, args) => {
+      calls.push({ name, arguments: args });
+      if (name === "test_connection") return { content: [{ type: "text", text: JSON.stringify({ status: "ready" }) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ output: "Claude answer", usage: { model: "claude-web-consumer", estimatedTokens: 23 } }) }] };
+    },
+  });
+
+  assert.equal(provider.supportsStreaming, false);
+  assert.equal((await provider.healthCheck()).status, "healthy");
+  assert.deepEqual((await provider.listModels()).map((model) => model.id), ["claude-web-consumer"]);
+  const result = await provider.generate({ modelId: "claude-web-consumer", prompt: "Small request", instructions: "Be concise", reasoningEffort: "none", maxOutputTokens: 256, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null });
+
+  assert.equal(result.text, "Claude answer");
+  assert.equal(result.usage.measurement, "estimated");
+  assert.equal(result.usage.inputTokens + result.usage.outputTokens, 23);
+  assert.equal(calls[1]?.name, "claude_query");
+  assert.equal(calls[1]?.arguments.prompt, "Small request");
+  assert.doesNotMatch(String(calls[1]?.arguments.prompt), /produce the requested work|do not claim|preserve uncertainty/i);
+});
+
+test("Claude consumer adapter errors are retryable so the free-provider ladder can continue", async () => {
+  const provider = new ClaudeConsumerProvider({
+    id: "claude-consumer",
+    command: "node",
+    args: ["adapter.js", "mcp"],
+    callTool: async () => ({ content: [{ type: "text", text: JSON.stringify({ error: "Claude browser session is not available" }) }], isError: true }),
+  });
+  await assert.rejects(
+    provider.generate({ modelId: "claude-web-consumer", prompt: "Hi", instructions: "", reasoningEffort: "none", maxOutputTokens: 64, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null }),
+    (error: unknown) => provider.classifyError(error).category === "unavailable" && provider.classifyError(error).retryable,
+  );
 });
