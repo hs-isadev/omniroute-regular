@@ -89,7 +89,7 @@ async function protocol() {
   try {
     const init=await call('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'package-protocol-fixture',version:'1'}});assert.equal(init.serverInfo.name,'omniroute');
     child.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');
-    const listing=await call('tools/list',{});assert.deepEqual(listing.tools.map(t=>t.name).sort(),['omni_models','omni_route','omni_routes']);
+    const listing=await call('tools/list',{});assert.deepEqual(listing.tools.map(t=>t.name).sort(),['omni_models','omni_route','omni_routes','omni_usage']);
     const schema=listing.tools.find(t=>t.name==='omni_route').inputSchema.properties.routingMode;
     assert.ok(JSON.stringify(schema).includes('regular'));assert.ok(!JSON.stringify(schema).includes('orchestrator'));
     const easy=await call('tools/call',{name:'omni_route',arguments:{prompt:'What is a variable?',routingMode:'regular'}});
