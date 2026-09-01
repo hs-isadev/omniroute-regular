@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { lookup as dnsLookup } from "node:dns";
 import { lookup } from "node:dns/promises";
 import { isIP, type LookupFunction } from "node:net";
@@ -295,6 +296,170 @@ export interface ProviderConstructorOptions {
   apiKey?: string | undefined;
   fetchImpl?: FetchLike | undefined;
   skipDnsValidationForTests?: boolean | undefined;
+}
+
+export interface McpStdioSpec {
+  command: string;
+  args: string[];
+  cwd?: string | undefined;
+}
+
+export interface McpToolResult {
+  content?: Array<{ type?: string; text?: string }>;
+  isError?: boolean;
+}
+
+export type McpToolCaller = (spec: McpStdioSpec, name: string, args: Record<string, unknown>, signal: AbortSignal) => Promise<McpToolResult>;
+
+function inheritedMcpEnvironment(): NodeJS.ProcessEnv {
+  const names = process.platform === "win32"
+    ? ["APPDATA", "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PROCESSOR_ARCHITECTURE", "SYSTEMDRIVE", "SYSTEMROOT", "TEMP", "USERNAME", "USERPROFILE", "PROGRAMFILES"]
+    : ["HOME", "LOGNAME", "PATH", "SHELL", "TERM"];
+  const env: NodeJS.ProcessEnv = {};
+  for (const name of [...names, "CLAUDE_CDP_ENDPOINT"]) if (process.env[name] !== undefined && !process.env[name]!.startsWith("()")) env[name] = process.env[name];
+  return env;
+}
+
+export const callMcpStdioTool: McpToolCaller = async (spec, name, args, signal) => {
+  if (signal.aborted) throw signal.reason;
+  const child = spawn(spec.command, spec.args, { cwd: spec.cwd, env: inheritedMcpEnvironment(), shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+  let buffer = "";
+  let stderr = "";
+  let settled = false;
+  const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: unknown) => void }>();
+  const rejectPending = (error: unknown): void => {
+    for (const request of pending.values()) request.reject(error);
+    pending.clear();
+  };
+  const processLine = (line: string): void => {
+    if (!line.trim()) return;
+    let message: { id?: unknown; result?: unknown; error?: { message?: unknown } };
+    try { message = JSON.parse(line) as typeof message; }
+    catch { rejectPending(new SafeError("MCP_PROTOCOL_ERROR", "Claude adapter returned invalid JSON-RPC")); return; }
+    if (typeof message.id !== "number") return;
+    const request = pending.get(message.id);
+    if (!request) return;
+    pending.delete(message.id);
+    if (message.error) request.reject(new SafeError("MCP_TOOL_ERROR", typeof message.error.message === "string" ? message.error.message : "Claude adapter MCP request failed", 502));
+    else request.resolve(message.result);
+  };
+  child.stdout.on("data", (chunk: Buffer) => {
+    buffer += chunk.toString("utf8");
+    if (buffer.length > 10 * 1024 * 1024) { rejectPending(new SafeError("MCP_PROTOCOL_ERROR", "Claude adapter response exceeded 10 MB")); child.kill(); return; }
+    for (;;) {
+      const newline = buffer.indexOf("\n");
+      if (newline < 0) break;
+      const line = buffer.slice(0, newline).replace(/\r$/, "");
+      buffer = buffer.slice(newline + 1);
+      processLine(line);
+    }
+  });
+  child.stderr.on("data", (chunk: Buffer) => { if (stderr.length < 65_536) stderr += chunk.toString("utf8"); });
+  const abort = (): void => {
+    const error = signal.reason ?? new DOMException("Claude adapter request was cancelled", "AbortError");
+    rejectPending(error);
+    child.kill();
+  };
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    await new Promise<void>((resolvePromise, reject) => {
+      const onSpawn = (): void => { child.off("error", onError); resolvePromise(); };
+      const onError = (error: Error): void => { child.off("spawn", onSpawn); reject(error); };
+      child.once("spawn", onSpawn);
+      child.once("error", onError);
+    });
+    child.once("error", rejectPending);
+    child.once("close", (code) => {
+      if (pending.size > 0) rejectPending(new SafeError("MCP_PROCESS_EXITED", `Claude adapter exited with code ${code ?? "unknown"}${stderr.trim() ? `: ${globalRedactor.redactText(stderr.trim())}` : ""}`, 503));
+    });
+    const request = (id: number, method: string, params: Record<string, unknown>): Promise<unknown> => new Promise((resolvePromise, reject) => {
+      pending.set(id, { resolve: resolvePromise, reject });
+      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`, (error) => { if (error) { pending.delete(id); reject(error); } });
+    });
+    await request(1, "initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "omniroute", version: "0.4.0" } });
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
+    const result = await request(2, "tools/call", { name, arguments: args });
+    settled = true;
+    return result as McpToolResult;
+  } finally {
+    signal.removeEventListener("abort", abort);
+    try { child.stdin.end(); } catch { /* process may already be closed */ }
+    if (!settled) rejectPending(new SafeError("MCP_PROCESS_EXITED", "Claude adapter request did not complete", 503));
+    if (child.exitCode === null) child.kill();
+  }
+};
+
+export interface ClaudeConsumerProviderOptions extends McpStdioSpec {
+  id: string;
+  callTool?: McpToolCaller | undefined;
+}
+
+export class ClaudeConsumerProvider extends BaseProvider {
+  readonly supportsStreaming = false;
+  readonly id: string;
+  readonly #spec: McpStdioSpec;
+  readonly #callTool: McpToolCaller;
+
+  constructor(options: ClaudeConsumerProviderOptions) {
+    super();
+    if (!options.command || options.args.length === 0) throw new SafeError("PROVIDER_COMMAND_MISSING", `${options.id} requires an MCP stdio command and arguments`);
+    this.id = options.id;
+    this.#spec = { command: options.command, args: [...options.args], cwd: options.cwd };
+    this.#callTool = options.callTool ?? callMcpStdioTool;
+  }
+
+  async listModels(_signal?: AbortSignal): Promise<ProviderModel[]> {
+    return [{ id: "claude-web-consumer", name: "Claude Web Consumer", createdAt: null, contextWindow: 32_768, maxOutputTokens: 4_096, capabilities: { text: true, coding: true, toolCalling: false, structuredOutput: false, web: false }, reasoningEfforts: ["none"] }];
+  }
+
+  async healthCheck(signal?: AbortSignal): Promise<ProviderHealth> {
+    const started = Date.now();
+    try {
+      const result = await this.#callTool(this.#spec, "test_connection", {}, signal ?? AbortSignal.timeout(60_000));
+      const payload = this.payload(result);
+      if (payload.status !== "ready") throw new SafeError("CLAUDE_CONSUMER_UNAVAILABLE", typeof payload.message === "string" ? payload.message : "Claude browser session is not ready", 503);
+      return { status: "healthy", checkedAt: new Date().toISOString(), latencyMs: Date.now() - started, message: null };
+    } catch (error) {
+      return { status: "unhealthy", checkedAt: new Date().toISOString(), latencyMs: Date.now() - started, message: this.classifyError(error).message };
+    }
+  }
+
+  async generate(request: GenerateRequest): Promise<GenerateResult> {
+    if (request.modelId !== "claude-web-consumer") throw new SafeError("PROVIDER_MODEL_MISSING", `${this.id} does not expose ${request.modelId}`, 404);
+    if (request.jsonSchema) throw new SafeError("PROVIDER_CAPABILITY_MISMATCH", "Claude consumer adapter does not support structured output");
+    // This adapter types into a consumer chat, so send only the user's request.
+    // Provider-style system directives look unnatural there and can trigger
+    // misleading prompt-injection titles or warnings.
+    const prompt = request.prompt;
+    const payload = this.payload(await this.#callTool(this.#spec, "claude_query", { prompt }, request.signal));
+    if (typeof payload.output !== "string" || !payload.output) throw new SafeError("PROVIDER_RESPONSE_INVALID", "Claude adapter returned no output", 502);
+    const estimatedTotal = typeof (payload.usage as { estimatedTokens?: unknown } | undefined)?.estimatedTokens === "number" ? Math.max(0, Math.ceil((payload.usage as { estimatedTokens: number }).estimatedTokens)) : null;
+    const inputTokens = Math.max(1, Math.ceil(prompt.length / 4));
+    const outputTokens = estimatedTotal === null ? Math.max(1, Math.ceil(payload.output.length / 4)) : Math.max(0, estimatedTotal - inputTokens);
+    return { text: payload.output, responseId: null, usage: { inputTokens, outputTokens, cachedInputTokens: 0, estimatedCostUsd: 0, measurement: "estimated" } };
+  }
+
+  async *stream(request: GenerateRequest): AsyncGenerator<ProviderStreamEvent> {
+    const result = await this.generate(request);
+    yield { type: "start", responseId: null };
+    yield { type: "delta", text: result.text };
+    yield { type: "usage", usage: result.usage };
+    yield { type: "done", responseId: null };
+  }
+
+  override classifyError(error: unknown): ProviderErrorShape {
+    if (error instanceof SafeError && ["CLAUDE_CONSUMER_UNAVAILABLE", "MCP_PROCESS_EXITED", "MCP_TOOL_ERROR"].includes(error.code)) return { category: "unavailable", message: error.message, retryable: true, retryAfterMs: null, providerStatus: null };
+    return super.classifyError(error);
+  }
+
+  private payload(result: McpToolResult): Record<string, unknown> {
+    const text = result.content?.find((item) => item.type === "text" && typeof item.text === "string")?.text;
+    let payload: Record<string, unknown> = {};
+    try { payload = text ? JSON.parse(text) as Record<string, unknown> : {}; }
+    catch { throw new SafeError("PROVIDER_RESPONSE_INVALID", "Claude adapter returned invalid JSON", 502); }
+    if (result.isError) throw new SafeError("CLAUDE_CONSUMER_UNAVAILABLE", typeof payload.error === "string" ? payload.error : typeof payload.message === "string" ? payload.message : "Claude adapter request failed", 503);
+    return payload;
+  }
 }
 
 export class OpenAIProvider extends BaseProvider {
@@ -600,6 +765,7 @@ export interface ProviderFactoryOptions {
   credentials: Record<string, Record<string, string>>;
   fetchImpl?: FetchLike | undefined;
   skipDnsValidationForTests?: boolean | undefined;
+  mcpToolCaller?: McpToolCaller | undefined;
 }
 
 export function createConfiguredProvider(settings: ProviderSettings, credential: Readonly<Record<string, string>>, options: Omit<ProviderFactoryOptions, "credentials"> = {}): ProviderAdapter {
@@ -608,6 +774,7 @@ export function createConfiguredProvider(settings: ProviderSettings, credential:
   const profile = EXTRA_FREE_PROVIDERS.find((item) => item.id === settings.id);
   if (profile && settings.freeTierConfirmed !== true) throw new SafeError("FREE_TIER_CONFIRMATION_REQUIRED", `${settings.id}: confirm a free-only account with omni providers enable ${settings.id} --confirm-free-tier before importing or using its key`, 400);
   const common = { id: settings.id, baseUrl: settings.baseUrl, apiPrefix: settings.apiPrefix, fetchImpl: options.fetchImpl, skipDnsValidationForTests: options.skipDnsValidationForTests };
+  if (settings.type === "mcp-stdio") return new ClaudeConsumerProvider({ id: settings.id, command: settings.mcpCommand ?? "", args: settings.mcpArgs ?? [], cwd: settings.mcpWorkingDirectory, callTool: options.mcpToolCaller });
   if (settings.type === "openai") return new OpenAIProvider({ ...common, apiKey });
   if (settings.type === "anthropic") return new AnthropicProvider({ ...common, apiKey });
   if (settings.type === "local") return new LocalProvider(common);

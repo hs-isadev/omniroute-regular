@@ -15,7 +15,7 @@ CLI / dashboard / HTTP / MCP / hooks
                                       |
                    worker executor / dependency scheduler / reviewer
                                       |
-         OpenRouter | Gemini | Groq | local
+ OpenRouter | Gemini | Groq | local | Claude browser adapter
                  |
           attribution + redacted audit metadata
 ```
@@ -31,7 +31,7 @@ Package responsibilities:
 - `vault`: current-user DPAPI master-key wrapping and independent AES-GCM
   records. No secret is stored in normal config or audit data.
 - `providers`: stable provider interface and OpenAI, Anthropic,
-  OpenAI-compatible, and local adapters.
+  OpenAI-compatible, local, and MCP-stdio browser-session adapters.
 - `core`: deterministic task signals, registry filtering, optional planner envelope,
   plan validation/repair, dependency scheduling, cancellation, review, budget
   enforcement, and attribution.

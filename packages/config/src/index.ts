@@ -3,7 +3,7 @@ import { access, mkdir, open, readFile, rename, writeFile } from "node:fs/promis
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { isIP } from "node:net";
-import { ORCHESTRATOR_MODEL_ID, type Capability, type ReasoningEffort, REASONING_EFFORTS, ROUTING_MODES, type RoutingMode } from "@omniroute/contracts";
+import { ORCHESTRATOR_MODEL_ID, type Capability, type ReasoningEffort, REASONING_EFFORTS, ROUTING_MODES, type RoutingMode, TASK_CLASSES, type TaskClass } from "@omniroute/contracts";
 import { addDefaultFreeLadders, EXTRA_FREE_PROVIDERS, extraProviderSettings } from "./provider-catalog.js";
 export { EXTRA_FREE_PROVIDERS, freeWorkerModel } from "./provider-catalog.js";
 
@@ -26,7 +26,7 @@ export interface RuntimePaths {
 
 export interface ProviderSettings {
   id: string;
-  type: "openai" | "anthropic" | "openai-compatible" | "local";
+  type: "openai" | "anthropic" | "openai-compatible" | "local" | "mcp-stdio";
   enabled: boolean;
   freeTierOnly: boolean;
   freeTierConfirmed?: boolean;
@@ -34,6 +34,10 @@ export interface ProviderSettings {
   credentialField: string | null;
   baseUrl: string;
   apiPrefix: string;
+  mcpCommand?: string;
+  mcpArgs?: string[];
+  mcpWorkingDirectory?: string;
+  maxTaskClass?: TaskClass;
   discoveryTtlSeconds: number;
   models: Array<{
     modelId: string;
@@ -162,7 +166,7 @@ export const DEFAULT_CONFIG: OmniConfig = {
     freeModelCooldownMs: 60_000,
     orchestratorProviderId: "openrouter",
     orchestratorModelId: "openrouter/free",
-    directProviderOrder: ["groq", "gemini", "openrouter", "ollama"],
+    directProviderOrder: ["claude-consumer", "groq", "gemini", "openrouter", "ollama"],
     defaultOrchestratorEffort: "low",
     ambiguousOrchestratorEffort: "medium",
     repairInvalidPlanOnce: true,
@@ -189,6 +193,7 @@ export const DEFAULT_CONFIG: OmniConfig = {
   reliability: { retryLimit: 2, retryBaseDelayMs: 500, retryMaxDelayMs: 10_000 },
   providers: [
     ...extraProviderSettings(),
+    { id: "claude-consumer", type: "mcp-stdio", enabled: false, freeTierOnly: true, credentialField: null, baseUrl: "http://127.0.0.1:9222", apiPrefix: "", mcpCommand: "node", mcpArgs: [], maxTaskClass: "small", discoveryTtlSeconds: 60, models: [{ modelId: "claude-web-consumer", enabled: true, allowed: true, capabilities: { text: true, coding: true, structured_output: false, web: false, tool_calling: false }, contextWindow: 32_768, maxOutputTokens: 4_096, reasoningEfforts: ["none"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 3 }] },
     { id: "openai", type: "openai", enabled: false, freeTierOnly: false, credentialField: "OPENAI_API_KEY", baseUrl: "https://api.openai.com", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: openAiModels },
     { id: "anthropic", type: "anthropic", enabled: false, freeTierOnly: false, credentialField: "ANTHROPIC_API_KEY", baseUrl: "https://api.anthropic.com", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: [] },
     { id: "openrouter", type: "openai-compatible", enabled: true, freeTierOnly: true, credentialField: "OPENROUTER_API_KEY", baseUrl: "https://openrouter.ai/api/", apiPrefix: "v1/", discoveryTtlSeconds: 300, models: [{ modelId: "openrouter/free", enabled: true, allowed: true, capabilities: { text: true, vision: true, tool_calling: true, long_context: true, coding: true, structured_output: true }, contextWindow: 131_072, maxOutputTokens: 8_192, reasoningEfforts: ["none", "low", "medium"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 3 }] },
@@ -298,9 +303,15 @@ export function validateConfig(config: OmniConfig): void {
     if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(provider.id)) throw new Error(`invalid provider id: ${provider.id}`);
     if (providerIds.has(provider.id)) throw new Error(`duplicate provider id: ${provider.id}`);
     providerIds.add(provider.id);
+    if (!["openai", "anthropic", "openai-compatible", "local", "mcp-stdio"].includes(provider.type)) throw new Error(`invalid provider type for ${provider.id}`);
+    if (provider.maxTaskClass !== undefined && !TASK_CLASSES.includes(provider.maxTaskClass)) throw new Error(`invalid maximum task class for ${provider.id}`);
+    if (provider.type === "mcp-stdio") {
+      if (provider.enabled && (!provider.mcpCommand || !Array.isArray(provider.mcpArgs) || provider.mcpArgs.length === 0)) throw new Error(`enabled MCP stdio provider ${provider.id} requires a command and arguments`);
+      if ((provider.mcpCommand?.includes("\0") ?? false) || provider.mcpArgs?.some((value) => typeof value !== "string" || value.includes("\0")) || (provider.mcpWorkingDirectory?.includes("\0") ?? false)) throw new Error(`invalid MCP stdio process settings for ${provider.id}`);
+    }
     if (provider.freeModelOrder !== undefined && (!Array.isArray(provider.freeModelOrder) || provider.freeModelOrder.some((id) => typeof id !== "string" || !id) || new Set(provider.freeModelOrder).size !== provider.freeModelOrder.length)) throw new Error(`invalid free model order for ${provider.id}`);
     const parsed = new URL(provider.baseUrl);
-    if (!isSafeProviderBaseUrl(parsed, provider.type === "local")) throw new Error(`unsafe provider base URL for ${provider.id}`);
+    if (!isSafeProviderBaseUrl(parsed, provider.type === "local" || provider.type === "mcp-stdio")) throw new Error(`unsafe provider base URL for ${provider.id}`);
     if (provider.apiPrefix && (!/^[A-Za-z0-9._~/-]*$/.test(provider.apiPrefix) || provider.apiPrefix.includes(".."))) throw new Error(`invalid API prefix for ${provider.id}`);
     if (config.routing.freeOnly && provider.enabled && !provider.freeTierOnly) throw new Error(`paid provider ${provider.id} cannot be enabled while free-only policy is active`);
     if (provider.enabled && EXTRA_FREE_PROVIDERS.some((item) => item.id === provider.id) && provider.freeTierConfirmed !== true) throw new Error(`provider ${provider.id} requires explicit free-tier confirmation`);

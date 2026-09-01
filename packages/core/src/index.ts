@@ -168,10 +168,14 @@ export class OmniRouter {
     const modelPreference: ModelPreference = this.#config.routing.freeOnly && this.#config.routing.intentRoutingEnabled && ["casual_question", "light_task"].includes(signals.intent) ? "lightweight" : "quality";
     const mode = request.routingMode ?? this.#config.routing.defaultMode;
     const registered = await this.#registry();
+    const taskScoped = { ...registered, models: registered.models.filter((model) => {
+      const maximum = this.#config.providers.find((provider) => provider.id === model.providerId)?.maxTaskClass;
+      return maximum === undefined || TASK_ORDER.indexOf(signals.suggestedClass) <= TASK_ORDER.indexOf(maximum);
+    }) };
     const demandingWorker = mode === 'regular' && request.sourceClient === 'antigravity-mcp' && signals.requiredCapabilities.includes('coding') && ['complex_task','high_risk'].includes(signals.intent);
     // A conservative configured tier floor, not a claim of benchmark superiority.
     // Filter the immutable route snapshot so EVERY retry observes the same floor.
-    const snapshot = demandingWorker ? {...registered,models:registered.models.filter(model=>(model.intelligenceTier??0)>=4)} : registered;
+    const snapshot = demandingWorker ? {...taskScoped,models:taskScoped.models.filter(model=>(model.intelligenceTier??0)>=4)} : taskScoped;
     const freePlanner = mode === "orchestrator" && this.#config.routing.freeOnly && this.#config.routing.freeModelFailoverEnabled ? this.#freeFailover.candidates({ providerId: this.#config.routing.orchestratorProviderId, modelId: this.#config.routing.orchestratorModelId, reasoningEffort: modelPreference === "lightweight" ? "none" : this.orchestratorEffort(signals), maxOutputTokens: 4000 }, snapshot, ["text", "structured_output"], 0, modelPreference)[0] : undefined;
     const orchestratorModel = mode === "orchestrator" ? snapshot.models.find((model) => model.providerId === (freePlanner?.providerId ?? this.#config.routing.orchestratorProviderId) && model.modelId === (freePlanner?.modelId ?? this.#config.routing.orchestratorModelId) && model.enabled && model.allowed && model.health.status === "healthy" && model.capabilities.structuredOutput === true) ?? null : null;
     if (mode === "orchestrator" && !orchestratorModel) throw new SafeError("ORCHESTRATION_UNAVAILABLE", `Configured orchestrator ${this.#config.routing.orchestratorProviderId}/${this.#config.routing.orchestratorModelId} is not enabled, healthy, allowed, free-policy compliant, and structured-output capable`, 503);

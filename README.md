@@ -98,6 +98,11 @@ Runtime enforces compiled provider endpoints and free-model IDs before loading k
 
 Simple worker questions use a lightweight preference; coding uses a quality preference. Complex coding has a conservative configured-tier floor across fallbacks. Provider-first fallback tries adequate alternatives on the same provider before another. Model tiers/order are provisional, not a benchmark leaderboard. Host-model choice stays in Antigravity.
 
+A machine-local `claude-consumer` profile can call the separate browser-session
+adapter over MCP stdio. It is disabled in portable defaults, claims only text
+and coding, and is hard-capped at the small task class. See
+[Claude consumer provider](docs/claude-consumer-provider.md).
+
 ## Updates, rollback, troubleshooting
 
 See [full setup and migration guide](docs/antigravity-regular.md), including workspace detachment, version rollback and data-preserving uninstall. [Test evidence](docs/testing/antigravity-regular.tdd.md) distinguishes mock/protocol checks from actual Antigravity tests.
