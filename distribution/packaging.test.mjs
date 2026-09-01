@@ -10,6 +10,8 @@ test('default packages bundle MCP but not OpenCode and include provenance',async
 test('dual release preserves upstream MIT attribution',async()=>{
   const build=await source('../scripts/package-dual.mjs');
   assert.match(build,/version='0\.4\.0'/);
+  for(const component of ['contracts','core','integrations','mcp-server','observability','providers']) assert.ok(build.includes(component),`updated ${component} dist is not overlaid`);
+  assert.match(build,/hosts:\['opencode','antigravity','codex','claude-code'\]/);
   assert.match(build,/THIRD-PARTY-NOTICES\.md/);
   const notice=await source('../THIRD-PARTY-NOTICES.md');
   assert.match(notice,/Copyright \(c\) 2026 diegosouzapw/);
