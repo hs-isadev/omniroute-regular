@@ -48,6 +48,10 @@ test('complete regular runtime uses encrypted fixture vault, cached discovery, r
   assert.equal(result.attribution.worker.modelId,'openai/gpt-oss-20b');assert.match(result.badge,/groq/);
   const before=catalogCalls;await backend.models();assert.equal(catalogCalls,before);
   assert.equal((await backend.recentRoutes(1)).length,1);
+  const usage=await backend.usageSummary();
+  assert.equal(usage.routes,1);
+  assert.equal(usage.providerReportedTokensOffloaded,12);
+  assert.equal(usage.actualHostTokensSaved,null);
   assert.doesNotMatch(await readFile(paths.log,'utf8'),/What is a variable|fixture-runtime-key/);
   failResponse=true;await assert.rejects(backend.route({prompt:'fixture-private-content-must-not-log',requiredCapabilities:[]}),/400/);
   assert.doesNotMatch(await readFile(paths.log,'utf8'),/fixture-private-content-must-not-log/);

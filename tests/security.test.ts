@@ -45,6 +45,23 @@ test("aggregate spending reads beyond the 500-row recent-history display cap", a
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("token savings summary separates measured offload from unknowable counterfactual savings", async () => {
+  const root = await mkdtemp(join(tmpdir(), "omniroute-token-summary-"));
+  try {
+    const path = join(root, "routes.jsonl"), audit = new AuditStore(path);
+    const base: AttributionRecord = { routeId: "r", startedAt: new Date().toISOString(), endedAt: new Date().toISOString(), sourceClient: "test", hostApplication: "codex", hostModel: null, hostModelAuthoritative: false, orchestrator: { providerId: "omniroute", modelId: "deterministic-direct", reasoningEffort: "none" }, worker: { providerId: "groq", modelId: "worker", reasoningEffort: "low", maxOutputTokens: 100 }, reviewers: [], fallbacksAttempted: [], taskClass: "small", policyDecisions: [], usage: { inputTokens: 120, outputTokens: 30, cachedInputTokens: 0, estimatedCostUsd: 0, measurement: "provider-reported" }, latencyMs: 1, status: "completed", registrySnapshotId: "s" };
+    await audit.append(base);
+    await audit.append({ ...base, routeId: "r2", usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, estimatedCostUsd: 0, measurement: "unavailable" } });
+    const summary = await audit.tokenSavingsSummary();
+    assert.equal(summary.routes, 2);
+    assert.equal(summary.providerReportedRoutes, 1);
+    assert.equal(summary.routesWithoutProviderUsage, 1);
+    assert.equal(summary.providerReportedTokensOffloaded, 150);
+    assert.equal(summary.actualHostTokensSaved, null);
+    assert.equal(summary.savingsStatus, "counterfactual-host-usage-unavailable");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("provider URL policy blocks credentials, non-HTTPS remote URLs, and private targets", async () => {
   assert.equal(isSafeProviderBaseUrl(new URL("https://api.openai.com"), false), true);
   assert.equal(isSafeProviderBaseUrl(new URL("http://api.openai.com"), false), false);
