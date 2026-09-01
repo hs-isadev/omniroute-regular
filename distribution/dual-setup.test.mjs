@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,readFile,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {getRuntimePaths,loadConfig,saveConfig} from '../packages/config/dist/index.js';
+import {regularConfig} from './settings.mjs';
 const mod=await import('./dual-setup.mjs').catch(e=>{if(e.code!=='ERR_MODULE_NOT_FOUND')throw e;return {};});
 test('global Antigravity setup is repeatable and preserves unrelated MCP entries and rules',async()=>{
   assert.equal(typeof mod.connectAntigravity,'function','combined global connector missing');
@@ -43,4 +45,40 @@ test('new setup saves keys before starting Antigravity so its MCP sees the saved
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');
   const setup=source.slice(source.indexOf('export async function setupBoth'));
   assert.ok(setup.indexOf('await openKeyForm(root)')<setup.indexOf('await launchAntigravity(root)'));
+});
+
+test('experiment setup enables the packaged Claude consumer without storing a credential',async()=>{
+  assert.equal(typeof mod.configureClaudeConsumer,'function','Claude consumer setup missing');
+  const root=await mkdtemp(join(tmpdir(),'dual-claude-'));
+  const paths=getRuntimePaths(join(root,'data'));
+  const config=regularConfig();
+  await saveConfig(config,paths);
+  const node=join(root,'versions/0.5.0/node/node.exe');
+  const entrypoint=join(root,'versions/0.5.0/app/packages/claude-consumer-adapter/src/adapter.mjs');
+  await mod.configureClaudeConsumer({root,node,entrypoint});
+  const saved=await loadConfig(paths);
+  const provider=saved.providers.find(item=>item.id==='claude-consumer');
+  assert.equal(provider.enabled,true);
+  assert.equal(provider.credentialField,null);
+  assert.equal(provider.mcpCommand,node);
+  assert.deepEqual(provider.mcpArgs,[entrypoint]);
+  assert.equal(saved.routing.directProviderOrder[0],'claude-consumer');
+});
+
+test('consumer autostart is per-user, background, and contains no account data',async()=>{
+  assert.equal(typeof mod.installClaudeConsumerAutostart,'function','Claude consumer autostart missing');
+  const home=await mkdtemp(join(tmpdir(),'dual-autostart-'));
+  const root=join(home,'install'),node=join(root,'node'),entrypoint=join(root,'credential-server.mjs');
+  const result=await mod.installClaudeConsumerAutostart({platform:'linux',home,root,node,entrypoint});
+  const text=await readFile(result.file,'utf8');
+  assert.match(text,/X-GNOME-Autostart-enabled=true/);
+  assert.match(text,/--background/);
+  assert.doesNotMatch(text,/cookie|token|password/i);
+});
+
+test('experiment package includes the adapter and marks five integrated routes',async()=>{
+  const source=await readFile(new URL('../scripts/package-dual.mjs',import.meta.url),'utf8');
+  assert.match(source,/claude-consumer-adapter/);
+  assert.match(source,/claude-web-consumer/);
+  assert.match(source,/playwright-core/);
 });
