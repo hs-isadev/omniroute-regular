@@ -22,5 +22,10 @@ expected: [ 'omni_models', 'omni_route', 'omni_routes' ]
 
 ## Green
 
-Pending the minimal expected-tool-list correction and a rerun of the same
-freshly built package test.
+The expected public tool list now includes `omni_usage`. Rerunning
+`npm run test:package` against the same freshly built Windows package returned
+`"status": "PASS"`, including checksum, install/reinstall, MCP discovery and
+invocation, routing, reconnect, redaction, detach, and uninstall checks.
+
+This is an assertion-only correction: no runtime tool or provider behavior was
+changed.
