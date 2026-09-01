@@ -61,7 +61,7 @@ test('experiment setup enables the packaged Claude consumer without storing a cr
   assert.equal(provider.enabled,true);
   assert.equal(provider.credentialField,null);
   assert.equal(provider.mcpCommand,node);
-  assert.deepEqual(provider.mcpArgs,[entrypoint]);
+  assert.deepEqual(provider.mcpArgs,[entrypoint,'--endpoint','http://127.0.0.1:47842']);
   assert.equal(saved.routing.directProviderOrder[0],'claude-consumer');
 });
 
@@ -75,6 +75,7 @@ test('consumer autostart is per-user, background, and contains no account data',
   assert.match(text,/--background/);
   assert.match(text,/--profile/);
   assert.match(text,/claude-consumer-profile/);
+  assert.match(text,/--port 47842/);
   assert.doesNotMatch(text,/cookie|token|password/i);
 });
 
