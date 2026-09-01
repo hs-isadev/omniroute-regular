@@ -30,7 +30,9 @@ test("Codex integration preserves unrelated config, is idempotent, removable, an
     const installed = parseToml(await readFile(host.codexConfig, "utf8")) as any;
     assert.equal(installed.approval_policy, "on-request");
     assert.equal(installed.mcp_servers.omniroute.default_tools_approval_mode, "prompt");
-    assert.deepEqual(Object.keys(installed.mcp_servers.omniroute.tools).sort(), ["omni_models", "omni_route", "omni_routes"]);
+    assert.equal(installed.mcp_servers.omniroute.env.OMNIROUTE_HOME, runtime.root);
+    assert.equal(installed.mcp_servers.omniroute.env.OMNIROUTE_ROUTING_MODE, "regular");
+    assert.deepEqual(Object.keys(installed.mcp_servers.omniroute.tools).sort(), ["omni_models", "omni_route", "omni_routes", "omni_usage"]);
     assert.equal(installed.mcp_servers.omniroute.tools.omni_route.approval_mode, "approve");
     const repeatPlan = await manager.plan("codex", "install");
     assert.equal(repeatPlan.changed, false, JSON.stringify(repeatPlan.changes.map((change) => ({ path: change.path, diff: change.redactedDiff }))));
@@ -54,6 +56,8 @@ test("Claude Code merge preserves unrelated MCP servers and hooks", async () => 
     await manager.apply(await manager.plan("claude-code", "install"));
     const config = JSON.parse(await readFile(host.claudeConfig, "utf8"));
     assert.equal(config.theme, "dark"); assert.ok(config.mcpServers.existing); assert.equal(config.mcpServers.omniroute.env.OMNIROUTE_MANAGED, "1");
+    assert.equal(config.mcpServers.omniroute.env.OMNIROUTE_HOME, getRuntimePaths(join(root, "runtime")).root);
+    assert.equal(config.mcpServers.omniroute.env.OMNIROUTE_ROUTING_MODE, "regular");
     assert.match(await readFile(host.claudeSettings, "utf8"), /existing/);
     assert.equal((await manager.plan("claude-code", "install")).changed, false);
   } finally { await rm(root, { recursive: true, force: true }); }

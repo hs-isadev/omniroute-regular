@@ -20,6 +20,18 @@ test('OpenCode environment excludes upstream credentials and points both models 
   const env=mod.openCodeEnvironment({PATH:'fixture',HOME:'/user',GROQ_API_KEY:'never-forward',NODE_OPTIONS:'--require evil'},'/install','{}');
   assert.equal(env.GROQ_API_KEY,undefined);assert.equal(env.NODE_OPTIONS,undefined);assert.equal(env.OPENCODE_CONFIG_CONTENT,'{}');assert.match(env.XDG_CONFIG_HOME,/opencode/);assert.equal(env.OPENCODE_DISABLE_MODELS_FETCH,'true');
 });
+test('one setup connects Codex and Claude Code to the isolated regular MCP without replacing user settings',async()=>{
+  assert.equal(typeof mod.connectDeveloperHosts,'function','Codex/Claude connector missing');
+  const home=await mkdtemp(join(tmpdir(),'dual-dev-hosts-')),root=join(home,'install');await mkdir(root,{recursive:true});
+  await mkdir(join(home,'.codex'),{recursive:true});await mkdir(join(home,'.claude'),{recursive:true});
+  await writeFile(join(home,'.codex/config.toml'),'model = "user-choice"\n');
+  await writeFile(join(home,'.claude.json'),JSON.stringify({theme:'dark'}));
+  const result=await mod.connectDeveloperHosts({home,root,node:process.execPath,entrypoint:join(home,'mcp-regular.mjs')});
+  assert.deepEqual(result.connected.sort(),['claude-code','codex']);
+  const codex=await readFile(join(home,'.codex/config.toml'),'utf8');assert.match(codex,/user-choice/);assert.match(codex,/OMNIROUTE_HOME/);
+  const claude=JSON.parse(await readFile(join(home,'.claude.json'),'utf8'));assert.equal(claude.theme,'dark');assert.equal(claude.mcpServers.omniroute.env.OMNIROUTE_ROUTING_MODE,'regular');
+  await mod.connectDeveloperHosts({home,root,node:process.execPath,entrypoint:join(home,'mcp-regular.mjs')});
+});
 test('installer entrypoints include user-friendly editor workflow and no GitHub publication',async()=>{
   const path=new URL('./dual/Setup.ps1',import.meta.url);
   const ps=await readFile(path,'utf8').catch(e=>{if(e.code!=='ENOENT')throw e;return '';});
