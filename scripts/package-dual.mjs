@@ -47,7 +47,7 @@ for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']])
     }
   }}
   await walk(payload);files.sort((a,b)=>a.path.localeCompare(b.path));
-  await writeFile(join(target,'manifest.json'),JSON.stringify({version,platform,host:'multi',hosts:['opencode','antigravity','codex','claude-code'],files},null,2)+'\n');
+  await writeFile(join(target,'manifest.json'),JSON.stringify({version,platform,host:'antigravity',hosts:['opencode','antigravity','codex','claude-code'],files},null,2)+'\n');
   await verifyPackage(target,platform);console.log('Verified '+label+': '+files.length+' payload files');
 }
 await cp(join(repo,'distribution/dual/README.md'),join(release,'README.md'));

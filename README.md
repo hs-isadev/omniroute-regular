@@ -1,6 +1,6 @@
 # OmniRoute — OpenCode + Antigravity + Codex + Claude Code
 
-The current `0.3.0` release is one download for Windows 10/11 x64 and Linux
+The current `0.4.0` release is one download for Windows 10/11 x64 and Linux
 x64 desktops. It installs or connects four host modes:
 
 - OpenCode uses OmniRoute as its main model/router.
@@ -12,9 +12,9 @@ No API keys, login sessions, vaults, or personal projects are included. You
 bring your own free/evaluation provider keys and sign into the official Google
 Antigravity app yourself.
 
-## Quick setup (0.3.0)
+## Quick setup (0.4.0)
 
-1. Download `OmniRoute-Dual-0.3.0.zip` and its `.sha256` file from the latest
+1. Download `OmniRoute-Dual-0.4.0.zip` and its `.sha256` file from the latest
    GitHub release, then extract the whole ZIP.
 2. Windows: double-click `Install-Windows.cmd`.
    Linux: run `sh Install-Linux.sh` from the extracted directory.
@@ -29,14 +29,14 @@ OmniRoute runtime, connects MCP, and creates launchers. OS security, admin,
 desktop-keyring, and Antigravity onboarding prompts can still require approval.
 See the release's `VERIFICATION.md` for the exact tests and limitations.
 
-## Unreleased 0.4.0 source
+## What changed in 0.4.0
 
-The next source release adds opt-in Cerebras and SambaNova free-tier API-key
+This release adds opt-in Cerebras and SambaNova free-tier API-key
 profiles, 12-provider graphical key entry, Codex/Claude Code integration,
 provider-reported token-offload accounting, and an upstream MIT notice. Their
 adapters pass mock-backed discovery, completion, and streaming tests, but they
-have not yet passed a live owner-key check. The published 0.3.0 download remains
-the tested release until 0.4.0 is packaged, reviewed, and sealed.
+have not yet passed a live owner-key check. See the release verification report
+for the exact Windows, Linux, package, dependency, and secret-scan results.
 
 ## Legacy Antigravity-only 0.2.x documentation
 
@@ -92,7 +92,7 @@ Then try a bounded coding task with relevant code and requirements. The host mus
 
 ## Providers and routing
 
-Published Regular 0.3.0 offers **10 opt-in free-plan/free-endpoint/evaluation providers**. Unreleased 0.4.0 source offers 12 by adding Cerebras and SambaNova. Hugging Face and Vercel credit-based profiles are disabled, even when their keys are retained. See [provider/authentication guide](docs/free-provider-expansion.md). Stronger candidates include NVIDIA Kimi K2.6 and OpenRouter Qwen3 Coder free; their individual connectivity check must pass before activation. Coding quality is not certified by that check. No 120B ceiling is imposed.
+Regular 0.4.0 offers **12 opt-in free-plan/free-endpoint/evaluation providers** by adding Cerebras and SambaNova. Hugging Face and Vercel credit-based profiles are disabled, even when their keys are retained. See [provider/authentication guide](docs/free-provider-expansion.md). Stronger candidates include NVIDIA Kimi K2.6 and OpenRouter Qwen3 Coder free; their individual connectivity check must pass before activation. Coding quality is not certified by that check. No 120B ceiling is imposed.
 
 Runtime enforces compiled provider endpoints and free-model IDs before loading keys; editing prices to zero cannot admit an unlisted model. Account free-plan eligibility is still your responsibility: connectivity does not prove billing status, and there is no universal billing-status API. Limits stop/fallback only among eligible free workers. No claim of unlimited access, zero security risk, or superiority over every installer is made. See [security/test evidence](docs/testing/key-editor.tdd.md).
 
