@@ -13,13 +13,17 @@ import { getRuntimePaths, EXTRA_FREE_PROVIDERS } from '../packages/config/dist/i
 const execute=promisify(execFile),MAX=65536;
 const supported=Object.fromEntries(Object.entries(fields).filter(([id])=>!CREDIT_PROVIDERS.includes(id)));
 const allowed=new Set(Object.values(supported).flat());
+const labels=Object.fromEntries(Object.entries(supported).flatMap(([id,names])=>names.map((name,index)=>[name,index===0?id:name.toLowerCase()])));
+const aliases=new Map(Object.entries(labels).map(([name,label])=>[label,name]));
 const links={groq:'https://console.groq.com/keys',gemini:'https://aistudio.google.com/apikey',openrouter:'https://openrouter.ai/settings/keys',...Object.fromEntries(EXTRA_FREE_PROVIDERS.map(p=>[p.id,p.signup]))};
 export function parseKeyFile(text) {
   if(Buffer.byteLength(text)>MAX||text.includes('\0')) throw new Error('Key file is too large or contains invalid characters.');
   const output={},seen=new Set();
   for(const [index,raw] of text.replace(/^\uFEFF/,'').split(/\r?\n/).entries()) {
     const line=raw.trim();if(!line||line.startsWith('#'))continue;
-    const at=line.indexOf('='),name=line.slice(0,at).trim();
+    const match=/^([^:=]+)\s*([:=])/.exec(line);
+    const at=match?match[0].length-1:-1,rawName=line.slice(0,at).trim();
+    const name=aliases.get(rawName.toLowerCase())??rawName;
     if(at<1||!allowed.has(name)||seen.has(name)) throw new Error('Unknown, duplicate or malformed credential field at line '+(index+1)+'.');
     seen.add(name);let value=line.slice(at+1).trim();
     if((value.startsWith('"')&&value.endsWith('"'))||(value.startsWith("'")&&value.endsWith("'")))value=value.slice(1,-1);
@@ -57,19 +61,23 @@ async function savedProviders(paths) {
   catch(error){if(error.code==='ENOENT')return new Set();throw new Error('Cannot read saved-provider metadata. Existing vault was not changed.');}
 }
 function template(saved,remaining={}) {
-  const lines=['# OmniRoute Regular API keys - edit ONLY the values after =.',
-    '# Existing saved keys are never shown here. Blank = keep saved key.',
+  const lines=['# OmniRoute Regular API keys - paste each key after its provider colon (:).',
+    '# Existing saved keys are never shown here. Leave a value blank to keep its saved key.',
     '# Save and CLOSE this editor, then return to setup and confirm import.',
     '# Use free-plan/evaluation accounts only; billing, paid overages, BYOK and auto-top-up OFF.',
     '# Never enter account passwords, browser cookies or host login sessions.',
     '# Plaintext risk: disable editor autosave/session backups. Cleanup is NOT secure erasure.',
     '# Successful values are removed from this file; failed values remain for retry.',
+    '# This EDITING file is temporary plaintext. Imported keys are encrypted in the vault.',
+    '# One key per provider, not per model. Leave providers you do not want blank.',
+    '# LongCat excluded: current API is paid; old free models were retired.',
     '# Hugging Face and Vercel credit-based providers are disabled in Regular mode.',''];
-  for(const [id,names] of Object.entries(supported)) {
+  for(const id of ['groq','gemini','cohere','cloudflare','mistral','openrouter','kilo','zai','nvidia','opencode-zen']) {
+    const names=supported[id];
     lines.push('# '+id+': '+(saved.has(id)?'saved (blank keeps it)':'not configured'),'# Get key: '+links[id]);
     const note=EXTRA_FREE_PROVIDERS.find(p=>p.id===id)?.note;
     if(note)lines.push('# '+note);
-    for(const name of names)lines.push(name+'='+(remaining[name]??''));
+    for(const name of names)lines.push(labels[name]+': '+(remaining[name]??''));
     lines.push('');
   }
   return lines.join('\n');

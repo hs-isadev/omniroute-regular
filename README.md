@@ -1,4 +1,33 @@
-# OmniRoute Regular — Antigravity + free MCP workers
+# OmniRoute Dual — OpenCode + Antigravity
+
+The current `0.3.0` release is one download for Windows 10/11 x64 and Linux
+x64 desktops. It installs both modes:
+
+- OpenCode uses OmniRoute as its main model/router.
+- Antigravity stays the main agent and calls OmniRoute workers through MCP.
+
+No API keys, login sessions, vaults, or personal projects are included. You
+bring your own free/evaluation provider keys and sign into the official Google
+Antigravity app yourself.
+
+## Quick setup (0.3.0)
+
+1. Download `OmniRoute-Dual-0.3.0.zip` and its `.sha256` file from the latest
+   GitHub release, then extract the whole ZIP.
+2. Windows: double-click `Install-Windows.cmd`.
+   Linux: run `sh Install-Linux.sh` from the extracted directory.
+3. In the graphical **API Keys** window, use **Get key**, paste any keys you
+   want, confirm free-account settings, and choose **Save and test**. One
+   working provider is enough; blank fields preserve existing saved keys.
+4. Complete Antigravity's official sign-in when it opens. Launch either
+   **OmniRoute OpenCode** or **OmniRoute Antigravity** afterward.
+
+Setup obtains official Antigravity, installs the bundled pinned OpenCode and
+OmniRoute runtime, connects MCP, and creates launchers. OS security, admin,
+desktop-keyring, and Antigravity onboarding prompts can still require approval.
+See the release's `VERIFICATION.md` for the exact tests and limitations.
+
+## Legacy Antigravity-only 0.2.x documentation
 
 Preview release: Windows/Linux installer and MCP protocol checks pass. Real Antigravity account/tool-adherence testing and a Linux desktop-keyring round trip are still pending. See the included test evidence before relying on this for important work.
 

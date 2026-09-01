@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$InstallRoot,[string]$AppRoot,[string]$NodePath,[string]$RuntimeRoot,[switch]$ExistingSetup,[switch]$SmokeTest,[switch]$RequireReady)
+param([string]$InstallRoot,[string]$AppRoot,[string]$NodePath,[string]$RuntimeRoot,[switch]$ExistingSetup,[switch]$SmokeTest,[switch]$RequireReady,[switch]$Simple)
 $ErrorActionPreference = 'Stop'
 $script:setupReady=$false
 if(-not $InstallRoot) {$InstallRoot=$PSScriptRoot}
@@ -14,7 +14,21 @@ if(-not $NodePath) {$NodePath=Join-Path $InstallRoot 'node\node.exe'}
 if(-not $RuntimeRoot) {$RuntimeRoot=Join-Path $InstallRoot 'data'}
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+if($Simple -and -not ('OmniRouteKeyFormVisibility' -as [type])) {
+  Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class OmniRouteKeyFormVisibility {
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr handle, int command);
+}
+'@
+}
 $form = New-Object Windows.Forms.Form
+if($Simple) {
+  # A hidden PowerShell launch can hide its first GUI window too. Reveal the
+  # form after the message loop starts, while keeping the console hidden.
+  $form.Add_Shown({[void]$form.BeginInvoke([Action]{[void][OmniRouteKeyFormVisibility]::ShowWindow($form.Handle,5); $form.Activate()})})
+}
 $form.Text = 'OmniRoute Regular - Your API keys'
 if($ExistingSetup) {$form.Text='OmniRoute - Provider keys (existing setup)'}
 $form.Size = New-Object Drawing.Size(690,640)
@@ -25,6 +39,7 @@ $intro = New-Object Windows.Forms.Label
 $intro.Text = 'Any one suitable free provider is enough. Keys stay on this Windows account. Antigravity sign-in stays in Antigravity.'
 $intro.SetBounds(15,12,650,36)
 $form.Controls.Add($intro)
+if($Simple) {$intro.Text='Paste your API keys below. Use Get key if you need one. Leave any others blank; saved keys are kept.'}
 $panel=New-Object Windows.Forms.Panel; $panel.SetBounds(15,52,650,330); $panel.AutoScroll=$true; $form.Controls.Add($panel)
 $rows = @(
   @('OpenRouter','OPENROUTER_API_KEY','https://openrouter.ai/settings/keys'),
@@ -42,6 +57,7 @@ $rows = @(
   @('OpenCode Zen free','OPENCODE_ZEN_API_KEY','https://opencode.ai/auth')
 )
 $boxes = @{}
+if($Simple) {$rows=@($rows | Where-Object {$_[1] -notin @('HF_TOKEN','VERCEL_AI_GATEWAY_API_KEY')})}
 for ($i=0; $i -lt $rows.Count; $i++) {
   $label=New-Object Windows.Forms.Label; $label.Text=$rows[$i][0]; $label.SetBounds(0,(3+$i*42),150,25); $panel.Controls.Add($label)
   $box=New-Object Windows.Forms.TextBox; $box.UseSystemPasswordChar=$true; $box.SetBounds(155,($i*42),370,26); $panel.Controls.Add($box); $boxes[$rows[$i][1]]=$box
@@ -61,6 +77,12 @@ $candidates=New-Object Windows.Forms.CheckBox
 $candidates.Text='Also test Kimi K2.6 / Qwen3 Coder free candidates (up to one extra call per supplied key).'
 $candidates.SetBounds(15,485,650,35); $candidates.Enabled=(-not $ExistingSetup); $form.Controls.Add($candidates)
 $save=New-Object Windows.Forms.Button; $save.Text='Validate and save'; $save.SetBounds(235,535,190,35); $form.Controls.Add($save)
+if($Simple) {
+  $candidates.Visible=$false
+  $confirm.Text='I use free/evaluation accounts. Paid overages and auto top-up are OFF.'
+  $save.Text='Save and test'
+  $notice.Text='Keys are masked and saved encrypted on this PC. No text file needed. Cloudflare requires BOTH fields. Some free services are evaluation-only. Antigravity login stays in its own app.'
+}
 $save.Add_Click({
   if(-not $confirm.Checked) { [Windows.Forms.MessageBox]::Show('Confirm free-only account settings first.'); return }
   $save.Enabled=$false; $save.Text='Checking keys...'; $form.Refresh()
@@ -82,17 +104,20 @@ $save.Add_Click({
     if($process.ExitCode -ne 0 -or -not $result.ready) { [Windows.Forms.MessageBox]::Show($result.error,'Setup needs attention'); return }
     foreach($box in $boxes.Values) {$box.Clear()}; $keys.Clear()
     $message='Saved. Open the OmniRoute Regular desktop shortcut.'
-    if($RequireReady) {$message='Saved. Next, return to the setup terminal to choose your project folder.'}
+    if($Simple) {$message='Your working keys have been saved encrypted on this PC. Restart your host or reconnect its OmniRoute MCP server to refresh providers.'}
+    if($RequireReady -and -not $Simple) {$message='Saved. Next, return to the setup terminal to choose your project folder.'}
     if($ExistingSetup) {$message='Saved for your existing OmniRoute setup. Modes, port and existing keys were preserved.'}
     if($result.restartNeeded) {$message+=' Restart OmniRoute with omni service stop, then omni service start.'}
     if($result.failed.Count -gt 0) {$message+=' Some supplied keys failed validation: '+($result.failed -join ', ')+'. Existing keys were kept. Reopen Settings to retry.'}
     foreach($candidate in $result.codingCandidates) {$message+=[Environment]::NewLine+$candidate.provider+'/'+$candidate.model+': '+$candidate.status}
     [Windows.Forms.MessageBox]::Show($message,'Ready'); $script:setupReady=$true; $form.Close()
   } catch { [Windows.Forms.MessageBox]::Show('Setup could not finish. Check your connection and try again. No key values were logged.','Setup error') }
-  finally { $save.Enabled=$true; $save.Text='Validate and save' }
+  finally { $save.Enabled=$true; $save.Text='Validate and save'; if($Simple){$save.Text='Save and test'} }
 })
 if($SmokeTest) {
-  if($boxes.Count -ne 13 -or -not $panel.AutoScroll) {throw 'Missing credential fields or scrolling'}
+  $expected=13; if($Simple){$expected=11}
+  if($boxes.Count -ne $expected -or -not $panel.AutoScroll) {throw 'Missing credential fields or scrolling'}
+  if($Simple -and ($boxes.ContainsKey('HF_TOKEN') -or $boxes.ContainsKey('VERCEL_AI_GATEWAY_API_KEY') -or $save.Text -ne 'Save and test')) {throw 'Simple form has unexpected controls'}
   foreach($box in $boxes.Values) {if(-not $box.UseSystemPasswordChar) {throw 'Unmasked credential field'}}
   $form.Dispose(); Write-Output 'PASS: masked Windows Forms key-entry controls'; return
 }

@@ -16,7 +16,7 @@ test('template marks saved providers without exporting keys and excludes credit 
   requireEditor();const f=await fixture();
   await configure({keys:{GROQ_API_KEY:'fixture-never-export'},freeOnlyConfirmed:true},f.paths,f);
   const file=await editor.prepareKeyFile(f);const text=await readFile(file,'utf8');
-  assert.match(text,/# groq: saved/);assert.match(text,/GROQ_API_KEY=\r?\n/);
+  assert.match(text,/# groq: saved/);assert.match(text,/^groq: *\r?$/m);
   assert.doesNotMatch(text,/fixture-never-export|HF_TOKEN=|VERCEL_AI_GATEWAY_API_KEY=/);
   assert.match(text,/https:\/\/console.groq.com\/keys/);
 });
@@ -48,7 +48,14 @@ test('failed validation retains file and vault; partial success keeps only faile
   await writeFile(file,'GROQ_API_KEY=fixture-good\nZAI_API_KEY=fixture-bad\n');
   const result=await editor.importKeyFile({...f,file,freeOnlyConfirmed:true,factory:p=>p.id==='groq'?f.factory():failure()});
   assert.deepEqual(result.failed,['zai']);const text=await readFile(file,'utf8');
-  assert.match(text,/ZAI_API_KEY=fixture-bad/);assert.doesNotMatch(text,/fixture-good/);
+  assert.match(text,/zai: fixture-bad/);assert.doesNotMatch(text,/fixture-good/);
+});
+test('simple provider labels map to credentials and aliases cannot bypass duplicate checks',()=>{
+  assert.deepEqual(editor.parseKeyFile('groq: fixture=a:b\nGemini: fixture-g\ncohere:\ncloudflare: fixture-c\ncloudflare_account_id: fixture-id\n'),{
+    GROQ_API_KEY:'fixture=a:b',GEMINI_API_KEY:'fixture-g',CLOUDFLARE_API_TOKEN:'fixture-c',CLOUDFLARE_ACCOUNT_ID:'fixture-id',
+  });
+  for(const text of ['groq: a\nGROQ_API_KEY=b','groq: a\nGroq: b','Longcat: fixture-secret','HF_TOKEN: fixture-secret'])
+    assert.throws(()=>editor.parseKeyFile(text),e=>!e.message.includes('fixture-secret'));
 });
 test('confirmation is mandatory and concurrent edits are never overwritten',async()=>{
   requireEditor();const f=await fixture();const file=await editor.prepareKeyFile(f);

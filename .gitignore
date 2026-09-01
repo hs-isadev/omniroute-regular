@@ -33,3 +33,5 @@ release/
 .cache/
 test-artifacts/
 test-results*.txt
+__pycache__/
+*.py[cod]
