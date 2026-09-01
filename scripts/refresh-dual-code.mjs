@@ -2,7 +2,7 @@ import {access,readFile,writeFile,copyFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {join,resolve} from 'node:path';
 import {verifyPackage} from '../distribution/install.mjs';
-const repo=resolve(import.meta.dirname,'..'),release=join(repo,'release/OmniRoute-Dual-0.4.0');
+const repo=resolve(import.meta.dirname,'..'),release=join(repo,'release/OmniRoute-Dual-0.5.0-experiment');
 try{await access(release+'.zip');throw new Error('Do not change a sealed release');}catch(e){if(e.code!=='ENOENT')throw e;}
 for(const [label,platform] of [['Windows','windows-x64'],['Linux','linux-x64']]){
   const dir=join(release,label);await verifyPackage(dir,platform);

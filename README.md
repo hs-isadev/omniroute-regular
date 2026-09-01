@@ -1,42 +1,48 @@
-# OmniRoute — OpenCode + Antigravity + Codex + Claude Code
+# OmniRoute experiment — five routes, one setup
 
-The current `0.4.0` release is one download for Windows 10/11 x64 and Linux
-x64 desktops. It installs or connects four host modes:
+The `experiment` branch builds one download for Windows 10/11 x64 and Linux
+x64 desktops. It installs or connects five routes:
 
 - OpenCode uses OmniRoute as its main model/router.
 - Antigravity stays the main agent and calls OmniRoute workers through MCP.
 - Codex and Claude Code stay the main agents and call OmniRoute workers through
   MCP when those hosts are already installed.
+- Short text and coding requests can use a signed-in Claude web account through
+  a dedicated local browser profile. These requests contain only the user's
+  natural prompt—no role labels or system-like preamble.
 
-No API keys, login sessions, vaults, or personal projects are included. You
-bring your own free/evaluation provider keys and sign into the official Google
-Antigravity app yourself.
+No API keys, browser sessions, vaults, or personal projects are included. You
+bring your own provider keys and sign into Antigravity and Claude yourself.
+The `main` branch remains the same four-host BYOK package without the Claude web
+consumer.
 
-## Quick setup (0.4.0)
+## Quick setup (0.5.0-experiment)
 
-1. Download `OmniRoute-Dual-0.4.0.zip` and its `.sha256` file from the latest
-   GitHub release, then extract the whole ZIP.
+1. Build or download `OmniRoute-Dual-0.5.0-experiment`, then extract the whole
+   folder.
 2. Windows: double-click `Install-Windows.cmd`.
    Linux: run `sh Install-Linux.sh` from the extracted directory.
 3. In the graphical **API Keys** window, use **Get key**, paste any keys you
    want, confirm free-account settings, and choose **Save and test**. One
    working provider is enough; blank fields preserve existing saved keys.
-4. Complete Antigravity's official sign-in when it opens. Launch either
-   **OmniRoute OpenCode** or **OmniRoute Antigravity** afterward.
+4. Complete the one-time Claude login in the dedicated browser window, then
+   complete Antigravity's sign-in when it opens.
 
 Setup obtains official Antigravity, installs the bundled pinned OpenCode and
 OmniRoute runtime, connects MCP, and creates launchers. OS security, admin,
-desktop-keyring, and Antigravity onboarding prompts can still require approval.
-See the release's `VERIFICATION.md` for the exact tests and limitations.
+desktop-keyring, browser login, and Antigravity onboarding prompts can still
+require approval. The dedicated Claude browser starts quietly at user login on
+both platforms; normal Opera tabs and profiles are not touched. See the
+release's `VERIFICATION.md` for the exact tests and limitations.
 
-## What changed in 0.4.0
+## What changed in 0.5.0-experiment
 
-This release adds opt-in Cerebras and SambaNova free-tier API-key
-profiles, 12-provider graphical key entry, Codex/Claude Code integration,
-provider-reported token-offload accounting, and an upstream MIT notice. Their
-adapters pass mock-backed discovery, completion, and streaming tests, but they
-have not yet passed a live owner-key check. See the release verification report
-for the exact Windows, Linux, package, dependency, and secret-scan results.
+This experiment adds the local Claude browser consumer to the 0.4.0 BYOK,
+OpenCode, Antigravity, Codex, and Claude Code package. It is limited to small
+text/coding work, uses an isolated loopback port, and starts from a per-user
+autostart entry. Opera GX is preferred on Windows; Opera, Chrome, or Chromium
+can be used on Linux. Claude web access is account/quota/terms dependent and is
+not presented as an API key or unlimited provider.
 
 ## Legacy Antigravity-only 0.2.x documentation
 

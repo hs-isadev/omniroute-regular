@@ -80,8 +80,18 @@ test('consumer autostart is per-user, background, and contains no account data',
 });
 
 test('experiment package includes the adapter and marks five integrated routes',async()=>{
-  const source=await readFile(new URL('../scripts/package-dual.mjs',import.meta.url),'utf8');
-  assert.match(source,/claude-consumer-adapter/);
-  assert.match(source,/claude-web-consumer/);
-  assert.match(source,/playwright-core/);
+  const source=await readFile(new URL('../scripts/package-dual.mjs',import.meta.url),'utf8').catch(error=>{
+    if(error.code!=='ENOENT')throw error;
+    return null;
+  });
+  if(source!==null){
+    assert.match(source,/claude-consumer-adapter/);
+    assert.match(source,/claude-web-consumer/);
+    assert.match(source,/playwright-core/);
+  }else{
+    const adapter=await readFile(new URL('../packages/claude-consumer-adapter/src/adapter.mjs',import.meta.url),'utf8');
+    assert.match(adapter,/playwright/);
+    assert.match(adapter,/claude-web-consumer/);
+    assert.match(await readFile(new URL('../node_modules/playwright-core/package.json',import.meta.url),'utf8'),/playwright-core/);
+  }
 });

@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {join,resolve,basename,dirname} from 'node:path';
 import {verifyPackage} from '../distribution/install.mjs';
-const release=resolve(import.meta.dirname,'../release/OmniRoute-Dual-0.4.0');
+const release=resolve(import.meta.dirname,'../release/OmniRoute-Dual-0.5.0-experiment');
 await access(join(release,'VERIFICATION.md'));
 for(const [label,platform] of [['Windows','windows-x64'],['Linux','linux-x64']])await verifyPackage(join(release,label),platform);
 const archive=release+'.zip';try{await access(archive);throw new Error('Archive already exists; never silently overwrite a distributed preview.');}catch(e){if(e.code!=='ENOENT')throw e;}

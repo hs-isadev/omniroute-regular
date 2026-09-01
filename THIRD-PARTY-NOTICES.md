@@ -34,3 +34,8 @@ The upstream project is distributed under the following MIT license:
 Provider endpoints, model identifiers, and free-tier eligibility must also be
 checked against each provider's current official documentation. Provider names
 and trademarks belong to their respective owners.
+
+The experiment package includes Microsoft Playwright and Playwright Core under
+their Apache-2.0 license. Their own license and notice files remain alongside
+the packaged modules. No Playwright-managed browser binary is redistributed;
+the adapter connects to a compatible browser already installed by the user.

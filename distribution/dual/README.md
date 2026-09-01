@@ -1,4 +1,4 @@
-# OmniRoute — OpenCode + Antigravity + Codex + Claude Code
+# OmniRoute experiment — OpenCode + Antigravity + Codex + Claude Code + Claude web
 
 One download for Windows 10/11 x64 and Linux x64 desktops. No Codex subscription
 needed. No API keys, accounts, vaults or personal projects are included.
@@ -11,7 +11,8 @@ needed. No API keys, accounts, vaults or personal projects are included.
 3. In the **API Keys** window, click **Get key**, get your own provider key, and
    paste it beside that provider. Tick the free-account confirmation and click
    **Save and test**. Leave other fields blank. One working provider is enough.
-4. Sign in to Antigravity when its official app opens after key setup. Existing
+4. Sign in to Claude once in the dedicated browser window. Then sign in to
+   Antigravity when its official app opens after key setup. Existing
    Codex and Claude Code installations are connected automatically; the package
    does not install or sign into those optional hosts.
 
@@ -34,7 +35,10 @@ require approval. Antigravity may show its own first-run onboarding.
   run cannot be observed.
 
 Windows launchers appear on the Desktop; Linux launchers appear in the app menu.
-Restart a host after changing keys. Neither host is registered for autostart.
+Restart a host after changing keys. Developer hosts are not registered for
+autostart. Only the dedicated Claude consumer browser starts in the background
+at user login, using its own profile and loopback-only port; it does not reuse
+or alter normal browser tabs.
 OpenCode starts in a starter workspace; open your project from there or pass a
 project path to the installed launcher (`Launch.ps1 -Action opencode C:\Projects\Example`
 or `sh Launch.sh opencode /path/to/project`). Normal tool approval prompts remain.
@@ -61,6 +65,10 @@ providers retain prompts or restrict evaluation/commercial/confidential usage.
 Do not send private repository secrets to hosted workers. No billing settings
 are changed by setup. HF/Vercel credit-based inference and LongCat's paid API
 are excluded. The provider list is not a promise that every model is available.
+The Claude web consumer is not BYOK: it uses the Claude account you explicitly
+sign into and is limited to small text/coding requests. Its quota and terms
+still apply. Browser credentials stay in the dedicated local browser profile
+and are never included in the package.
 
 ## Failed provider? You can still finish
 

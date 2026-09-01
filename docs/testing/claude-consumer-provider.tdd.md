@@ -67,3 +67,42 @@ C:\Users\thest\AppData\Local\OmniRoute\backups\claude-consumer-20260901-175137
 
 No OmniRoute worker service, paid-provider fallback, native subagent, browser
 credential export, or payment-setting change was used during implementation.
+
+## Experiment installer cycle
+
+Installer tests were written before the packaged adapter, browser discovery,
+provider configuration, and autostart functions existed. The first run failed
+with the expected missing-function and missing-package assertions. Follow-up
+regressions also failed before the browser profile path and isolated port were
+pinned in autostart and MCP arguments.
+
+The green implementation:
+
+- packages the adapter and pinned Playwright runtime without a browser binary;
+- prefers Opera GX on Windows and supports Opera, Chrome, or Chromium on Linux;
+- uses a dedicated profile and loopback-only port `47842`;
+- enables the credential-free `claude-consumer` entry after BYOK setup;
+- writes a per-user, background autostart entry without cookies or account data;
+- leaves the four-host BYOK-only implementation on `main`.
+
+The packaged adapter then connected to the existing signed-in loopback browser.
+Its connection check returned `ready`, and this ordinary user request:
+
+```text
+Could you reply with CLAUDE_CONSUMER_HUMAN_OK, and nothing else? Thanks.
+```
+
+returned exactly `CLAUDE_CONSUMER_HUMAN_OK` with 24 estimated combined tokens.
+No provider-style instruction preamble was sent.
+
+Final verification after packaging:
+
+- `npm test`: 158 passed, 0 failed.
+- `npm run test:regular`: 87 passed, 0 failed, 2 platform skips.
+- Windows package: idempotent install, bundled Node/OpenCode checks, masked key
+  form smoke, and local OpenCode tool round trip passed.
+- Ubuntu/WSL package: idempotent install, 21 JavaScript distribution checks,
+  3 Python GUI checks, isolated GUI smoke, and local OpenCode tool round trip
+  passed.
+- Generated manifests verified 1,511 Windows and 1,508 Linux payload files.
+- Secret scan checked 3,029 package files and found no saved secret value.

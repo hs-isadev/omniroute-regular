@@ -1,6 +1,6 @@
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot -Parent
-$bundle=Join-Path $repo 'release/OmniRoute-Dual-0.4.0/Windows'
+$bundle=Join-Path $repo 'release/OmniRoute-Dual-0.5.0-experiment/Windows'
 $stage=Join-Path ([IO.Path]::GetTempPath()) ('omniroute-shareable-'+[guid]::NewGuid().ToString('N'))
 $root=Join-Path $stage 'install'
 & (Join-Path $bundle 'Setup.ps1') -InstallRoot $root -InstallOnly
