@@ -26,4 +26,12 @@ the authoritative RED evidence.
 
 ## Green
 
-Pending.
+Windows candidates now use Node's explicit `win32` path implementation instead
+of the current host's path implementation. This keeps real Windows behavior
+unchanged while making a requested Windows target deterministic on Linux.
+
+Validation after the fix:
+
+- `node --test distribution/claude-consumer.test.mjs`: 2 passed, 0 failed.
+- `npm run test:regular`: 87 passed, 0 failed, 2 platform skips.
+- `npm test`: 158 passed, 0 failed.

@@ -1,5 +1,5 @@
 import {access} from 'node:fs/promises';
-import {join} from 'node:path';
+import {win32} from 'node:path';
 
 export function buildBrowserArguments(profileDir,cdpPort,{background=false}={}) {
   if(!profileDir)throw new Error('A dedicated profile directory is required.');
@@ -17,10 +17,10 @@ export function buildBrowserArguments(profileDir,cdpPort,{background=false}={}) 
 export async function findConsumerBrowser({platform=process.platform,home,env=process.env,exists=async path=>{try{await access(path);return true;}catch{return false;}}}={}) {
   if(env.OMNIROUTE_CLAUDE_BROWSER&&await exists(env.OMNIROUTE_CLAUDE_BROWSER))return env.OMNIROUTE_CLAUDE_BROWSER;
   const candidates=platform==='win32' ? [
-    join(env.LOCALAPPDATA??join(home,'AppData/Local'),'Programs/Opera GX/opera.exe'),
-    join(env.LOCALAPPDATA??join(home,'AppData/Local'),'Programs/Opera/opera.exe'),
-    join(env.PROGRAMFILES??'C:/Program Files','Google/Chrome/Application/chrome.exe'),
-    join(env['PROGRAMFILES(X86)']??'C:/Program Files (x86)','Microsoft/Edge/Application/msedge.exe'),
+    win32.join(env.LOCALAPPDATA??win32.join(home,'AppData/Local'),'Programs/Opera GX/opera.exe'),
+    win32.join(env.LOCALAPPDATA??win32.join(home,'AppData/Local'),'Programs/Opera/opera.exe'),
+    win32.join(env.PROGRAMFILES??'C:/Program Files','Google/Chrome/Application/chrome.exe'),
+    win32.join(env['PROGRAMFILES(X86)']??'C:/Program Files (x86)','Microsoft/Edge/Application/msedge.exe'),
   ] : [
     '/usr/bin/opera','/usr/bin/opera-beta','/usr/bin/opera-developer',
     '/usr/bin/google-chrome','/usr/bin/google-chrome-stable',
