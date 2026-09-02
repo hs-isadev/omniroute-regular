@@ -46,7 +46,7 @@ Kimi/Qwen start disabled. Tick the extra candidate check in Settings and supply 
 
 ## Your existing setup
 
-Use the **OmniRoute Provider Keys** desktop shortcut. Scroll to the new provider rows, paste your own keys and select Validate and save. Existing keys are never displayed; blank fields preserve them. Existing routing mode, port, and disabled providers are preserved. Successfully validated new providers are added to the routing order. Saving accepted keys restarts the existing OmniRoute background service; finish active requests first. If automatic restart fails, the form says so and gives manual commands.
+Run `%LOCALAPPDATA%\OmniRouteRegular\Settings.cmd`. Scroll to the new provider rows, paste your own keys and select Validate and save. Existing keys are never displayed; blank fields preserve them. Existing routing mode, port, and disabled providers are preserved. Successfully validated new providers are added to the routing order. Saving accepted keys restarts the existing OmniRoute background service; finish active requests first. If automatic restart fails, the form says so and gives manual commands.
 
 Keys are sent via process stdin and stored in your existing DPAPI vault; they are not copied into this repository, the ZIP, or shell arguments. No provider's billing settings are changed. Local free-only configuration cannot verify your provider account's billing status.
 

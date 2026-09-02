@@ -1,4 +1,4 @@
-# OmniRoute experiment — OpenCode + Antigravity + Codex + Claude Code + Claude web
+# OmniRoute 0.5.0 — BYOK + Claude web + Z.AI GLM
 
 One download for Windows 10/11 x64 and Linux x64 desktops. No Codex subscription
 needed. No API keys, accounts, vaults or personal projects are included.
@@ -11,8 +11,8 @@ needed. No API keys, accounts, vaults or personal projects are included.
 3. In the **API Keys** window, click **Get key**, get your own provider key, and
    paste it beside that provider. Tick the free-account confirmation and click
    **Save and test**. Leave other fields blank. One working provider is enough.
-4. Sign in to Claude once in the dedicated browser window. Then sign in to
-   Antigravity when its official app opens after key setup. Existing
+4. Sign in to Claude and Z.AI once in their separate dedicated browser windows.
+   Then sign in to Antigravity when its official app opens after key setup. Existing
    Codex and Claude Code installations are connected automatically; the package
    does not install or sign into those optional hosts.
 
@@ -36,9 +36,9 @@ require approval. Antigravity may show its own first-run onboarding.
 
 Windows launchers appear on the Desktop; Linux launchers appear in the app menu.
 Restart a host after changing keys. Developer hosts are not registered for
-autostart. Only the dedicated Claude consumer browser starts in the background
-at user login, using its own profile and loopback-only port; it does not reuse
-or alter normal browser tabs.
+autostart. Only the dedicated Claude and Z.AI consumer browsers start in the
+background at user login. Each uses its own profile and loopback-only port;
+neither reuses or alters normal browser tabs.
 OpenCode starts in a starter workspace; open your project from there or pass a
 project path to the installed launcher (`Launch.ps1 -Action opencode C:\Projects\Example`
 or `sh Launch.sh opencode /path/to/project`). Normal tool approval prompts remain.
@@ -65,10 +65,10 @@ providers retain prompts or restrict evaluation/commercial/confidential usage.
 Do not send private repository secrets to hosted workers. No billing settings
 are changed by setup. HF/Vercel credit-based inference and LongCat's paid API
 are excluded. The provider list is not a promise that every model is available.
-The Claude web consumer is not BYOK: it uses the Claude account you explicitly
-sign into and is limited to small text/coding requests. Its quota and terms
-still apply. Browser credentials stay in the dedicated local browser profile
-and are never included in the package.
+The Claude and Z.AI web consumers are not BYOK: they use the accounts you
+explicitly sign into and are limited to small text/coding requests. Their quotas
+and terms still apply. Browser credentials stay in two dedicated local browser
+profiles and are never included in the package.
 
 ## Failed provider? You can still finish
 
@@ -77,9 +77,10 @@ provider names; failed new keys are not activated and existing saved keys remain
 If none work, the form stays open so you can retry or use another free provider.
 
 Latest owner-account checks: Groq, Gemini, Mistral, Cohere, Cloudflare, OpenRouter,
-Kilo and OpenCode Zen have passed inference. Kilo's Auto Free returned 503 but
-its free fallback worked. Z.AI returned 429 / a timeout; it remains an available
-slot for your own account. NVIDIA, Cerebras and SambaNova are untested with a
+Kilo and OpenCode Zen have passed inference. The signed-in Z.AI GLM browser
+route also passed an exact-response end-to-end check. Kilo's Auto Free returned
+503 but its free fallback worked. The separate Z.AI API-key route returned 429 /
+a timeout; it remains an available slot for your own account. NVIDIA, Cerebras and SambaNova are untested with a
 live owner key. Their adapters have mock-backed protocol tests only. These
 results are not guarantees for another account or proof of large-project coding
 quality.

@@ -7,7 +7,7 @@ Write-Host 'Step 1/4: Verify and install OmniRoute Regular (existing keys are re
 if($LASTEXITCODE -ne 0) {throw 'Installation failed. Existing user data was retained.'}
 if(-not $NoShortcuts) {
   $shell=New-Object -ComObject WScript.Shell
-  foreach($item in @(@('OmniRoute Regular','Launch.cmd'),@('OmniRoute Regular Settings','Settings.cmd'),@('OmniRoute Regular Finish Setup','Connect.cmd'))) {
+  foreach($item in @(@('OmniRoute Regular','Launch.cmd'))) {
     $shortcut=$shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) ($item[0]+'.lnk')))
     $shortcut.TargetPath=Join-Path $InstallRoot $item[1]; $shortcut.WorkingDirectory=$InstallRoot; $shortcut.Save()
   }

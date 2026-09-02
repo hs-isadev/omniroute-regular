@@ -5,7 +5,7 @@ import {join,resolve,relative,basename,dirname} from 'node:path';
 import {verifyPackage} from '../distribution/install.mjs';
 const repo=resolve(import.meta.dirname,'..'),version='0.5.0';
 const release=join(repo,'release','OmniRoute-Dual-'+version);
-try{await access(release);throw new Error('Release folder exists; preserve it before making a new preview.');}catch(e){if(e.code!=='ENOENT')throw e;}
+try{await access(release);throw new Error('Release folder exists; preserve it before making a new release.');}catch(e){if(e.code!=='ENOENT')throw e;}
 await mkdir(release,{recursive:true});
 const work=await mkdtemp(join(repo,'.build','dual-'));
 async function run(cmd,args){await new Promise((res,rej)=>{const child=spawn(cmd,args,{stdio:'inherit',windowsHide:true});child.once('error',rej);child.once('exit',code=>code===0?res():rej(new Error(cmd+' failed '+code)));});}

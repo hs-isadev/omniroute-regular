@@ -33,17 +33,5 @@ try {
   }
 } finally { & $node $cli service start }
 if($LASTEXITCODE -ne 0) {throw 'Updated files; service restart needs attention'}
-$desktop=[Environment]::GetFolderPath('Desktop')
-$shortcutPath=Join-Path $desktop 'OmniRoute Provider Keys.lnk'
-if(Test-Path -LiteralPath $shortcutPath) {Copy-Item -LiteralPath $shortcutPath -Destination (Join-Path $backup 'previous-provider-keys-shortcut.lnk')}
-$shell=New-Object -ComObject WScript.Shell
-$shortcut=$shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-$script=Join-Path $LiveRoot 'distribution\Settings.ps1'
-$runtime=Join-Path $env:LOCALAPPDATA 'OmniRoute'
-$shortcut.Arguments='-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+$script+'" -AppRoot "'+$LiveRoot+'" -NodePath "'+$node+'" -RuntimeRoot "'+$runtime+'" -ExistingSetup'
-$shortcut.WorkingDirectory=$LiveRoot
-$shortcut.Description='Add your own free-provider API keys without changing routing mode or existing credentials'
-$shortcut.Save()
 Write-Output ('Updated application; source backup: '+$backup)
-Write-Output ('Key-entry shortcut: '+$shortcutPath)
+Write-Output 'The single canonical OmniRoute Regular desktop shortcut was left unchanged.'

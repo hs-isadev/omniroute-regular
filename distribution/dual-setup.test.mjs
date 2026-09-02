@@ -47,7 +47,7 @@ test('new setup saves keys before starting Antigravity so its MCP sees the saved
   assert.ok(setup.indexOf('await openKeyForm(root)')<setup.indexOf('await launchAntigravity(root)'));
 });
 
-test('experiment setup enables the packaged Claude consumer without storing a credential',async()=>{
+test('release setup enables the packaged Claude consumer without storing a credential',async()=>{
   assert.equal(typeof mod.configureClaudeConsumer,'function','Claude consumer setup missing');
   const root=await mkdtemp(join(tmpdir(),'dual-claude-'));
   const paths=getRuntimePaths(join(root,'data'));

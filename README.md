@@ -1,7 +1,7 @@
-# OmniRoute experiment — five routes, one setup
+# OmniRoute 0.5.0 — six routes, one setup
 
-The `experiment` branch builds one download for Windows 10/11 x64 and Linux
-x64 desktops. It installs or connects five routes:
+OmniRoute builds one download for Windows 10/11 x64 and Linux x64 desktops. It
+installs or connects six routes:
 
 - OpenCode uses OmniRoute as its main model/router.
 - Antigravity stays the main agent and calls OmniRoute workers through MCP.
@@ -10,39 +10,40 @@ x64 desktops. It installs or connects five routes:
 - Short text and coding requests can use a signed-in Claude web account through
   a dedicated local browser profile. These requests contain only the user's
   natural prompt—no role labels or system-like preamble.
+- Short text and coding requests can also use signed-in Z.AI GLM models through
+  a second dedicated local browser profile and loopback-only connection.
 
 No API keys, browser sessions, vaults, or personal projects are included. You
-bring your own provider keys and sign into Antigravity and Claude yourself.
-The `main` branch remains the same four-host BYOK package without the Claude web
-consumer.
+bring your own provider keys and sign into Antigravity, Claude, and Z.AI
+yourself. Browser profiles remain local to the installed machine.
 
-## Quick setup (0.5.0-experiment)
+## Quick setup (0.5.0)
 
-1. Build or download `OmniRoute-Dual-0.5.0-experiment`, then extract the whole
+1. Build or download `OmniRoute-Dual-0.5.0`, then extract the whole
    folder.
 2. Windows: double-click `Install-Windows.cmd`.
    Linux: run `sh Install-Linux.sh` from the extracted directory.
 3. In the graphical **API Keys** window, use **Get key**, paste any keys you
    want, confirm free-account settings, and choose **Save and test**. One
    working provider is enough; blank fields preserve existing saved keys.
-4. Complete the one-time Claude login in the dedicated browser window, then
-   complete Antigravity's sign-in when it opens.
+4. Complete the one-time Claude and Z.AI logins in their separate dedicated
+   browser windows, then complete Antigravity's sign-in when it opens.
 
 Setup obtains official Antigravity, installs the bundled pinned OpenCode and
 OmniRoute runtime, connects MCP, and creates launchers. OS security, admin,
 desktop-keyring, browser login, and Antigravity onboarding prompts can still
-require approval. The dedicated Claude browser starts quietly at user login on
-both platforms; normal Opera tabs and profiles are not touched. See the
-release's `VERIFICATION.md` for the exact tests and limitations.
+require approval. The dedicated Claude and Z.AI browsers start quietly at user
+login on both platforms; normal browser tabs and profiles are not touched. See
+the release's `VERIFICATION.md` for the exact tests and limitations.
 
-## What changed in 0.5.0-experiment
+## What changed in 0.5.0
 
-This experiment adds the local Claude browser consumer to the 0.4.0 BYOK,
-OpenCode, Antigravity, Codex, and Claude Code package. It is limited to small
-text/coding work, uses an isolated loopback port, and starts from a per-user
-autostart entry. Opera GX is preferred on Windows; Opera, Chrome, or Chromium
-can be used on Linux. Claude web access is account/quota/terms dependent and is
-not presented as an API key or unlimited provider.
+This release adds local Claude and Z.AI GLM browser consumers to the 0.4.0 BYOK,
+OpenCode, Antigravity, Codex, and Claude Code package. Both browser routes are
+limited to small text/coding work, use separate isolated loopback ports, and
+start from per-user autostart entries. Opera GX is preferred on Windows; Opera,
+Chrome, or Chromium can be used on Linux. Browser access is account, quota, and
+terms dependent and is not presented as an API key or unlimited provider.
 
 ## Legacy Antigravity-only 0.2.x documentation
 
@@ -62,9 +63,9 @@ This is quota-limited, not unlimited free frontier inference. The host still con
 4. Fill only the keys you want to add/change, **save and close Notepad**, then return to setup. Type **yes** to confirm free-plan accounts (no billing/overages/BYOK/top-up) and import. Optionally test Kimi/Qwen candidates. Short validation requests use free quota; successful keys are encrypted and removed from the text file. Failed entries stay for retry.
 5. Enter an existing project folder, or press Enter for a starter workspace. Review the preview, then type **yes** to connect and open Antigravity. Declining import stops setup. No extra commands are needed.
 
-To resume later, double-click **OmniRoute Regular Finish Setup** on your desktop, or run `%LOCALAPPDATA%\OmniRouteRegular\Connect.cmd`. To add keys only, use **OmniRoute Regular Settings**. Blank fields keep saved keys, so you do not need to paste every key again.
+To resume later, run `%LOCALAPPDATA%\OmniRouteRegular\Connect.cmd`. To add keys only, run `%LOCALAPPDATA%\OmniRouteRegular\Settings.cmd`. Blank fields keep saved keys, so you do not need to paste every key again.
 
-**Text-file risk:** Notepad/editor session backups, clipboard history, disk snapshots and malware can retain plaintext. Disable editor session recovery before entering keys. Cleanup is not secure erasure. For less exposure, use `Connect.cmd --masked` or the Settings shortcut instead. Files are created under `%LOCALAPPDATA%\OmniRouteRegular-KeyEntry\<profile-id>\credentials.txt`, outside the package/project, with current-user-only permissions. Cancelled/failed imports leave pending plaintext there. No OS-login startup task is added.
+**Text-file risk:** Notepad/editor session backups, clipboard history, disk snapshots and malware can retain plaintext. Disable editor session recovery before entering keys. Cleanup is not secure erasure. For less exposure, use `Connect.cmd --masked` or `Settings.cmd` instead. Files are created under `%LOCALAPPDATA%\OmniRouteRegular-KeyEntry\<profile-id>\credentials.txt`, outside the package/project, with current-user-only permissions. Cancelled/failed imports leave pending plaintext there. No OS-login startup task is added.
 
 Advanced/manual launch remains available:
 
@@ -73,7 +74,7 @@ Advanced/manual launch remains available:
 & "$env:LOCALAPPDATA\OmniRouteRegular\Launch.cmd" --workspace "C:\path\to\project" --apply
 ```
 
-The second command merges workspace MCP/rules and opens Antigravity. Restart/reconnect its MCP servers if the project was already open. Check that `omniroute_regular` exposes `omni_route`, `omni_models`, and `omni_routes`; confirm the workspace rule is Always On. The desktop shortcut previews the package's default workspace; add `--apply` to connect it.
+The second command merges workspace MCP/rules and opens Antigravity. Restart/reconnect its MCP servers if the project was already open. Check that `omniroute_regular` exposes `omni_route`, `omni_models`, and `omni_routes`; confirm the workspace rule is Always On. The single desktop launcher previews the package's default workspace; add `--apply` to connect it.
 
 ## Linux x64 (glibc desktop)
 
@@ -108,6 +109,11 @@ A machine-local `claude-consumer` profile can call the separate browser-session
 adapter over MCP stdio. It is disabled in portable defaults, claims only text
 and coding, and is hard-capped at the small task class. See
 [Claude consumer provider](docs/claude-consumer-provider.md).
+
+A separate machine-local `zai-consumer` profile can call signed-in Z.AI GLM
+models through its own browser-session adapter. It has the same small-task and
+text/coding limits and never shares Claude's browser profile or port. See
+[Z.AI consumer provider](docs/zai-consumer-provider.md).
 
 ## Updates, rollback, troubleshooting
 
