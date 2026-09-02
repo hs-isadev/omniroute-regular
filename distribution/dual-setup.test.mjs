@@ -65,6 +65,25 @@ test('experiment setup enables the packaged Claude consumer without storing a cr
   assert.equal(saved.routing.directProviderOrder[0],'claude-consumer');
 });
 
+test('one-click setup enables a separate packaged Z.AI browser consumer without storing a credential',async()=>{
+  assert.equal(typeof mod.configureZaiConsumer,'function','Z.AI consumer setup missing');
+  const root=await mkdtemp(join(tmpdir(),'dual-zai-'));
+  const paths=getRuntimePaths(join(root,'data'));
+  const config=regularConfig();
+  await saveConfig(config,paths);
+  const node=join(root,'versions/0.5.0/node/node.exe');
+  const entrypoint=join(root,'versions/0.5.0/app/packages/zai-consumer-adapter/src/adapter.mjs');
+  await mod.configureZaiConsumer({root,node,entrypoint});
+  const saved=await loadConfig(paths);
+  const provider=saved.providers.find(item=>item.id==='zai-consumer');
+  assert.equal(provider.enabled,true);
+  assert.equal(provider.credentialField,null);
+  assert.equal(provider.mcpCommand,node);
+  assert.deepEqual(provider.mcpArgs,[entrypoint,'--endpoint','http://127.0.0.1:47843']);
+  assert.equal(saved.routing.directProviderOrder[1],'zai-consumer');
+  assert.equal(saved.providers.find(item=>item.id==='zai').type,'openai-compatible');
+});
+
 test('consumer autostart is per-user, background, and contains no account data',async()=>{
   assert.equal(typeof mod.installClaudeConsumerAutostart,'function','Claude consumer autostart missing');
   const home=await mkdtemp(join(tmpdir(),'dual-autostart-'));
@@ -79,7 +98,28 @@ test('consumer autostart is per-user, background, and contains no account data',
   assert.doesNotMatch(text,/cookie|token|password/i);
 });
 
-test('experiment package includes the adapter and marks five integrated routes',async()=>{
+test('Z.AI consumer gets its own profile, port, and per-user background autostart',async()=>{
+  assert.equal(typeof mod.installZaiConsumerAutostart,'function','Z.AI consumer autostart missing');
+  const home=await mkdtemp(join(tmpdir(),'dual-zai-autostart-'));
+  const root=join(home,'install'),node=join(root,'node'),entrypoint=join(root,'zai-credential-server.mjs');
+  const result=await mod.installZaiConsumerAutostart({platform:'linux',home,root,node,entrypoint});
+  const text=await readFile(result.file,'utf8');
+  assert.match(text,/X-GNOME-Autostart-enabled=true/);
+  assert.match(text,/--background/);
+  assert.match(text,/zai-consumer-profile/);
+  assert.match(text,/--port 47843/);
+  assert.doesNotMatch(text,/cookie|token|password/i);
+});
+
+test('combined setup bootstraps both browser consumers after BYOK key setup',async()=>{
+  const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');
+  const setup=source.slice(source.indexOf('export async function setupBoth'));
+  for(const call of ['configureClaudeConsumer','configureZaiConsumer','installClaudeConsumerAutostart','installZaiConsumerAutostart','launchClaudeConsumerSetup','launchZaiConsumerSetup']) assert.match(setup,new RegExp(`await ${call}\\(`),call);
+  assert.ok(setup.indexOf('await openKeyForm(root)')<setup.indexOf('await launchClaudeConsumerSetup(root)'));
+  assert.ok(setup.indexOf('await launchClaudeConsumerSetup(root)')<setup.indexOf('await launchZaiConsumerSetup(root)'));
+});
+
+test('release package includes both browser adapters and marks six integrated routes',async()=>{
   const source=await readFile(new URL('../scripts/package-dual.mjs',import.meta.url),'utf8').catch(error=>{
     if(error.code!=='ENOENT')throw error;
     return null;
@@ -87,11 +127,15 @@ test('experiment package includes the adapter and marks five integrated routes',
   if(source!==null){
     assert.match(source,/claude-consumer-adapter/);
     assert.match(source,/claude-web-consumer/);
+    assert.match(source,/zai-consumer-adapter/);
+    assert.match(source,/glm-web-consumer/);
     assert.match(source,/playwright-core/);
   }else{
     const adapter=await readFile(new URL('../packages/claude-consumer-adapter/src/adapter.mjs',import.meta.url),'utf8');
     assert.match(adapter,/playwright/);
     assert.match(adapter,/claude-web-consumer/);
+    const zaiAdapter=await readFile(new URL('../packages/zai-consumer-adapter/src/adapter.mjs',import.meta.url),'utf8');
+    assert.match(zaiAdapter,/glm-web-consumer/);
     assert.match(await readFile(new URL('../node_modules/playwright-core/package.json',import.meta.url),'utf8'),/playwright-core/);
   }
 });

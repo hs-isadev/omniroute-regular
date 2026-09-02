@@ -5,6 +5,10 @@ const browser=await import('../packages/zai-consumer-adapter/src/browser.mjs').c
   if(error.code!=='ERR_MODULE_NOT_FOUND')throw error;
   return {};
 });
+const dom=await import('../packages/zai-consumer-adapter/src/dom.mjs').catch(error=>{
+  if(error.code!=='ERR_MODULE_NOT_FOUND')throw error;
+  return {};
+});
 
 test('Z.AI consumer browser uses a dedicated profile and loopback-only debugging',()=>{
   assert.equal(typeof browser.buildBrowserArguments,'function','Z.AI consumer browser arguments missing');
@@ -21,4 +25,13 @@ test('Z.AI auth routes are detected without inspecting browser storage',()=>{
   assert.equal(typeof browser.isZaiLoginUrl,'function','Z.AI auth-route detection missing');
   assert.equal(browser.isZaiLoginUrl('https://chat.z.ai/auth?redirect=%2F'),true);
   assert.equal(browser.isZaiLoginUrl('https://chat.z.ai/'),false);
+});
+
+test('Z.AI response extraction keeps final answer text and removes the thinking chain',()=>{
+  assert.match(dom.ZAI_ASSISTANT_RESPONSE_SELECTOR,/chat-assistant/);
+  assert.equal(dom.cleanAssistantParts([
+    {text:'Reasoning details',thinking:true},
+    {text:'First paragraph',thinking:false},
+    {text:'Second paragraph',thinking:false},
+  ]),'First paragraph\nSecond paragraph');
 });
