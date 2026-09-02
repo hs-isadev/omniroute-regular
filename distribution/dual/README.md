@@ -1,4 +1,4 @@
-# OmniRoute 0.5.0 — BYOK + Claude web + Z.AI GLM
+# OmniRoute 0.5.1 — BYOK + Claude web + Z.AI GLM
 
 One download for Windows 10/11 x64 and Linux x64 desktops. No Codex subscription
 needed. No API keys, accounts, vaults or personal projects are included.
@@ -11,8 +11,9 @@ needed. No API keys, accounts, vaults or personal projects are included.
 3. In the **API Keys** window, click **Get key**, get your own provider key, and
    paste it beside that provider. Tick the free-account confirmation and click
    **Save and test**. Leave other fields blank. One working provider is enough.
-4. Sign in to Claude and Z.AI once in their separate dedicated browser windows.
-   Then sign in to Antigravity when its official app opens after key setup. Existing
+4. Sign in to Claude and Z.AI once in the two dedicated browser windows that open
+   together. Each minimizes automatically after sign-in and remains available in
+   the background. Then sign in to Antigravity when its official app opens. Existing
    Codex and Claude Code installations are connected automatically; the package
    does not install or sign into those optional hosts.
 
@@ -38,7 +39,12 @@ Windows launchers appear on the Desktop; Linux launchers appear in the app menu.
 Restart a host after changing keys. Developer hosts are not registered for
 autostart. Only the dedicated Claude and Z.AI consumer browsers start in the
 background at user login. Each uses its own profile and loopback-only port;
-neither reuses or alters normal browser tabs.
+neither reuses or alters normal browser tabs. Chrome, Edge, Opera, Brave, Vivaldi
+and Chromium are detected on Windows and Linux. Any other Chromium-family
+executable can be selected with `OMNIROUTE_BROWSER`, or per provider with
+`OMNIROUTE_CLAUDE_BROWSER` and `OMNIROUTE_ZAI_BROWSER`. Firefox and Safari do
+not expose the Chromium CDP transport this adapter requires; the user's default
+browser can still be any browser because these two dedicated windows are separate.
 OpenCode starts in a starter workspace; open your project from there or pass a
 project path to the installed launcher (`Launch.ps1 -Action opencode C:\Projects\Example`
 or `sh Launch.sh opencode /path/to/project`). Normal tool approval prompts remain.
@@ -78,7 +84,10 @@ If none work, the form stays open so you can retry or use another free provider.
 
 Latest owner-account checks: Groq, Gemini, Mistral, Cohere, Cloudflare, OpenRouter,
 Kilo and OpenCode Zen have passed inference. The signed-in Z.AI GLM browser
-route also passed an exact-response end-to-end check. Kilo's Auto Free returned
+route also passed an exact-response end-to-end check. If Z.AI reports that GLM is
+in peak hour, the adapter first looks for the visible **Switch to GLM 5.3 Flash**
+action by its text. If it cannot select that action safely, the route fails as
+retryable so OmniRoute continues down the free-provider ladder. Kilo's Auto Free returned
 503 but its free fallback worked. The separate Z.AI API-key route returned 429 /
 a timeout; it remains an available slot for your own account. NVIDIA, Cerebras and SambaNova are untested with a
 live owner key. Their adapters have mock-backed protocol tests only. These

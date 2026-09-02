@@ -9,7 +9,7 @@ test('default packages bundle MCP but not OpenCode and include provenance',async
 });
 test('v0.5 release preserves attribution and includes both browser consumer routes',async()=>{
   const build=await source('../scripts/package-dual.mjs');
-  assert.match(build,/version='0\.5\.0'/);
+  assert.match(build,/version='0\.5\.1'/);
   for(const component of ['contracts','core','integrations','mcp-server','observability','providers']) assert.ok(build.includes(component),`updated ${component} dist is not overlaid`);
   assert.match(build,/hosts:\['opencode','antigravity','codex','claude-code','claude-web-consumer','glm-web-consumer'\]/);
   assert.match(build,/packages\/zai-consumer-adapter/);

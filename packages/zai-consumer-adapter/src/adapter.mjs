@@ -1,5 +1,5 @@
 import {chromium} from 'playwright';
-import {ZAI_ASSISTANT_RESPONSE_SELECTOR,cleanAssistantParts} from './dom.mjs';
+import {ZAI_ASSISTANT_RESPONSE_SELECTOR,ZAI_FLASH_SWITCH_PATTERN,ZAI_PEAK_HOUR_PATTERN,cleanAssistantParts,decidePeakHourAction} from './dom.mjs';
 
 const endpointIndex=process.argv.indexOf('--endpoint');
 const endpoint=endpointIndex>=0?process.argv[endpointIndex+1]:process.env.ZAI_CDP_ENDPOINT||'http://127.0.0.1:9222';
@@ -47,10 +47,34 @@ async function responseState(target){
   });
   return {count:items.length,text:cleanAssistantParts(parts)};
 }
+async function handlePeakHour(target,state){
+  const notices=target.getByText(ZAI_PEAK_HOUR_PATTERN),noticeCount=await notices.count();
+  let noticeText='';
+  for(let index=noticeCount-1;index>=0;index--){
+    const notice=notices.nth(index);
+    if(await notice.isVisible().catch(()=>false)){noticeText=await notice.innerText().catch(()=>'in peak hour');break;}
+  }
+  if(!noticeText)return;
+  const controls=target.locator('button,[role="button"],a'),labels=await controls.allInnerTexts();
+  const decision=decidePeakHourAction(noticeText,labels);
+  if(decision.action==='none')return;
+  if(decision.action==='switch'&&!state.attemptedAt){
+    const candidates=controls.filter({hasText:ZAI_FLASH_SWITCH_PATTERN}),count=await candidates.count();
+    for(let index=0;index<count;index++){
+      const candidate=candidates.nth(index);
+      if(await candidate.isVisible().catch(()=>false)&&await candidate.isEnabled().catch(()=>false)){
+        await candidate.click();state.attemptedAt=Date.now();return;
+      }
+    }
+  }
+  if(state.attemptedAt&&Date.now()-state.attemptedAt<10000)return;
+  throw new Error('Z.AI is in peak hour and GLM 5.3 Flash could not be selected. OmniRoute should try another provider.');
+}
 async function stable(target,before){
-  let last='',same=0;const started=Date.now();
+  let last='',same=0;const started=Date.now(),peakHour={attemptedAt:0};
   while(Date.now()-started<120000){
     await target.waitForTimeout(750);
+    await handlePeakHour(target,peakHour);
     const current=await responseState(target);
     const changed=current.count>before.count||(current.text&&current.text!==before.text);
     if(!changed)continue;

@@ -2,7 +2,7 @@ import {access,readFile,writeFile,copyFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {join,resolve} from 'node:path';
 import {verifyPackage} from '../distribution/install.mjs';
-const repo=resolve(import.meta.dirname,'..'),release=join(repo,'release/OmniRoute-Dual-0.5.0');
+const repo=resolve(import.meta.dirname,'..'),release=join(repo,'release/OmniRoute-Dual-0.5.1');
 try{await access(release+'.zip');throw new Error('Do not change a sealed release');}catch(e){if(e.code!=='ENOENT')throw e;}
 for(const [label,platform] of [['Windows','windows-x64'],['Linux','linux-x64']]){
   const dir=join(release,label);await verifyPackage(dir,platform);
@@ -10,7 +10,11 @@ for(const [label,platform] of [['Windows','windows-x64'],['Linux','linux-x64']])
   const overlays=[
     ...['dual-chat.mjs','dual-setup.mjs','Settings.ps1','settings-gui.py','dual/README.md'].map(name=>[`distribution/${name}`,`app/distribution/${name}`]),
     ['packages/claude-consumer-adapter/src/credential-server.mjs','app/packages/claude-consumer-adapter/src/credential-server.mjs'],
+    ['packages/claude-consumer-adapter/src/browser.mjs','app/packages/claude-consumer-adapter/src/browser.mjs'],
     ['packages/zai-consumer-adapter/src/credential-server.mjs','app/packages/zai-consumer-adapter/src/credential-server.mjs'],
+    ['packages/zai-consumer-adapter/src/browser.mjs','app/packages/zai-consumer-adapter/src/browser.mjs'],
+    ['packages/zai-consumer-adapter/src/dom.mjs','app/packages/zai-consumer-adapter/src/dom.mjs'],
+    ['packages/zai-consumer-adapter/src/adapter.mjs','app/packages/zai-consumer-adapter/src/adapter.mjs'],
   ];
   for(const [source,target] of overlays){
     await copyFile(join(repo,source),join(dir,'payload',target));

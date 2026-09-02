@@ -124,6 +124,9 @@ export async function launchClaudeConsumerSetup(root,{node=process.execPath,entr
 export async function launchZaiConsumerSetup(root,{node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/zai-consumer-adapter/src/credential-server.mjs',import.meta.url))}={}) {
   await run(node,[entrypoint,'--profile',join(root,'data/zai-consumer-profile'),'--port',String(ZAI_CONSUMER_PORT)]);
 }
+export async function launchConsumerSetups(root,{launchClaude=launchClaudeConsumerSetup,launchZai=launchZaiConsumerSetup}={}) {
+  await Promise.all([launchClaude(root),launchZai(root)]);
+}
 export async function launchOpenCode(root,args=[]) {
   const active=(await readFile(join(root,'active-version.txt'),'utf8')).trim();if(!/^versions\/[a-zA-Z0-9.-]+$/.test(active))throw new Error('Invalid installed version');
   const backend=await createChatBackend(join(root,'data')),proxy=await startChatProxy(backend);
@@ -156,10 +159,9 @@ export async function setupBoth(root,{noKeys=false,noLaunch=false,home=homedir()
   await configureZaiConsumer({root});
   await installClaudeConsumerAutostart({root,home});
   await installZaiConsumerAutostart({root,home});
-  await launchClaudeConsumerSetup(root);
-  console.log('Claude web consumer configured for small requests. Complete the one-time sign-in in its dedicated browser window.');
-  await launchZaiConsumerSetup(root);
-  console.log('Z.AI GLM web consumer configured for small requests. Complete the one-time sign-in in its dedicated browser window.');
+  console.log('Opening the dedicated Claude and Z.AI sign-in windows together. Each will minimize automatically when ready.');
+  await launchConsumerSetups(root);
+  console.log('Claude and Z.AI browser consumers are configured for small requests and running in the background.');
   if(!noLaunch)await launchAntigravity(root).catch(e=>console.log(e.message));
   console.log('Setup complete. Use OpenCode or open Antigravity, Codex, or Claude Code normally. Restart open hosts after changing keys.');
 }

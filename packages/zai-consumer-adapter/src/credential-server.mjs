@@ -3,7 +3,9 @@ import {spawn} from 'node:child_process';
 import {mkdir} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import {isAbsolute,join} from 'node:path';
-import {buildBrowserLaunch,findConsumerBrowser,isZaiLoginUrl} from './browser.mjs';
+import {buildBrowserLaunch,findConsumerBrowser,isZaiLoginUrl,minimizeBrowserWindow,waitForConsumerAuthentication} from './browser.mjs';
+
+const readySelector='#nux-user-menu-btn,button[aria-label="Open User Menu"]';
 
 const background=process.argv.includes('--background');
 const profileIndex=process.argv.indexOf('--profile');
@@ -30,8 +32,14 @@ async function start(){
   let page=context.pages().find(item=>item.url().includes('chat.z.ai'));
   if(!page)page=await context.newPage();
   if(!page.url().includes('chat.z.ai'))await page.goto('https://chat.z.ai/',{waitUntil:'domcontentloaded',timeout:30000});
-  if(background)console.log(isZaiLoginUrl(page.url())?'Z.AI needs you to sign in once. Run setup again interactively.':'Z.AI consumer browser is ready in the background.');
-  else console.log(isZaiLoginUrl(page.url())?'Sign in to Z.AI in this dedicated browser window. OmniRoute will reuse only this profile.':'Z.AI is already signed in. Keep this dedicated browser running.');
+  if(!background&&isZaiLoginUrl(page.url()))console.log('Sign in to Z.AI in the dedicated browser window. It will minimize automatically when ready.');
+  const authenticated=await waitForConsumerAuthentication(page,{isLoginUrl:isZaiLoginUrl,readySelector,timeoutMs:background?2000:600000});
+  if(!authenticated){
+    if(background){console.log('Z.AI needs a one-time sign-in. Run Setup to open its dedicated login window.');return;}
+    throw new Error('Timed out waiting for Z.AI sign-in. Run Setup again when you are ready.');
+  }
+  await minimizeBrowserWindow(context,page);
+  console.log('Z.AI consumer browser is signed in and running in the background.');
 }
 
 start().then(()=>process.exit(0)).catch(error=>{console.error(error instanceof Error?error.message:String(error));process.exit(1);});

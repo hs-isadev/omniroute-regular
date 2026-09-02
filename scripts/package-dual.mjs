@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {join,resolve,relative,basename,dirname} from 'node:path';
 import {verifyPackage} from '../distribution/install.mjs';
-const repo=resolve(import.meta.dirname,'..'),version='0.5.0';
+const repo=resolve(import.meta.dirname,'..'),version='0.5.1';
 const release=join(repo,'release','OmniRoute-Dual-'+version);
 try{await access(release);throw new Error('Release folder exists; preserve it before making a new release.');}catch(e){if(e.code!=='ENOENT')throw e;}
 await mkdir(release,{recursive:true});
@@ -41,7 +41,7 @@ for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']])
   await cp(join(repo,'distribution/OPENCODE-LICENSE.txt'),join(payload,'opencode/LICENSE.txt'));
   await cp(join(repo,'THIRD-PARTY-NOTICES.md'),join(payload,'app/THIRD-PARTY-NOTICES.md'));
   if(!windows)await chmod(join(payload,'opencode/opencode'),0o755);
-  await writeFile(join(payload,'dual-provenance.json'),JSON.stringify({version,hosts:['opencode','antigravity','codex','claude-code','claude-web-consumer','glm-web-consumer'],status:'shareable-release-package',node:'22.23.2',opencode:'1.18.25',opencodeIntegrity:'sha512-'+integrity[platform],personalDataIncluded:false,sourceBaseline:'OmniRoute 0.5.0 with four developer hosts, graphical BYOK setup, strict-free providers, usage accounting, and optional local Claude and Z.AI browser consumers',antigravity:'Downloaded directly from Google during setup; not redistributed',codex:'Uses an existing user installation; not redistributed',claudeCode:'Uses an existing user installation; not redistributed',claudeWebConsumer:'Uses a dedicated local browser profile and a user-supplied Claude login; no session is included',glmWebConsumer:'Uses a separate dedicated local browser profile and a user-supplied Z.AI login; no session is included'},null,2)+'\n');
+  await writeFile(join(payload,'dual-provenance.json'),JSON.stringify({version,hosts:['opencode','antigravity','codex','claude-code','claude-web-consumer','glm-web-consumer'],status:'shareable-release-package',node:'22.23.2',opencode:'1.18.25',opencodeIntegrity:'sha512-'+integrity[platform],personalDataIncluded:false,sourceBaseline:'OmniRoute 0.5.1 with four developer hosts, graphical BYOK setup, strict-free providers, usage accounting, and concurrent background Claude and Z.AI browser consumers',antigravity:'Downloaded directly from Google during setup; not redistributed',codex:'Uses an existing user installation; not redistributed',claudeCode:'Uses an existing user installation; not redistributed',claudeWebConsumer:'Uses a dedicated local browser profile and a user-supplied Claude login; no session is included',glmWebConsumer:'Uses a separate dedicated local browser profile and a user-supplied Z.AI login; no session is included'},null,2)+'\n');
   const files=[];
   async function walk(dir){for(const item of await readdir(dir,{withFileTypes:true})){
     const path=join(dir,item.name),rel=relative(payload,path).replaceAll('\\','/');

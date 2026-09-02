@@ -3,7 +3,9 @@ import {spawn} from 'node:child_process';
 import {mkdir} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import {isAbsolute,join} from 'node:path';
-import {buildBrowserLaunch,findConsumerBrowser,isClaudeLoginUrl} from './browser.mjs';
+import {buildBrowserLaunch,findConsumerBrowser,isClaudeLoginUrl,minimizeBrowserWindow,waitForConsumerAuthentication} from './browser.mjs';
+
+const readySelector='[data-testid="chat-input"][contenteditable="true"],.ProseMirror[contenteditable="true"],[contenteditable="true"][role="textbox"],textarea[data-testid="prompt-input"],textarea[placeholder*="Message" i]';
 
 const background=process.argv.includes('--background');
 const profileIndex=process.argv.indexOf('--profile');
@@ -31,8 +33,14 @@ async function start(){
   let page=context.pages().find(item=>item.url().includes('claude.ai'));
   if(!page)page=await context.newPage();
   if(!page.url().includes('claude.ai'))await page.goto(background?'https://claude.ai/new':'https://claude.ai/login',{waitUntil:'domcontentloaded',timeout:30000});
-  if(background)console.log(isClaudeLoginUrl(page.url())?'Claude needs you to sign in once. Run Setup again to open the login window.':'Claude consumer browser is ready in the background.');
-  else console.log(isClaudeLoginUrl(page.url())?'Sign in to Claude in the dedicated browser window. OmniRoute will reuse only this profile.':'Claude is already signed in. You can close Setup; keep the dedicated browser running.');
+  if(!background&&isClaudeLoginUrl(page.url()))console.log('Sign in to Claude in the dedicated browser window. It will minimize automatically when ready.');
+  const authenticated=await waitForConsumerAuthentication(page,{isLoginUrl:isClaudeLoginUrl,readySelector,timeoutMs:background?2000:600000});
+  if(!authenticated){
+    if(background){console.log('Claude needs a one-time sign-in. Run Setup to open its dedicated login window.');return;}
+    throw new Error('Timed out waiting for Claude sign-in. Run Setup again when you are ready.');
+  }
+  await minimizeBrowserWindow(context,page);
+  console.log('Claude consumer browser is signed in and running in the background.');
 }
 
 start().then(()=>process.exit(0)).catch(error=>{console.error(error.message);process.exit(1);});
