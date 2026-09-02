@@ -21,6 +21,33 @@ test('Z.AI consumer browser uses a dedicated profile and loopback-only debugging
   assert.doesNotMatch(args.join(' '),/--headless|--no-sandbox/);
 });
 
+test('Z.AI browser discovery supports generic overrides and Vivaldi on Windows',async()=>{
+  assert.equal(typeof browser.findConsumerBrowser,'function','Z.AI browser discovery missing');
+  const generic=await browser.findConsumerBrowser({
+    platform:'win32',home:'C:\\Users\\Person',env:{OMNIROUTE_BROWSER:'D:\\Portable\\chrome.exe'},
+    exists:async path=>path==='D:\\Portable\\chrome.exe',
+  });
+  assert.equal(generic,'D:\\Portable\\chrome.exe');
+  const vivaldi=await browser.findConsumerBrowser({
+    platform:'win32',home:'C:\\Users\\Person',
+    env:{LOCALAPPDATA:'C:\\Users\\Person\\AppData\\Local',PROGRAMFILES:'C:\\Program Files'},
+    exists:async path=>path.endsWith('Vivaldi\\Application\\vivaldi.exe'),
+  });
+  assert.match(vivaldi,/Vivaldi\\Application\\vivaldi\.exe$/);
+});
+
+test('Z.AI bootstrap can minimize the attached browser after sign-in',async()=>{
+  assert.equal(typeof browser.minimizeBrowserWindow,'function','Z.AI browser minimization helper missing');
+  const calls=[];
+  const session={
+    async send(method,payload){calls.push([method,payload]);return method==='Browser.getWindowForTarget'?{windowId:23}:{};},
+    async detach(){calls.push(['detach']);},
+  };
+  await browser.minimizeBrowserWindow({newCDPSession:async()=>session},{});
+  assert.deepEqual(calls.at(1),['Browser.setWindowBounds',{windowId:23,bounds:{windowState:'minimized'}}]);
+  assert.deepEqual(calls.at(-1),['detach']);
+});
+
 test('Z.AI auth routes are detected without inspecting browser storage',()=>{
   assert.equal(typeof browser.isZaiLoginUrl,'function','Z.AI auth-route detection missing');
   assert.equal(browser.isZaiLoginUrl('https://chat.z.ai/auth?redirect=%2F'),true);
@@ -34,4 +61,12 @@ test('Z.AI response extraction keeps final answer text and removes the thinking 
     {text:'First paragraph',thinking:false},
     {text:'Second paragraph',thinking:false},
   ]),'First paragraph\nSecond paragraph');
+});
+
+test('Z.AI peak-hour handling switches semantically to GLM 5.3 Flash or requests fallback',()=>{
+  assert.equal(typeof dom.decidePeakHourAction,'function','Z.AI peak-hour decision missing');
+  assert.deepEqual(dom.decidePeakHourAction('Everything is available',['Switch to GLM5.3 Flash']),{action:'none',label:null});
+  assert.deepEqual(dom.decidePeakHourAction('GLM is in peak hour',['Switch to GLM5.3 Flash']),{action:'switch',label:'Switch to GLM5.3 Flash'});
+  assert.deepEqual(dom.decidePeakHourAction('Currently in peak hours',['Try later']),{action:'fallback',label:null});
+  assert.deepEqual(dom.decidePeakHourAction('Currently IN PEAK HOUR',['switch to GLM-5.3 Flash']),{action:'switch',label:'switch to GLM-5.3 Flash'});
 });

@@ -129,15 +129,27 @@ test('browser bootstrap commands disconnect their CDP clients and let one-click 
   for(const relative of ['../packages/claude-consumer-adapter/src/credential-server.mjs','../packages/zai-consumer-adapter/src/credential-server.mjs']){
     const source=await readFile(new URL(relative,import.meta.url),'utf8');
     assert.match(source,/start\(\)\.then\(\(\)=>process\.exit\(0\)\)/,relative);
+    assert.match(source,/await waitForConsumerAuthentication\(/,relative);
+    assert.match(source,/await minimizeBrowserWindow\(/,relative);
   }
 });
 
-test('combined setup bootstraps both browser consumers after BYOK key setup',async()=>{
+test('combined setup starts both browser consumers concurrently after BYOK key setup',async()=>{
+  assert.equal(typeof mod.launchConsumerSetups,'function','concurrent browser setup helper missing');
+  const started=[];
+  let release;
+  const gate=new Promise(resolve=>{release=resolve;});
+  const pending=mod.launchConsumerSetups('/install',{
+    launchClaude:async root=>{started.push(['claude',root]);await gate;},
+    launchZai:async root=>{started.push(['zai',root]);await gate;},
+  });
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(started,[['claude','/install'],['zai','/install']]);
+  release();await pending;
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');
   const setup=source.slice(source.indexOf('export async function setupBoth'));
-  for(const call of ['configureClaudeConsumer','configureZaiConsumer','installClaudeConsumerAutostart','installZaiConsumerAutostart','launchClaudeConsumerSetup','launchZaiConsumerSetup']) assert.match(setup,new RegExp(`await ${call}\\(`),call);
-  assert.ok(setup.indexOf('await openKeyForm(root)')<setup.indexOf('await launchClaudeConsumerSetup(root)'));
-  assert.ok(setup.indexOf('await launchClaudeConsumerSetup(root)')<setup.indexOf('await launchZaiConsumerSetup(root)'));
+  for(const call of ['configureClaudeConsumer','configureZaiConsumer','installClaudeConsumerAutostart','installZaiConsumerAutostart','launchConsumerSetups']) assert.match(setup,new RegExp(`await ${call}\\(`),call);
+  assert.ok(setup.indexOf('await openKeyForm(root)')<setup.indexOf('await launchConsumerSetups(root)'));
 });
 
 test('release package includes both browser adapters and marks six integrated routes',async()=>{
@@ -146,6 +158,7 @@ test('release package includes both browser adapters and marks six integrated ro
     return null;
   });
   if(source!==null){
+    assert.match(source,/version='0\.5\.1'/);
     assert.match(source,/claude-consumer-adapter/);
     assert.match(source,/claude-web-consumer/);
     assert.match(source,/zai-consumer-adapter/);
