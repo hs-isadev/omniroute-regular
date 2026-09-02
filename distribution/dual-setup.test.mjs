@@ -111,6 +111,27 @@ test('Z.AI consumer gets its own profile, port, and per-user background autostar
   assert.doesNotMatch(text,/cookie|token|password/i);
 });
 
+test('Windows Z.AI autostart is hidden, profile-isolated, and contains no account data',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'dual-zai-win-autostart-'));
+  const root=join(home,'install'),node=join(root,'node.exe'),entrypoint=join(root,'zai-credential-server.mjs');
+  const appData=join(home,'AppData/Roaming');
+  const result=await mod.installZaiConsumerAutostart({platform:'win32',home,root,node,entrypoint,env:{APPDATA:appData}});
+  const text=await readFile(result.file,'utf8');
+  assert.match(result.file,/OmniRoute Z\.AI Consumer\.vbs$/);
+  assert.match(text,/--background/);
+  assert.match(text,/zai-consumer-profile/);
+  assert.match(text,/--port 47843/);
+  assert.match(text,/, 0, False/);
+  assert.doesNotMatch(text,/cookie|token|password/i);
+});
+
+test('browser bootstrap commands disconnect their CDP clients and let one-click setup continue',async()=>{
+  for(const relative of ['../packages/claude-consumer-adapter/src/credential-server.mjs','../packages/zai-consumer-adapter/src/credential-server.mjs']){
+    const source=await readFile(new URL(relative,import.meta.url),'utf8');
+    assert.match(source,/start\(\)\.then\(\(\)=>process\.exit\(0\)\)/,relative);
+  }
+});
+
 test('combined setup bootstraps both browser consumers after BYOK key setup',async()=>{
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');
   const setup=source.slice(source.indexOf('export async function setupBoth'));
