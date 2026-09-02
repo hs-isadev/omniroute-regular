@@ -35,4 +35,4 @@ async function start(){
   else console.log(isClaudeLoginUrl(page.url())?'Sign in to Claude in the dedicated browser window. OmniRoute will reuse only this profile.':'Claude is already signed in. You can close Setup; keep the dedicated browser running.');
 }
 
-start().catch(error=>{console.error(error.message);process.exitCode=1;});
+start().then(()=>process.exit(0)).catch(error=>{console.error(error.message);process.exit(1);});

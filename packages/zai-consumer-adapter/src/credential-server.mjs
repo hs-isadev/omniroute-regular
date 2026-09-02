@@ -34,4 +34,4 @@ async function start(){
   else console.log(isZaiLoginUrl(page.url())?'Sign in to Z.AI in this dedicated browser window. OmniRoute will reuse only this profile.':'Z.AI is already signed in. Keep this dedicated browser running.');
 }
 
-start().catch(error=>{console.error(error instanceof Error?error.message:String(error));process.exitCode=1;});
+start().then(()=>process.exit(0)).catch(error=>{console.error(error instanceof Error?error.message:String(error));process.exit(1);});
