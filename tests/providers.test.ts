@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AnthropicProvider, buildRegistry, ClaudeConsumerProvider, OpenAICompatibleProvider, OpenAIProvider, ProviderHttpError, retryProviderCall } from "@omniroute/providers";
+import { AnthropicProvider, buildRegistry, ClaudeConsumerProvider, OpenAICompatibleProvider, OpenAIProvider, ProviderHttpError, retryProviderCall, ZaiConsumerProvider } from "@omniroute/providers";
 import { MockProvider } from "@omniroute/testing";
 import { configFixture } from "./helpers.js";
 
@@ -161,5 +161,47 @@ test("Claude consumer adapter errors are retryable so the free-provider ladder c
   await assert.rejects(
     provider.generate({ modelId: "claude-web-consumer", prompt: "Hi", instructions: "", reasoningEffort: "none", maxOutputTokens: 64, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null }),
     (error: unknown) => provider.classifyError(error).category === "unavailable" && provider.classifyError(error).retryable,
+  );
+});
+
+test("Z.AI consumer adapter sends natural user text through the signed-in web session", async () => {
+  const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+  const provider = new ZaiConsumerProvider({
+    id: "zai-consumer",
+    command: "node",
+    args: ["adapter.js", "mcp"],
+    callTool: async (_spec, name, args) => {
+      calls.push({ name, arguments: args });
+      if (name === "test_connection") return { content: [{ type: "text", text: JSON.stringify({ status: "ready" }) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ output: "GLM answer", usage: { model: "glm-web-consumer", estimatedTokens: 17 } }) }] };
+    },
+  });
+
+  assert.equal(provider.supportsStreaming, false);
+  assert.equal((await provider.healthCheck()).status, "healthy");
+  assert.deepEqual((await provider.listModels()).map((model) => model.id), ["glm-web-consumer"]);
+  const result = await provider.generate({ modelId: "glm-web-consumer", prompt: "Small request", instructions: "Be concise", reasoningEffort: "none", maxOutputTokens: 256, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null });
+
+  assert.equal(result.text, "GLM answer");
+  assert.equal(result.usage.measurement, "estimated");
+  assert.equal(result.usage.inputTokens + result.usage.outputTokens, 17);
+  assert.equal(calls[1]?.name, "zai_query");
+  assert.deepEqual(calls[1]?.arguments, { prompt: "Small request" });
+});
+
+test("Z.AI consumer adapter outages are retryable and never fall through to the API-shaped zai identity", async () => {
+  const provider = new ZaiConsumerProvider({
+    id: "zai-consumer",
+    command: "node",
+    args: ["adapter.js", "mcp"],
+    callTool: async () => ({ content: [{ type: "text", text: JSON.stringify({ error: "Z.AI browser session is not available" }) }], isError: true }),
+  });
+  await assert.rejects(
+    provider.generate({ modelId: "glm-web-consumer", prompt: "Hi", instructions: "", reasoningEffort: "none", maxOutputTokens: 64, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null }),
+    (error: unknown) => provider.classifyError(error).category === "unavailable" && provider.classifyError(error).retryable,
+  );
+  await assert.rejects(
+    provider.generate({ modelId: "glm-4.7-flash", prompt: "Hi", instructions: "", reasoningEffort: "none", maxOutputTokens: 64, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null }),
+    /does not expose/,
   );
 });

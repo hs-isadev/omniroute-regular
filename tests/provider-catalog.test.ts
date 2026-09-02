@@ -30,6 +30,29 @@ test("Claude consumer is a credential-free, small-task-only provider profile", (
   assert.throws(() => validateConfig(config), /requires a command and arguments/);
 });
 
+test("Z.AI web consumer is distinct from the API-key provider and restricted to small tasks", () => {
+  const browser = DEFAULT_CONFIG.providers.find((provider) => provider.id === "zai-consumer");
+  const api = DEFAULT_CONFIG.providers.find((provider) => provider.id === "zai");
+  assert.ok(browser);
+  assert.ok(api);
+  assert.equal(browser.type, "mcp-stdio");
+  assert.equal(browser.credentialField, null);
+  assert.equal(browser.freeTierOnly, true);
+  assert.equal(browser.maxTaskClass, "small");
+  assert.deepEqual(browser.models.map((model) => model.modelId), ["glm-web-consumer"]);
+  assert.equal(api.type, "openai-compatible");
+  assert.equal(api.credentialField, "ZAI_API_KEY");
+  assert.notEqual(browser.id, api.id);
+
+  const config = structuredClone(DEFAULT_CONFIG);
+  const enabled = config.providers.find((provider) => provider.id === "zai-consumer")!;
+  enabled.enabled = true;
+  enabled.mcpCommand = "node";
+  enabled.mcpArgs = ["zai-adapter.js", "mcp"];
+  validateConfig(config);
+  assert.ok(createProviders(config, { credentials: {}, mcpToolCaller: async () => ({ content: [] }) }).has("zai-consumer"));
+});
+
 test("strict-free catalog includes current no-card Cerebras and SambaNova API tiers", () => {
   const expected = [
     { id: "cerebras", field: "CEREBRAS_API_KEY", base: "https://api.cerebras.ai/", models: ["gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "zai-glm-4.7"] },
