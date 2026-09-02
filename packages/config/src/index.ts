@@ -166,7 +166,7 @@ export const DEFAULT_CONFIG: OmniConfig = {
     freeModelCooldownMs: 60_000,
     orchestratorProviderId: "openrouter",
     orchestratorModelId: "openrouter/free",
-    directProviderOrder: ["claude-consumer", "groq", "gemini", "openrouter", "ollama"],
+    directProviderOrder: ["claude-consumer", "zai-consumer", "groq", "gemini", "openrouter", "ollama"],
     defaultOrchestratorEffort: "low",
     ambiguousOrchestratorEffort: "medium",
     repairInvalidPlanOnce: true,
@@ -194,6 +194,7 @@ export const DEFAULT_CONFIG: OmniConfig = {
   providers: [
     ...extraProviderSettings(),
     { id: "claude-consumer", type: "mcp-stdio", enabled: false, freeTierOnly: true, credentialField: null, baseUrl: "http://127.0.0.1:9222", apiPrefix: "", mcpCommand: "node", mcpArgs: [], maxTaskClass: "small", discoveryTtlSeconds: 60, models: [{ modelId: "claude-web-consumer", enabled: true, allowed: true, capabilities: { text: true, coding: true, structured_output: false, web: false, tool_calling: false }, contextWindow: 32_768, maxOutputTokens: 4_096, reasoningEfforts: ["none"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 3 }] },
+    { id: "zai-consumer", type: "mcp-stdio", enabled: false, freeTierOnly: true, credentialField: null, baseUrl: "http://127.0.0.1:9222", apiPrefix: "", mcpCommand: "node", mcpArgs: [], maxTaskClass: "small", discoveryTtlSeconds: 60, models: [{ modelId: "glm-web-consumer", enabled: true, allowed: true, capabilities: { text: true, coding: true, structured_output: false, web: false, tool_calling: false }, contextWindow: 32_768, maxOutputTokens: 4_096, reasoningEfforts: ["none"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 3 }] },
     { id: "openai", type: "openai", enabled: false, freeTierOnly: false, credentialField: "OPENAI_API_KEY", baseUrl: "https://api.openai.com", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: openAiModels },
     { id: "anthropic", type: "anthropic", enabled: false, freeTierOnly: false, credentialField: "ANTHROPIC_API_KEY", baseUrl: "https://api.anthropic.com", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: [] },
     { id: "openrouter", type: "openai-compatible", enabled: true, freeTierOnly: true, credentialField: "OPENROUTER_API_KEY", baseUrl: "https://openrouter.ai/api/", apiPrefix: "v1/", discoveryTtlSeconds: 300, models: [{ modelId: "openrouter/free", enabled: true, allowed: true, capabilities: { text: true, vision: true, tool_calling: true, long_context: true, coding: true, structured_output: true }, contextWindow: 131_072, maxOutputTokens: 8_192, reasoningEfforts: ["none", "low", "medium"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 3 }] },
