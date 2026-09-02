@@ -2,7 +2,7 @@ import {readdir,readFile} from 'node:fs/promises';
 import {resolve,join,relative} from 'node:path';
 import {SecretVault} from '../packages/vault/dist/index.js';
 import {getRuntimePaths} from '../packages/config/dist/index.js';
-const folder=resolve(import.meta.dirname,'../release/OmniRoute-Dual-0.5.0-experiment'),patterns=[];
+const folder=resolve(import.meta.dirname,'../release/OmniRoute-Dual-0.5.0'),patterns=[];
 for(const paths of [getRuntimePaths(),getRuntimePaths(join(process.env.LOCALAPPDATA,'OmniRouteRegular','data'))]){
   const vault=await SecretVault.load(paths.vault);
   try{for(const record of vault.list()){const values=vault.get(record.providerId);for(const value of Object.values(values??{}))if(value.length>=12)patterns.push(Buffer.from(value));if(values)for(const name of Object.keys(values))values[name]='';}}finally{vault.dispose();}

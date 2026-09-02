@@ -1,4 +1,5 @@
 import {chromium} from 'playwright';
+import {ZAI_ASSISTANT_RESPONSE_SELECTOR,cleanAssistantParts} from './dom.mjs';
 
 const endpointIndex=process.argv.indexOf('--endpoint');
 const endpoint=endpointIndex>=0?process.argv[endpointIndex+1]:process.env.ZAI_CDP_ENDPOINT||'http://127.0.0.1:9222';
@@ -13,15 +14,9 @@ const input=[
   'textarea[placeholder*="Ask" i]',
   '[contenteditable="true"][role="textbox"]',
 ].join(',');
-const responses=[
-  '[data-message-author-role="assistant"] .prose',
-  '[data-message-author-role="assistant"]',
-  '[data-testid="assistant-message"]',
-  '[id^="message-"] .prose',
-  '.message.assistant .prose',
-].join(',');
 const sendButton='button[type="submit"],button[aria-label*="Send" i],[data-testid="send-button"]';
 const stopButton='button[aria-label*="Stop" i],[data-testid="stop-button"],button[title*="Stop" i]';
+const userMenu='#nux-user-menu-btn,button[aria-label="Open User Menu"]';
 const result=(value,isError=false)=>({content:[{type:'text',text:JSON.stringify(value)}],...(isError?{isError:true}:{})});
 let browser,page;
 
@@ -37,10 +32,20 @@ async function ready(target){
   if(/^https:\/\/chat\.z\.ai\/(?:auth|login)(?:[/?#]|$)/i.test(target.url()))throw new Error('Z.AI is not signed in in the attached browser profile.');
   try{await target.waitForSelector(input,{state:'visible',timeout:15000});}
   catch{throw new Error('The Z.AI prompt input is unavailable. Sign in at chat.z.ai in the attached browser, or update the adapter selectors if the site changed.');}
+  try{await target.waitForSelector(userMenu,{state:'visible',timeout:15000});}
+  catch{throw new Error('Z.AI is not signed in in the attached browser profile.');}
 }
 async function responseState(target){
-  const items=await target.$$(responses);
-  return {count:items.length,text:items.length?(await items.at(-1).textContent())?.trim()||'':''};
+  const items=await target.$$(ZAI_ASSISTANT_RESPONSE_SELECTOR);
+  if(!items.length)return {count:0,text:''};
+  const parts=await items.at(-1).evaluate(node=>{
+    const children=[...node.children];
+    return (children.length?children:[node]).map(child=>({
+      text:child.textContent??'',
+      thinking:child.matches?.('.thinking-chain-container')||Boolean(child.querySelector?.('.thinking-chain-container')),
+    }));
+  });
+  return {count:items.length,text:cleanAssistantParts(parts)};
 }
 async function stable(target,before){
   let last='',same=0;const started=Date.now();
