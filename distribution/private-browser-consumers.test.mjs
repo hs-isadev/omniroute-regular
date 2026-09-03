@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {getRuntimePaths,loadConfig,saveConfig} from '../packages/config/dist/index.js';
+import {regularConfig} from './settings.mjs';
 
 const runtime=await import('../packages/browser-consumer-adapter/src/runtime.mjs').catch(error=>{
   if(error.code!=='ERR_MODULE_NOT_FOUND')throw error;
@@ -57,6 +59,15 @@ test('private consumers configure and autostart independently on Linux',async()=
   assert.equal(typeof setup.installPrivateBrowserConsumerAutostarts,'function');
   const home=await mkdtemp(join(tmpdir(),'private-consumers-'));
   const root=join(home,'install'),node=join(root,'node'),entrypoint=join(root,'credential-server.mjs');
+  await saveConfig(regularConfig(),getRuntimePaths(join(root,'data')));
+  await setup.configurePrivateBrowserConsumers({root,node,entrypoint:join(root,'adapter.mjs')});
+  const configured=await loadConfig(getRuntimePaths(join(root,'data')));
+  for(const [id,want] of Object.entries(expected)){
+    const provider=configured.providers.find(item=>item.id===`${id}-consumer`);
+    assert.equal(provider.enabled,true);
+    assert.equal(provider.credentialField,null);
+    assert.deepEqual(provider.mcpArgs,[join(root,'adapter.mjs'),'--provider',id,'--endpoint',`http://127.0.0.1:${want.port}`]);
+  }
   const results=await setup.installPrivateBrowserConsumerAutostarts({platform:'linux',home,root,node,entrypoint});
   assert.equal(results.length,4);
   for(const [id,want] of Object.entries(expected)){
@@ -80,4 +91,3 @@ test('all six browser setup tasks start concurrently',async()=>{
   assert.deepEqual(started.map(([id])=>id),['claude','zai','qwen','kimi','deepseek','perplexity']);
   release();await pending;
 });
-

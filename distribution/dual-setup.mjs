@@ -12,6 +12,7 @@ import {openKeyForm} from './gui-keys.mjs';
 import {RULES,findAntigravity} from './antigravity.mjs';
 import {claudeHarnessEnvironment} from '../apps/cli/dist/harness-env.js';
 import {createChatBackend,startChatProxy,openCodeConfig} from './dual-chat.mjs';
+import {PRIVATE_BROWSER_CONSUMERS} from '../packages/browser-consumer-adapter/src/runtime.mjs';
 const CLAUDE_CONSUMER_PORT=47842;
 const CLAUDE_CONSUMER_ENDPOINT=`http://127.0.0.1:${CLAUDE_CONSUMER_PORT}`;
 const ZAI_CONSUMER_PORT=47843;
@@ -75,6 +76,19 @@ export async function configureZaiConsumer({root,node=process.execPath,entrypoin
   await saveConfig(config,paths);
   return {providerId:provider.id,entrypoint};
 }
+
+export async function configurePrivateBrowserConsumers({root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/adapter.mjs',import.meta.url))}) {
+  for(const path of [root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute private browser consumer paths required');
+  const paths=getRuntimePaths(join(root,'data')),config=await loadConfig(paths);
+  const privateIds=new Set(PRIVATE_BROWSER_CONSUMERS.map(item=>item.providerId));
+  for(const item of PRIVATE_BROWSER_CONSUMERS){
+    const provider=config.providers.find(candidate=>candidate.id===item.providerId);if(!provider)throw new Error(`This build does not include the ${item.displayName} consumer provider.`);
+    const endpoint=`http://127.0.0.1:${item.port}`;
+    Object.assign(provider,{enabled:true,freeTierConfirmed:true,baseUrl:endpoint,mcpCommand:node,mcpArgs:[entrypoint,'--provider',item.id,'--endpoint',endpoint],mcpWorkingDirectory:dirname(entrypoint)});
+  }
+  config.routing.directProviderOrder=['claude-consumer','zai-consumer',...PRIVATE_BROWSER_CONSUMERS.map(item=>item.providerId),...config.routing.directProviderOrder.filter(id=>id!=='claude-consumer'&&id!=='zai-consumer'&&!privateIds.has(id))];
+  await saveConfig(config,paths);return config;
+}
 function desktopExec(value){return `"${String(value).replaceAll('\\','\\\\').replaceAll('"','\\"')}"`;}
 export async function installClaudeConsumerAutostart({platform=process.platform,home=homedir(),root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/claude-consumer-adapter/src/credential-server.mjs',import.meta.url)),env=process.env}) {
   for(const path of [home,root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute Claude autostart paths required');
@@ -112,6 +126,27 @@ export async function installZaiConsumerAutostart({platform=process.platform,hom
   }
   throw new Error('Z.AI consumer autostart supports Windows and Linux desktops.');
 }
+
+export async function installPrivateBrowserConsumerAutostarts({platform=process.platform,home=homedir(),root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/credential-server.mjs',import.meta.url)),env=process.env}) {
+  for(const path of [home,root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute private browser consumer autostart paths required');
+  const results=[];
+  for(const item of PRIVATE_BROWSER_CONSUMERS){
+    const profile=join(root,'data',item.profileName);
+    if(platform==='linux'){
+      const file=join(home,`.config/autostart/omniroute-${item.id}-consumer.desktop`),before=await optional(file);
+      const content=`[Desktop Entry]\nType=Application\nName=OmniRoute ${item.displayName} Consumer (Private)\nExec=${desktopExec(node)} ${desktopExec(entrypoint)} --provider ${item.id} --background --profile ${desktopExec(profile)} --port ${item.port}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`;
+      if(before!==content)await atomic(file,content,before);results.push({id:item.id,file});continue;
+    }
+    if(platform==='win32'){
+      const appData=env.APPDATA;if(!appData||!isAbsolute(appData))throw new Error('Windows APPDATA is unavailable.');
+      const file=join(appData,`Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute ${item.displayName} Consumer Private.vbs`),before=await optional(file);
+      const command=`"${node}" "${entrypoint}" --provider ${item.id} --background --profile "${profile}" --port ${item.port}`,content=`CreateObject("WScript.Shell").Run "${command.replaceAll('"','""')}", 0, False\r\n`;
+      if(before!==content)await atomic(file,content,before);results.push({id:item.id,file});continue;
+    }
+    throw new Error('Private browser consumer autostart supports Windows and Linux desktops.');
+  }
+  return results;
+}
 export function openCodeEnvironment(base,root,inline) {
   const env=claudeHarnessEnvironment(base,'regular',join(root,'data'));
   Object.assign(env,{XDG_CONFIG_HOME:join(root,'opencode/config'),XDG_DATA_HOME:join(root,'opencode/share'),XDG_CACHE_HOME:join(root,'opencode/cache'),XDG_STATE_HOME:join(root,'opencode/state'),OPENCODE_CONFIG_DIR:join(root,'opencode/config'),OPENCODE_CONFIG_CONTENT:inline,OPENCODE_DISABLE_AUTOUPDATE:'true',OPENCODE_DISABLE_MODELS_FETCH:'true',OPENCODE_DISABLE_LSP_DOWNLOAD:'true',OPENCODE_DISABLE_CLAUDE_CODE:'true',OPENCODE_DISABLE_DEFAULT_PLUGINS:'true'});
@@ -126,6 +161,17 @@ export async function launchZaiConsumerSetup(root,{node=process.execPath,entrypo
 }
 export async function launchConsumerSetups(root,{launchClaude=launchClaudeConsumerSetup,launchZai=launchZaiConsumerSetup}={}) {
   await Promise.all([launchClaude(root),launchZai(root)]);
+}
+export async function launchPrivateBrowserConsumerSetup(root,item,{node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/credential-server.mjs',import.meta.url))}={}) {
+  await run(node,[entrypoint,'--provider',item.id,'--profile',join(root,'data',item.profileName),'--port',String(item.port)]);
+}
+export async function launchAllConsumerSetups(root,launchers={}) {
+  const tasks=[
+    (launchers.claude??launchClaudeConsumerSetup)(root),
+    (launchers.zai??launchZaiConsumerSetup)(root),
+    ...PRIVATE_BROWSER_CONSUMERS.map(item=>(launchers[item.id]??(target=>launchPrivateBrowserConsumerSetup(target,item)))(root)),
+  ];
+  await Promise.all(tasks);
 }
 export async function launchOpenCode(root,args=[]) {
   const active=(await readFile(join(root,'active-version.txt'),'utf8')).trim();if(!/^versions\/[a-zA-Z0-9.-]+$/.test(active))throw new Error('Invalid installed version');
@@ -157,11 +203,13 @@ export async function setupBoth(root,{noKeys=false,noLaunch=false,home=homedir()
   if(!noKeys)await openKeyForm(root);
   await configureClaudeConsumer({root});
   await configureZaiConsumer({root});
+  await configurePrivateBrowserConsumers({root});
   await installClaudeConsumerAutostart({root,home});
   await installZaiConsumerAutostart({root,home});
-  console.log('Opening the dedicated Claude and Z.AI sign-in windows together. Each will minimize automatically when ready.');
-  await launchConsumerSetups(root);
-  console.log('Claude and Z.AI browser consumers are configured for small requests and running in the background.');
+  await installPrivateBrowserConsumerAutostarts({root,home});
+  console.log('Opening six dedicated consumer sign-in windows together. Each will minimize automatically when ready.');
+  await launchAllConsumerSetups(root);
+  console.log('Claude, Z.AI, Qwen, Kimi, DeepSeek, and Perplexity browser consumers are configured for small requests and running in the background.');
   if(!noLaunch)await launchAntigravity(root).catch(e=>console.log(e.message));
   console.log('Setup complete. Use OpenCode or open Antigravity, Codex, or Claude Code normally. Restart open hosts after changing keys.');
 }

@@ -134,7 +134,7 @@ test('browser bootstrap commands disconnect their CDP clients and let one-click 
   }
 });
 
-test('combined setup starts both browser consumers concurrently after BYOK key setup',async()=>{
+test('combined setup keeps the original pair helper and starts all browser consumers after BYOK key setup',async()=>{
   assert.equal(typeof mod.launchConsumerSetups,'function','concurrent browser setup helper missing');
   const started=[];
   let release;
@@ -148,8 +148,8 @@ test('combined setup starts both browser consumers concurrently after BYOK key s
   release();await pending;
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');
   const setup=source.slice(source.indexOf('export async function setupBoth'));
-  for(const call of ['configureClaudeConsumer','configureZaiConsumer','installClaudeConsumerAutostart','installZaiConsumerAutostart','launchConsumerSetups']) assert.match(setup,new RegExp(`await ${call}\\(`),call);
-  assert.ok(setup.indexOf('await openKeyForm(root)')<setup.indexOf('await launchConsumerSetups(root)'));
+  for(const call of ['configureClaudeConsumer','configureZaiConsumer','configurePrivateBrowserConsumers','installClaudeConsumerAutostart','installZaiConsumerAutostart','installPrivateBrowserConsumerAutostarts','launchAllConsumerSetups']) assert.match(setup,new RegExp(`await ${call}\\(`),call);
+  assert.ok(setup.indexOf('await openKeyForm(root)')<setup.indexOf('await launchAllConsumerSetups(root)'));
 });
 
 test('release package includes both browser adapters and marks six integrated routes',async()=>{

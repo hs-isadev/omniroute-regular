@@ -1,0 +1,10 @@
+{
+  "name": "@omniroute/browser-consumer-adapter",
+  "version": "0.1.0-private.1",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "playwright": "1.62.1"
+  }
+}

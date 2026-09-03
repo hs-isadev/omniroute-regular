@@ -21,6 +21,7 @@
     "build:mcpb": "node scripts/build-mcpb.mjs",
     "test:regular": "node --test distribution/*.test.mjs",
     "package:regular": "npm run build && node scripts/package-regular.mjs",
+    "package:private": "npm run build && node scripts/package-private.mjs",
     "test:package": "node scripts/test-regular-package.mjs",
     "typecheck": "tsc -b --pretty false",
     "lint": "npm run typecheck",

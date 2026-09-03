@@ -532,6 +532,77 @@ export class ZaiConsumerProvider extends BaseProvider {
   }
 }
 
+export interface BrowserConsumerProviderOptions extends McpStdioSpec {
+  id: string;
+  modelId: string;
+  displayName: string;
+  toolName: string;
+  callTool?: McpToolCaller | undefined;
+}
+
+export class BrowserConsumerProvider extends BaseProvider {
+  readonly supportsStreaming = false;
+  readonly id: string;
+  readonly #modelId: string;
+  readonly #displayName: string;
+  readonly #toolName: string;
+  readonly #spec: McpStdioSpec;
+  readonly #callTool: McpToolCaller;
+
+  constructor(options: BrowserConsumerProviderOptions) {
+    super();
+    if (!options.command || options.args.length === 0) throw new SafeError("PROVIDER_COMMAND_MISSING", `${options.id} requires an MCP stdio command and arguments`);
+    if (!/^[a-z0-9-]+-web-consumer$/.test(options.modelId) || !/^[a-z0-9]+_query$/.test(options.toolName)) throw new SafeError("PROVIDER_CONFIGURATION_INVALID", `${options.id} has invalid browser consumer metadata`);
+    this.id = options.id;
+    this.#modelId = options.modelId;
+    this.#displayName = options.displayName;
+    this.#toolName = options.toolName;
+    this.#spec = { command: options.command, args: [...options.args], cwd: options.cwd };
+    this.#callTool = options.callTool ?? callMcpStdioTool;
+  }
+
+  async listModels(_signal?: AbortSignal): Promise<ProviderModel[]> {
+    return [{ id: this.#modelId, name: this.#displayName, createdAt: null, contextWindow: 32_768, maxOutputTokens: 4_096, capabilities: { text: true, coding: true, toolCalling: false, structuredOutput: false, web: false }, reasoningEfforts: ["none"] }];
+  }
+
+  async healthCheck(signal?: AbortSignal): Promise<ProviderHealth> {
+    const started = Date.now();
+    try {
+      const payload = this.payload(await this.#callTool(this.#spec, "test_connection", {}, signal ?? AbortSignal.timeout(60_000)));
+      if (payload.status !== "ready") throw new SafeError("BROWSER_CONSUMER_UNAVAILABLE", typeof payload.message === "string" ? payload.message : `${this.#displayName} browser session is not ready`, 503);
+      return { status: "healthy", checkedAt: new Date().toISOString(), latencyMs: Date.now() - started, message: null };
+    } catch (error) { return { status: "unhealthy", checkedAt: new Date().toISOString(), latencyMs: Date.now() - started, message: this.classifyError(error).message }; }
+  }
+
+  async generate(request: GenerateRequest): Promise<GenerateResult> {
+    if (request.modelId !== this.#modelId) throw new SafeError("PROVIDER_MODEL_MISSING", `${this.id} does not expose ${request.modelId}`, 404);
+    if (request.jsonSchema) throw new SafeError("PROVIDER_CAPABILITY_MISMATCH", `${this.#displayName} browser consumer does not support structured output`);
+    const prompt = request.prompt;
+    const payload = this.payload(await this.#callTool(this.#spec, this.#toolName, { prompt }, request.signal));
+    if (typeof payload.output !== "string" || !payload.output) throw new SafeError("PROVIDER_RESPONSE_INVALID", `${this.#displayName} adapter returned no output`, 502);
+    const estimatedTotal = typeof (payload.usage as { estimatedTokens?: unknown } | undefined)?.estimatedTokens === "number" ? Math.max(0, Math.ceil((payload.usage as { estimatedTokens: number }).estimatedTokens)) : null;
+    const inputTokens = Math.max(1, Math.ceil(prompt.length / 4));
+    const outputTokens = estimatedTotal === null ? Math.max(1, Math.ceil(payload.output.length / 4)) : Math.max(0, estimatedTotal - inputTokens);
+    return { text: payload.output, responseId: null, usage: { inputTokens, outputTokens, cachedInputTokens: 0, estimatedCostUsd: 0, measurement: "estimated" } };
+  }
+
+  async *stream(request: GenerateRequest): AsyncGenerator<ProviderStreamEvent> {
+    const result = await this.generate(request);yield { type: "start", responseId: null };yield { type: "delta", text: result.text };yield { type: "usage", usage: result.usage };yield { type: "done", responseId: null };
+  }
+
+  override classifyError(error: unknown): ProviderErrorShape {
+    if (error instanceof SafeError && ["BROWSER_CONSUMER_UNAVAILABLE", "MCP_PROCESS_EXITED", "MCP_TOOL_ERROR"].includes(error.code)) return { category: "unavailable", message: error.message, retryable: true, retryAfterMs: null, providerStatus: null };
+    return super.classifyError(error);
+  }
+
+  private payload(result: McpToolResult): Record<string, unknown> {
+    const text = result.content?.find(item => item.type === "text" && typeof item.text === "string")?.text;let payload: Record<string, unknown> = {};
+    try { payload = text ? JSON.parse(text) as Record<string, unknown> : {}; } catch { throw new SafeError("PROVIDER_RESPONSE_INVALID", `${this.#displayName} adapter returned invalid JSON`, 502); }
+    if (result.isError) throw new SafeError("BROWSER_CONSUMER_UNAVAILABLE", typeof payload.error === "string" ? payload.error : typeof payload.message === "string" ? payload.message : `${this.#displayName} adapter request failed`, 503);
+    return payload;
+  }
+}
+
 export class OpenAIProvider extends BaseProvider {
   readonly supportsStreaming = true;
   readonly id: string;
@@ -846,7 +917,16 @@ export function createConfiguredProvider(settings: ProviderSettings, credential:
   const common = { id: settings.id, baseUrl: settings.baseUrl, apiPrefix: settings.apiPrefix, fetchImpl: options.fetchImpl, skipDnsValidationForTests: options.skipDnsValidationForTests };
   if (settings.type === "mcp-stdio") {
     const mcp = { id: settings.id, command: settings.mcpCommand ?? "", args: settings.mcpArgs ?? [], cwd: settings.mcpWorkingDirectory, callTool: options.mcpToolCaller };
-    return settings.id === "zai-consumer" ? new ZaiConsumerProvider(mcp) : new ClaudeConsumerProvider(mcp);
+    if (settings.id === "zai-consumer") return new ZaiConsumerProvider(mcp);
+    if (settings.id === "claude-consumer") return new ClaudeConsumerProvider(mcp);
+    const privateConsumers: Record<string,{modelId:string;displayName:string;toolName:string}> = {
+      "qwen-consumer": { modelId: "qwen-web-consumer", displayName: "Qwen Web Consumer", toolName: "qwen_query" },
+      "kimi-consumer": { modelId: "kimi-web-consumer", displayName: "Kimi Web Consumer", toolName: "kimi_query" },
+      "deepseek-consumer": { modelId: "deepseek-web-consumer", displayName: "DeepSeek Web Consumer", toolName: "deepseek_query" },
+      "perplexity-consumer": { modelId: "perplexity-web-consumer", displayName: "Perplexity Web Consumer", toolName: "perplexity_query" },
+    };
+    const metadata=privateConsumers[settings.id];if (!metadata) throw new SafeError("PROVIDER_CONFIGURATION_INVALID", `Unknown MCP browser consumer ${settings.id}`, 400);
+    return new BrowserConsumerProvider({ ...mcp, ...metadata });
   }
   if (settings.type === "openai") return new OpenAIProvider({ ...common, apiKey });
   if (settings.type === "anthropic") return new AnthropicProvider({ ...common, apiKey });
