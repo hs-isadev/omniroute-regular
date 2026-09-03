@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AnthropicProvider, buildRegistry, ClaudeConsumerProvider, OpenAICompatibleProvider, OpenAIProvider, ProviderHttpError, retryProviderCall, ZaiConsumerProvider } from "@omniroute/providers";
+import { AnthropicProvider, BrowserConsumerProvider, buildRegistry, ClaudeConsumerProvider, OpenAICompatibleProvider, OpenAIProvider, ProviderHttpError, retryProviderCall, ZaiConsumerProvider } from "@omniroute/providers";
 import { MockProvider } from "@omniroute/testing";
 import { configFixture } from "./helpers.js";
 
@@ -204,4 +204,24 @@ test("Z.AI consumer adapter outages are retryable and never fall through to the 
     provider.generate({ modelId: "glm-4.7-flash", prompt: "Hi", instructions: "", reasoningEffort: "none", maxOutputTokens: 64, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null }),
     /does not expose/,
   );
+});
+
+test("generic private browser consumers expose only their configured model and retry cleanly", async () => {
+  const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+  const provider = new BrowserConsumerProvider({
+    id: "qwen-consumer", modelId: "qwen-web-consumer", displayName: "Qwen Web Consumer", toolName: "qwen_query",
+    command: "node", args: ["adapter.mjs", "--provider", "qwen"],
+    callTool: async (_spec, name, args) => {
+      calls.push({ name, arguments: args });
+      if (name === "test_connection") return { content: [{ type: "text", text: JSON.stringify({ status: "ready" }) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ output: "Qwen answer", usage: { estimatedTokens: 11 } }) }] };
+    },
+  });
+  assert.deepEqual((await provider.listModels()).map(model=>model.id),["qwen-web-consumer"]);
+  const result=await provider.generate({ modelId:"qwen-web-consumer",prompt:"Small request",instructions:"ignored",reasoningEffort:"none",maxOutputTokens:64,jsonSchema:null,schemaName:null,signal:AbortSignal.timeout(5000),safetyIdentifier:null });
+  assert.equal(result.text,"Qwen answer");
+  assert.equal(calls.at(-1)?.name,"qwen_query");
+  assert.deepEqual(calls.at(-1)?.arguments,{prompt:"Small request"});
+  const unavailable=new BrowserConsumerProvider({id:"kimi-consumer",modelId:"kimi-web-consumer",displayName:"Kimi Web Consumer",toolName:"kimi_query",command:"node",args:["adapter.mjs"],callTool:async()=>({content:[{type:"text",text:JSON.stringify({error:"not ready"})}],isError:true})});
+  await assert.rejects(unavailable.generate({modelId:"kimi-web-consumer",prompt:"Hi",instructions:"",reasoningEffort:"none",maxOutputTokens:64,jsonSchema:null,schemaName:null,signal:AbortSignal.timeout(5000),safetyIdentifier:null}),error=>unavailable.classifyError(error).retryable);
 });
