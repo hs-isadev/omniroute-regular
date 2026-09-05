@@ -79,7 +79,7 @@ test('one-click setup enables a separate packaged Z.AI browser consumer without 
   assert.equal(provider.enabled,true);
   assert.equal(provider.credentialField,null);
   assert.equal(provider.mcpCommand,node);
-  assert.deepEqual(provider.mcpArgs,[entrypoint,'--endpoint','http://127.0.0.1:47843']);
+  assert.deepEqual(provider.mcpArgs,[entrypoint,'--endpoint','http://127.0.0.1:47842']);
   assert.equal(saved.routing.directProviderOrder[1],'zai-consumer');
   assert.equal(saved.providers.find(item=>item.id==='zai').type,'openai-compatible');
 });
@@ -148,8 +148,8 @@ test('combined setup keeps the original pair helper and starts all browser consu
   release();await pending;
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');
   const setup=source.slice(source.indexOf('export async function setupBoth'));
-  for(const call of ['configureClaudeConsumer','configureZaiConsumer','configurePrivateBrowserConsumers','installClaudeConsumerAutostart','installZaiConsumerAutostart','installPrivateBrowserConsumerAutostarts','launchAllConsumerSetups']) assert.match(setup,new RegExp(`await ${call}\\(`),call);
-  assert.ok(setup.indexOf('await openKeyForm(root)')<setup.indexOf('await launchAllConsumerSetups(root)'));
+  for(const call of ['configureClaudeConsumer','configureZaiConsumer','configurePrivateBrowserConsumers','installSharedBrowserConsumerAutostart','launchSharedBrowserConsumerSetup']) assert.match(setup,new RegExp(`await ${call}\\(`),call);
+  assert.ok(setup.indexOf('await openKeyForm(root)')<setup.indexOf('await launchSharedBrowserConsumerSetup(root)'));
 });
 
 test('release package includes both browser adapters and marks six integrated routes',async()=>{

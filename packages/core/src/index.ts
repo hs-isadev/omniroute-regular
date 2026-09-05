@@ -260,7 +260,8 @@ export class OmniRouter {
       }
       const selected=candidates[0];
       if (!selected) throw new SafeError("DIRECT_MODEL_UNAVAILABLE", "No eligible free worker meets capability/context requirements outside its cooldown", 503);
-      return selected;
+      const selectedModel=snapshot.models.find(model=>model.providerId===selected.providerId&&model.modelId===selected.modelId);
+      return selected.providerId.endsWith("-consumer")&&selectedModel?.reasoningEfforts.includes("high")?{...selected,reasoningEffort:"high"}:selected;
     }
     const supports = (model: ModelEntry, capability: Capability): boolean => ({
       text: model.capabilities.text,
@@ -277,7 +278,7 @@ export class OmniRouter {
     const selected = candidates[0];
     if (!selected) throw new SafeError("DIRECT_MODEL_UNAVAILABLE", "No healthy allowed free model satisfies the regular-mode capability requirements", 503);
     const maximum = Math.min(request.maxOutputTokens ?? (preference === "lightweight" ? 2048 : this.#config.routing.maxOutputTokensPerRequest), selected.maxOutputTokens ?? this.#config.routing.maxOutputTokensPerRequest, this.#config.routing.maxOutputTokensPerRequest);
-    const effort: ReasoningEffort = preference === "lightweight" && selected.reasoningEfforts.includes("none") ? "none" : selected.reasoningEfforts.includes("low") ? "low" : selected.reasoningEfforts.includes("none") ? "none" : selected.reasoningEfforts[0] ?? "none";
+    const effort: ReasoningEffort = selected.providerId.endsWith("-consumer") && selected.reasoningEfforts.includes("high") ? "high" : preference === "lightweight" && selected.reasoningEfforts.includes("none") ? "none" : selected.reasoningEfforts.includes("low") ? "low" : selected.reasoningEfforts.includes("none") ? "none" : selected.reasoningEfforts[0] ?? "none";
     return { providerId: selected.providerId, modelId: selected.modelId, reasoningEffort: effort, maxOutputTokens: maximum };
   }
 

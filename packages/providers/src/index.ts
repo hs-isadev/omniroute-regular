@@ -409,7 +409,7 @@ export class ClaudeConsumerProvider extends BaseProvider {
   }
 
   async listModels(_signal?: AbortSignal): Promise<ProviderModel[]> {
-    return [{ id: "claude-web-consumer", name: "Claude Web Consumer", createdAt: null, contextWindow: 32_768, maxOutputTokens: 4_096, capabilities: { text: true, coding: true, toolCalling: false, structuredOutput: false, web: false }, reasoningEfforts: ["none"] }];
+    return [{ id: "claude-web-consumer", name: "Claude Web Consumer", createdAt: null, contextWindow: 32_768, maxOutputTokens: 4_096, capabilities: { text: true, coding: true, toolCalling: false, structuredOutput: false, web: false }, reasoningEfforts: ["none", "high"] }];
   }
 
   async healthCheck(signal?: AbortSignal): Promise<ProviderHealth> {
@@ -431,7 +431,7 @@ export class ClaudeConsumerProvider extends BaseProvider {
     // Provider-style system directives look unnatural there and can trigger
     // misleading prompt-injection titles or warnings.
     const prompt = request.prompt;
-    const payload = this.payload(await this.#callTool(this.#spec, "claude_query", { prompt }, request.signal));
+    const payload = this.payload(await this.#callTool(this.#spec, "claude_query", { prompt, highThinking: request.reasoningEffort === "high" }, request.signal));
     if (typeof payload.output !== "string" || !payload.output) throw new SafeError("PROVIDER_RESPONSE_INVALID", "Claude adapter returned no output", 502);
     const estimatedTotal = typeof (payload.usage as { estimatedTokens?: unknown } | undefined)?.estimatedTokens === "number" ? Math.max(0, Math.ceil((payload.usage as { estimatedTokens: number }).estimatedTokens)) : null;
     const inputTokens = Math.max(1, Math.ceil(prompt.length / 4));
@@ -482,7 +482,7 @@ export class ZaiConsumerProvider extends BaseProvider {
   }
 
   async listModels(_signal?: AbortSignal): Promise<ProviderModel[]> {
-    return [{ id: "glm-web-consumer", name: "GLM Web Consumer", createdAt: null, contextWindow: 32_768, maxOutputTokens: 4_096, capabilities: { text: true, coding: true, toolCalling: false, structuredOutput: false, web: false }, reasoningEfforts: ["none"] }];
+    return [{ id: "glm-web-consumer", name: "GLM Web Consumer", createdAt: null, contextWindow: 32_768, maxOutputTokens: 4_096, capabilities: { text: true, coding: true, toolCalling: false, structuredOutput: false, web: false }, reasoningEfforts: ["none", "high"] }];
   }
 
   async healthCheck(signal?: AbortSignal): Promise<ProviderHealth> {
@@ -501,7 +501,7 @@ export class ZaiConsumerProvider extends BaseProvider {
     if (request.modelId !== "glm-web-consumer") throw new SafeError("PROVIDER_MODEL_MISSING", `${this.id} does not expose ${request.modelId}`, 404);
     if (request.jsonSchema) throw new SafeError("PROVIDER_CAPABILITY_MISMATCH", "Z.AI consumer adapter does not support structured output");
     const prompt = request.prompt;
-    const payload = this.payload(await this.#callTool(this.#spec, "zai_query", { prompt }, request.signal));
+    const payload = this.payload(await this.#callTool(this.#spec, "zai_query", { prompt, highThinking: request.reasoningEffort === "high" }, request.signal));
     if (typeof payload.output !== "string" || !payload.output) throw new SafeError("PROVIDER_RESPONSE_INVALID", "Z.AI adapter returned no output", 502);
     const estimatedTotal = typeof (payload.usage as { estimatedTokens?: unknown } | undefined)?.estimatedTokens === "number" ? Math.max(0, Math.ceil((payload.usage as { estimatedTokens: number }).estimatedTokens)) : null;
     const inputTokens = Math.max(1, Math.ceil(prompt.length / 4));
@@ -562,7 +562,7 @@ export class BrowserConsumerProvider extends BaseProvider {
   }
 
   async listModels(_signal?: AbortSignal): Promise<ProviderModel[]> {
-    return [{ id: this.#modelId, name: this.#displayName, createdAt: null, contextWindow: 32_768, maxOutputTokens: 4_096, capabilities: { text: true, coding: true, toolCalling: false, structuredOutput: false, web: false }, reasoningEfforts: ["none"] }];
+    return [{ id: this.#modelId, name: this.#displayName, createdAt: null, contextWindow: 32_768, maxOutputTokens: 4_096, capabilities: { text: true, coding: true, toolCalling: false, structuredOutput: false, web: false }, reasoningEfforts: ["none", "high"] }];
   }
 
   async healthCheck(signal?: AbortSignal): Promise<ProviderHealth> {
@@ -578,7 +578,7 @@ export class BrowserConsumerProvider extends BaseProvider {
     if (request.modelId !== this.#modelId) throw new SafeError("PROVIDER_MODEL_MISSING", `${this.id} does not expose ${request.modelId}`, 404);
     if (request.jsonSchema) throw new SafeError("PROVIDER_CAPABILITY_MISMATCH", `${this.#displayName} browser consumer does not support structured output`);
     const prompt = request.prompt;
-    const payload = this.payload(await this.#callTool(this.#spec, this.#toolName, { prompt }, request.signal));
+    const payload = this.payload(await this.#callTool(this.#spec, this.#toolName, { prompt, highThinking: request.reasoningEffort === "high" }, request.signal));
     if (typeof payload.output !== "string" || !payload.output) throw new SafeError("PROVIDER_RESPONSE_INVALID", `${this.#displayName} adapter returned no output`, 502);
     const estimatedTotal = typeof (payload.usage as { estimatedTokens?: unknown } | undefined)?.estimatedTokens === "number" ? Math.max(0, Math.ceil((payload.usage as { estimatedTokens: number }).estimatedTokens)) : null;
     const inputTokens = Math.max(1, Math.ceil(prompt.length / 4));

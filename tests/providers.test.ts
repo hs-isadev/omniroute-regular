@@ -141,13 +141,14 @@ test("Claude consumer adapter sends the request as natural user text without a s
   assert.equal(provider.supportsStreaming, false);
   assert.equal((await provider.healthCheck()).status, "healthy");
   assert.deepEqual((await provider.listModels()).map((model) => model.id), ["claude-web-consumer"]);
-  const result = await provider.generate({ modelId: "claude-web-consumer", prompt: "Small request", instructions: "Be concise", reasoningEffort: "none", maxOutputTokens: 256, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null });
+  const result = await provider.generate({ modelId: "claude-web-consumer", prompt: "Small request", instructions: "Be concise", reasoningEffort: "high", maxOutputTokens: 256, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null });
 
   assert.equal(result.text, "Claude answer");
   assert.equal(result.usage.measurement, "estimated");
   assert.equal(result.usage.inputTokens + result.usage.outputTokens, 23);
   assert.equal(calls[1]?.name, "claude_query");
   assert.equal(calls[1]?.arguments.prompt, "Small request");
+  assert.equal(calls[1]?.arguments.highThinking, true);
   assert.doesNotMatch(String(calls[1]?.arguments.prompt), /produce the requested work|do not claim|preserve uncertainty/i);
 });
 
@@ -180,13 +181,13 @@ test("Z.AI consumer adapter sends natural user text through the signed-in web se
   assert.equal(provider.supportsStreaming, false);
   assert.equal((await provider.healthCheck()).status, "healthy");
   assert.deepEqual((await provider.listModels()).map((model) => model.id), ["glm-web-consumer"]);
-  const result = await provider.generate({ modelId: "glm-web-consumer", prompt: "Small request", instructions: "Be concise", reasoningEffort: "none", maxOutputTokens: 256, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null });
+  const result = await provider.generate({ modelId: "glm-web-consumer", prompt: "Small request", instructions: "Be concise", reasoningEffort: "high", maxOutputTokens: 256, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null });
 
   assert.equal(result.text, "GLM answer");
   assert.equal(result.usage.measurement, "estimated");
   assert.equal(result.usage.inputTokens + result.usage.outputTokens, 17);
   assert.equal(calls[1]?.name, "zai_query");
-  assert.deepEqual(calls[1]?.arguments, { prompt: "Small request" });
+  assert.deepEqual(calls[1]?.arguments, { prompt: "Small request", highThinking: true });
 });
 
 test("Z.AI consumer adapter outages are retryable and never fall through to the API-shaped zai identity", async () => {
@@ -218,10 +219,10 @@ test("generic private browser consumers expose only their configured model and r
     },
   });
   assert.deepEqual((await provider.listModels()).map(model=>model.id),["qwen-web-consumer"]);
-  const result=await provider.generate({ modelId:"qwen-web-consumer",prompt:"Small request",instructions:"ignored",reasoningEffort:"none",maxOutputTokens:64,jsonSchema:null,schemaName:null,signal:AbortSignal.timeout(5000),safetyIdentifier:null });
+  const result=await provider.generate({ modelId:"qwen-web-consumer",prompt:"Small request",instructions:"ignored",reasoningEffort:"high",maxOutputTokens:64,jsonSchema:null,schemaName:null,signal:AbortSignal.timeout(5000),safetyIdentifier:null });
   assert.equal(result.text,"Qwen answer");
   assert.equal(calls.at(-1)?.name,"qwen_query");
-  assert.deepEqual(calls.at(-1)?.arguments,{prompt:"Small request"});
+  assert.deepEqual(calls.at(-1)?.arguments,{prompt:"Small request",highThinking:true});
   const unavailable=new BrowserConsumerProvider({id:"kimi-consumer",modelId:"kimi-web-consumer",displayName:"Kimi Web Consumer",toolName:"kimi_query",command:"node",args:["adapter.mjs"],callTool:async()=>({content:[{type:"text",text:JSON.stringify({error:"not ready"})}],isError:true})});
   await assert.rejects(unavailable.generate({modelId:"kimi-web-consumer",prompt:"Hi",instructions:"",reasoningEffort:"none",maxOutputTokens:64,jsonSchema:null,schemaName:null,signal:AbortSignal.timeout(5000),safetyIdentifier:null}),error=>unavailable.classifyError(error).retryable);
 });

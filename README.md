@@ -1,4 +1,23 @@
-# OmniRoute 0.5.0 — six routes, one setup
+# OmniRoute Private 0.6.0 — BYOK + six shared browser consumers
+
+The current release is `OmniRoute Private 0.6.0`. It adds one shared,
+isolated Chromium-family browser session for Claude, Z.AI, Qwen, Kimi,
+DeepSeek, and Perplexity, alongside the existing API-key and host integrations.
+See the complete release guide in [`release/OmniRoute-Private-0.6.0-private.1/README.md`](release/OmniRoute-Private-0.6.0-private.1/README.md).
+
+## Current release setup
+
+1. Extract the release package.
+2. Windows: double-click `Install-Windows.cmd`. Linux: run `sh Install-Linux.sh`.
+3. Add your own provider keys in the API Keys window and complete the free-account confirmation.
+4. Sign in to any web consumers you want to use in the dedicated browser window, then sign in to Antigravity.
+
+The package contains no API keys, browser sessions, vaults, or personal
+projects. Browser credentials stay in the dedicated local profile and are not
+copied from the normal browser profile. Free-provider quotas and service terms
+apply; this is not unlimited inference.
+
+## Legacy 0.5.0 documentation
 
 OmniRoute builds one download for Windows 10/11 x64 and Linux x64 desktops. It
 installs or connects six routes:

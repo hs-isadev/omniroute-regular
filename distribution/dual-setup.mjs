@@ -1,4 +1,4 @@
-import {access,readFile,writeFile,mkdir,lstat,copyFile,rename} from 'node:fs/promises';
+import {access,readFile,writeFile,mkdir,lstat,copyFile,rename,unlink} from 'node:fs/promises';
 import {join,dirname,resolve,isAbsolute} from 'node:path';
 import {homedir} from 'node:os';
 import {randomUUID} from 'node:crypto';
@@ -12,11 +12,13 @@ import {openKeyForm} from './gui-keys.mjs';
 import {RULES,findAntigravity} from './antigravity.mjs';
 import {claudeHarnessEnvironment} from '../apps/cli/dist/harness-env.js';
 import {createChatBackend,startChatProxy,openCodeConfig} from './dual-chat.mjs';
-import {PRIVATE_BROWSER_CONSUMERS} from '../packages/browser-consumer-adapter/src/runtime.mjs';
+import {PRIVATE_BROWSER_CONSUMERS,getSharedSessionDefinition} from '../packages/browser-consumer-adapter/src/runtime.mjs';
 const CLAUDE_CONSUMER_PORT=47842;
 const CLAUDE_CONSUMER_ENDPOINT=`http://127.0.0.1:${CLAUDE_CONSUMER_PORT}`;
 const ZAI_CONSUMER_PORT=47843;
 const ZAI_CONSUMER_ENDPOINT=`http://127.0.0.1:${ZAI_CONSUMER_PORT}`;
+const SHARED_BROWSER_SESSION=getSharedSessionDefinition();
+const SHARED_BROWSER_ENDPOINT=`http://127.0.0.1:${SHARED_BROWSER_SESSION.port}`;
 
 async function safe(path){for(let p=resolve(path);;p=dirname(p)){try{const info=await lstat(p);if(info.isSymbolicLink()||(info.isFile()&&info.nlink!==1))throw new Error('Linked setup path rejected');}catch(e){if(e.code!=='ENOENT')throw e;}if(p===dirname(p))break;}}
 async function optional(path){await safe(path);try{return await readFile(path,'utf8');}catch(e){if(e.code==='ENOENT')return null;throw e;}}
@@ -71,10 +73,33 @@ export async function configureZaiConsumer({root,node=process.execPath,entrypoin
   const paths=getRuntimePaths(join(root,'data')),config=await loadConfig(paths);
   const provider=config.providers.find(item=>item.id==='zai-consumer');
   if(!provider)throw new Error('This build does not include the Z.AI consumer provider.');
-  Object.assign(provider,{enabled:true,freeTierConfirmed:true,baseUrl:ZAI_CONSUMER_ENDPOINT,mcpCommand:node,mcpArgs:[entrypoint,'--endpoint',ZAI_CONSUMER_ENDPOINT],mcpWorkingDirectory:dirname(entrypoint)});
+  Object.assign(provider,{enabled:true,freeTierConfirmed:true,baseUrl:SHARED_BROWSER_ENDPOINT,mcpCommand:node,mcpArgs:[entrypoint,'--endpoint',SHARED_BROWSER_ENDPOINT],mcpWorkingDirectory:dirname(entrypoint)});
   config.routing.directProviderOrder=['claude-consumer','zai-consumer',...config.routing.directProviderOrder.filter(id=>id!=='claude-consumer'&&id!=='zai-consumer')];
   await saveConfig(config,paths);
   return {providerId:provider.id,entrypoint};
+}
+
+export async function installSharedBrowserConsumerAutostart({platform=process.platform,home=homedir(),root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/shared-session.mjs',import.meta.url)),env=process.env}) {
+  for(const path of [home,root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute shared browser autostart paths required');
+  const profile=join(root,'data',SHARED_BROWSER_SESSION.profileName);
+  if(platform==='linux'){
+    const file=join(home,'.config/autostart/omniroute-browser-consumers.desktop'),before=await optional(file);
+    const content=`[Desktop Entry]\nType=Application\nName=OmniRoute Browser Consumers\nExec=${desktopExec(node)} ${desktopExec(entrypoint)} --background --profile ${desktopExec(profile)} --port ${SHARED_BROWSER_SESSION.port}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`;
+    if(before!==content)await atomic(file,content,before);
+    const names=['omniroute-claude-consumer.desktop','omniroute-zai-consumer.desktop',...PRIVATE_BROWSER_CONSUMERS.map(item=>`omniroute-${item.id}-consumer.desktop`)];
+    const removed=[];for(const name of names){const path=join(home,'.config/autostart',name);try{await unlink(path);removed.push(path);}catch(error){if(error.code!=='ENOENT')throw error;}}
+    return {file,removed};
+  }
+  if(platform==='win32'){
+    const appData=env.APPDATA;if(!appData||!isAbsolute(appData))throw new Error('Windows APPDATA is unavailable.');
+    const file=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.vbs'),before=await optional(file);
+    const command=`"${node}" "${entrypoint}" --background --profile "${profile}" --port ${SHARED_BROWSER_SESSION.port}`,content=`CreateObject("WScript.Shell").Run "${command.replaceAll('"','""')}", 0, False\r\n`;
+    if(before!==content)await atomic(file,content,before);
+    const names=['OmniRoute Claude Consumer.vbs','OmniRoute Z.AI Consumer.vbs',...PRIVATE_BROWSER_CONSUMERS.map(item=>`OmniRoute ${item.displayName} Consumer Private.vbs`)];
+    const removed=[];for(const name of names){const path=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup',name);try{await unlink(path);removed.push(path);}catch(error){if(error.code!=='ENOENT')throw error;}}
+    return {file,removed};
+  }
+  throw new Error('Shared browser consumer autostart supports Windows and Linux desktops.');
 }
 
 export async function configurePrivateBrowserConsumers({root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/adapter.mjs',import.meta.url))}) {
@@ -173,6 +198,9 @@ export async function launchAllConsumerSetups(root,launchers={}) {
   ];
   await Promise.all(tasks);
 }
+export async function launchSharedBrowserConsumerSetup(root,{node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/shared-session.mjs',import.meta.url)),run:runImpl=run}={}) {
+  await runImpl(node,[entrypoint,'--profile',join(root,'data',SHARED_BROWSER_SESSION.profileName),'--port',String(SHARED_BROWSER_SESSION.port)]);
+}
 export async function launchOpenCode(root,args=[]) {
   const active=(await readFile(join(root,'active-version.txt'),'utf8')).trim();if(!/^versions\/[a-zA-Z0-9.-]+$/.test(active))throw new Error('Invalid installed version');
   const backend=await createChatBackend(join(root,'data')),proxy=await startChatProxy(backend);
@@ -204,12 +232,10 @@ export async function setupBoth(root,{noKeys=false,noLaunch=false,home=homedir()
   await configureClaudeConsumer({root});
   await configureZaiConsumer({root});
   await configurePrivateBrowserConsumers({root});
-  await installClaudeConsumerAutostart({root,home});
-  await installZaiConsumerAutostart({root,home});
-  await installPrivateBrowserConsumerAutostarts({root,home});
-  console.log('Opening six dedicated consumer sign-in windows together. Each will minimize automatically when ready.');
-  await launchAllConsumerSetups(root);
-  console.log('Claude, Z.AI, Qwen, Kimi, DeepSeek, and Perplexity browser consumers are configured for small requests and running in the background.');
+  await installSharedBrowserConsumerAutostart({root,home});
+  console.log('Opening one shared browser with six consumer sign-in tabs. It will minimize automatically when all are ready.');
+  await launchSharedBrowserConsumerSetup(root);
+  console.log('Claude, Z.AI, Qwen, Kimi, DeepSeek, and Perplexity are configured in one background browser session.');
   if(!noLaunch)await launchAntigravity(root).catch(e=>console.log(e.message));
   console.log('Setup complete. Use OpenCode or open Antigravity, Codex, or Claude Code normally. Restart open hosts after changing keys.');
 }

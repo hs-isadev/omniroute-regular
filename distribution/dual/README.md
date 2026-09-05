@@ -1,4 +1,4 @@
-# OmniRoute 0.5.1 — BYOK + Claude web + Z.AI GLM
+# OmniRoute Private 0.6.0 — BYOK + six shared browser consumers
 
 One download for Windows 10/11 x64 and Linux x64 desktops. No Codex subscription
 needed. No API keys, accounts, vaults or personal projects are included.
@@ -11,9 +11,10 @@ needed. No API keys, accounts, vaults or personal projects are included.
 3. In the **API Keys** window, click **Get key**, get your own provider key, and
    paste it beside that provider. Tick the free-account confirmation and click
    **Save and test**. Leave other fields blank. One working provider is enough.
-4. Sign in to Claude and Z.AI once in the two dedicated browser windows that open
-   together. Each minimizes automatically after sign-in and remains available in
-   the background. Then sign in to Antigravity when its official app opens. Existing
+4. One dedicated Chromium-family window opens with six tabs: Claude, Z.AI, Qwen,
+   Kimi, DeepSeek, and Perplexity. Sign in manually to any service you want to use.
+   The window minimizes after all six tabs are ready and starts minimized at future
+   OS logins. Then sign in to Antigravity when its official app opens. Existing
    Codex and Claude Code installations are connected automatically; the package
    does not install or sign into those optional hosts.
 
@@ -37,14 +38,13 @@ require approval. Antigravity may show its own first-run onboarding.
 
 Windows launchers appear on the Desktop; Linux launchers appear in the app menu.
 Restart a host after changing keys. Developer hosts are not registered for
-autostart. Only the dedicated Claude and Z.AI consumer browsers start in the
-background at user login. Each uses its own profile and loopback-only port;
-neither reuses or alters normal browser tabs. Chrome, Edge, Opera, Brave, Vivaldi
-and Chromium are detected on Windows and Linux. Any other Chromium-family
-executable can be selected with `OMNIROUTE_BROWSER`, or per provider with
-`OMNIROUTE_CLAUDE_BROWSER` and `OMNIROUTE_ZAI_BROWSER`. Firefox and Safari do
-not expose the Chromium CDP transport this adapter requires; the user's default
-browser can still be any browser because these two dedicated windows are separate.
+autostart. One shared consumer browser starts minimized in the background at user
+login. It uses the persistent profile `browser-consumer-profile`, the loopback-only
+endpoint `127.0.0.1:47842`, and six provider tabs; it does not reuse the user's
+normal browser profile. Chrome, Edge, Opera, Opera GX, Brave, Vivaldi and Chromium
+are detected on Windows and Linux (Opera GX itself is Windows-only). Override
+detection with `OMNIROUTE_BROWSER`. Firefox and Safari do not expose the Chromium
+CDP transport this adapter requires.
 OpenCode starts in a starter workspace; open your project from there or pass a
 project path to the installed launcher (`Launch.ps1 -Action opencode C:\Projects\Example`
 or `sh Launch.sh opencode /path/to/project`). Normal tool approval prompts remain.
@@ -71,10 +71,20 @@ providers retain prompts or restrict evaluation/commercial/confidential usage.
 Do not send private repository secrets to hosted workers. No billing settings
 are changed by setup. HF/Vercel credit-based inference and LongCat's paid API
 are excluded. The provider list is not a promise that every model is available.
-The Claude and Z.AI web consumers are not BYOK: they use the accounts you
-explicitly sign into and are limited to small text/coding requests. Their quotas
-and terms still apply. Browser credentials stay in two dedicated local browser
-profiles and are never included in the package.
+The six web consumers are not BYOK: they use the accounts you explicitly sign into
+and are limited by OmniRoute to small text/coding requests. Provider quotas and
+terms still apply. Browser credentials remain only in the one dedicated local
+profile created after installation and are never included in the package. Setup
+does not copy or merge cookies, login databases, passwords, OAuth tokens, local
+storage, or any other authentication material from another profile.
+
+Each browser consumer exposes `none` and `high` reasoning, and normal browser-consumer
+routing defaults to `high`. The adapter activates the site's visible Thinking, Extended Thinking,
+DeepThink, or Reasoning control before it submits the prompt. Availability depends
+on the signed-in account and selected web model; if the control is unavailable,
+the adapter reports a retryable failure and routing continues to the next provider.
+Before inserting a browser prompt, each adapter focuses the input and waits 150 ms.
+This small deterministic UI-settle delay is not represented as stealth or bot-evasion.
 
 ## Failed provider? You can still finish
 
@@ -82,9 +92,8 @@ Valid keys are saved even when another provider fails. The form reports failed
 provider names; failed new keys are not activated and existing saved keys remain.
 If none work, the form stays open so you can retry or use another free provider.
 
-Latest owner-account checks: Groq, Gemini, Mistral, Cohere, Cloudflare, OpenRouter,
-Kilo and OpenCode Zen have passed inference. The signed-in Z.AI GLM browser
-route also passed an exact-response end-to-end check. If Z.AI reports that GLM is
+Previous owner-account checks: Groq, Gemini, Mistral, Cohere, Cloudflare, OpenRouter,
+Kilo and OpenCode Zen passed inference when recorded in VERIFICATION.md. If Z.AI reports that GLM is
 in peak hour, the adapter first looks for the visible **Switch to GLM 5.3 Flash**
 action by its text. If it cannot select that action safely, the route fails as
 retryable so OmniRoute continues down the free-provider ladder. Kilo's Auto Free returned
@@ -92,7 +101,8 @@ retryable so OmniRoute continues down the free-provider ladder. Kilo's Auto Free
 a timeout; it remains an available slot for your own account. NVIDIA, Cerebras and SambaNova are untested with a
 live owner key. Their adapters have mock-backed protocol tests only. These
 results are not guarantees for another account or proof of large-project coding
-quality.
+quality. See MODEL-LIMITS.md for documented, observed, and unknown limits and
+large-task recommendations.
 
 ## Platform requirements and verification
 

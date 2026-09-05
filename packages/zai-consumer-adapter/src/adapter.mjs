@@ -1,5 +1,6 @@
 import {chromium} from 'playwright';
 import {ZAI_ASSISTANT_RESPONSE_SELECTOR,ZAI_FLASH_SWITCH_PATTERN,ZAI_PEAK_HOUR_PATTERN,cleanAssistantParts,decidePeakHourAction} from './dom.mjs';
+import {focusPauseAndFill} from '../../browser-consumer-adapter/src/prompt-input.mjs';
 
 const endpointIndex=process.argv.indexOf('--endpoint');
 const endpoint=endpointIndex>=0?process.argv[endpointIndex+1]:process.env.ZAI_CDP_ENDPOINT||'http://127.0.0.1:9222';
@@ -27,6 +28,11 @@ async function connect(){
   return page;
 }
 async function closePage(){try{if(page&&!page.isClosed())await page.close();}catch{}page=undefined;}
+async function enableHighThinking(target){
+  const controls=target.locator('button:has-text("Deep Thinking"),[role="button"]:has-text("Deep Thinking"),button:has-text("Thinking"),[role="button"]:has-text("Thinking")');
+  for(let index=0;index<await controls.count();index++){const control=controls.nth(index);if(!await control.isVisible().catch(()=>false)||!await control.isEnabled().catch(()=>false))continue;const pressed=await control.getAttribute('aria-pressed'),state=await control.getAttribute('data-state');if(pressed==='true'||state==='on'||state==='checked')return;await control.click();return;}
+  throw new Error('Z.AI high-thinking control is unavailable for this account or current model. OmniRoute should try another provider.');
+}
 async function ready(target){
   await target.goto('https://chat.z.ai/',{waitUntil:'domcontentloaded',timeout:30000});
   if(/^https:\/\/chat\.z\.ai\/(?:auth|login)(?:[/?#]|$)/i.test(target.url()))throw new Error('Z.AI is not signed in in the attached browser profile.');
@@ -85,7 +91,7 @@ async function stable(target,before){
   return last;
 }
 async function submit(target,prompt){
-  await target.fill(input,prompt);
+  await focusPauseAndFill(target,input,prompt);
   const button=await target.$(sendButton);
   if(button&&await button.isVisible()&&await button.isEnabled())await button.click();
   else await target.keyboard.press('Enter');
@@ -96,9 +102,10 @@ async function call(name,args={}){
     if(name==='test_connection')return result({status:'ready',browser:'chromium-cdp',endpoint});
     if(name!=='zai_query')return result({error:`Unknown tool: ${name}`},true);
     const prompt=typeof args.prompt==='string'?args.prompt.trim():'';if(!prompt)return result({error:'prompt must be a non-empty string'},true);
+    if(args.highThinking===true)await enableHighThinking(target);
     const before=await responseState(target);await submit(target,prompt);
     const output=await stable(target,before);if(!output)throw new Error('Z.AI returned no readable response.');
-    return result({output,usage:{model:'glm-web-consumer',estimatedTokens:Math.ceil((prompt.length+output.length)/4)},metadata:{transport:'browser-cdp',timestamp:new Date().toISOString()}});
+    return result({output,usage:{model:'glm-web-consumer',estimatedTokens:Math.ceil((prompt.length+output.length)/4)},metadata:{transport:'browser-cdp',highThinking:args.highThinking===true,timestamp:new Date().toISOString()}});
   }catch(error){return result({error:error instanceof Error?error.message:String(error)},true);}finally{await closePage();}
 }
 function send(id,payload){process.stdout.write(`${JSON.stringify({jsonrpc:'2.0',id,...payload})}\n`);}
@@ -109,7 +116,7 @@ process.stdin.on('data',chunk=>{
   for(;;){const newline=buffered.indexOf('\n');if(newline<0)break;const line=buffered.slice(0,newline).trim();buffered=buffered.slice(newline+1);if(!line)continue;
     void (async()=>{try{const message=JSON.parse(line);if(message.id===undefined)return;
       if(message.method==='initialize')send(message.id,{result:{protocolVersion:'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'zai-consumer-adapter',version:'0.1.0'}}});
-      else if(message.method==='tools/list')send(message.id,{result:{tools:[{name:'zai_query',description:'Ask a GLM model through the signed-in Z.AI browser session.',inputSchema:{type:'object',properties:{prompt:{type:'string',minLength:1}},required:['prompt'],additionalProperties:false}},{name:'test_connection',description:'Check the attached Z.AI browser login.',inputSchema:{type:'object',properties:{},additionalProperties:false}}]}});
+      else if(message.method==='tools/list')send(message.id,{result:{tools:[{name:'zai_query',description:'Ask a GLM model through the signed-in Z.AI browser session.',inputSchema:{type:'object',properties:{prompt:{type:'string',minLength:1},highThinking:{type:'boolean',description:'Enable Z.AI high thinking before submitting.'}},required:['prompt'],additionalProperties:false}},{name:'test_connection',description:'Check the attached Z.AI browser login.',inputSchema:{type:'object',properties:{},additionalProperties:false}}]}});
       else if(message.method==='tools/call')send(message.id,{result:await call(message.params?.name,message.params?.arguments)});
       else send(message.id,{error:{code:-32601,message:'Method not found'}});
     }catch(error){try{const parsed=JSON.parse(line);if(parsed.id!==undefined)send(parsed.id,{error:{code:-32603,message:error instanceof Error?error.message:String(error)}});}catch{}}})();
