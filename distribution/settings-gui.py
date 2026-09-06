@@ -56,7 +56,7 @@ def main():
     outer = ttk.Frame(window, padding=18)
     outer.pack(fill='both', expand=True)
     ttk.Label(outer, text='Connect your free providers', font=('', 16, 'bold')).pack(anchor='w')
-    ttk.Label(outer, text='Get a key, paste it beside its provider, then Save and test.\nOne working provider is enough. Blank fields keep previously saved keys.').pack(anchor='w', pady=(8, 14))
+    ttk.Label(outer, text='Get a key, paste it beside its provider, then Save and test.\nConfigure any supported providers. Blank fields keep previously saved keys.').pack(anchor='w', pady=(8, 14))
     frame = ttk.Frame(outer)
     frame.pack(fill='both', expand=True)
     canvas = tk.Canvas(frame, highlightthickness=0)

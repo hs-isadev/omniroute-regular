@@ -10,7 +10,7 @@ needed. No API keys, accounts, vaults or personal projects are included.
    **Linux:** open a terminal in the extracted folder and run **sh Install-Linux.sh**.
 3. In the **API Keys** window, click **Get key**, get your own provider key, and
    paste it beside that provider. Tick the free-account confirmation and click
-   **Save and test**. Leave other fields blank. One working provider is enough.
+   **Save and test**. Configure any supported providers; blank fields keep saved keys.
 4. One dedicated Chromium-family window opens with six tabs: Claude, Z.AI, Qwen,
    Kimi, DeepSeek, and Perplexity. Sign in manually to any service you want to use.
    The window minimizes after all six tabs are ready and starts minimized at future

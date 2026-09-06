@@ -6,11 +6,12 @@ Verification date: 2026-09-05. This file records commands actually run against t
 
 - `npm run build`: PASS.
 - `npm test`: PASS, 162/162 TypeScript tests.
-- `npm run test:regular`: PASS, 110 passed, 0 failed, 2 platform-specific skips, 112 total.
+- `npm run test:regular`: PASS, 111 passed, 0 failed, 2 platform-specific skips, 113 total.
 - Focused shared-browser tests: PASS, 9/9 after the final launcher/startup/probe/prompt-timing changes.
 - Browser high-thinking dispatch: PASS in source tests; `high` is forwarded to all six adapters, which activate a visible provider thinking control or fail retryably.
 - Browser prompt timing: PASS; all six consumers focus the prompt input, wait a fixed 150 ms, then fill it before submitting.
 - `npm run test:security`: PASS, 15/15 security and vault tests.
+- API-key provider selection: PASS; setup accepts all supported free provider credentials in one submission, and Cloudflare's token/account pair remains one provider record.
 - `npm audit --omit=dev`: PASS, 0 production vulnerabilities.
 - Shared model registry/routing ladder: PASS in source tests; Claude, Z.AI, Qwen, Kimi, DeepSeek, and Perplexity browser consumers are present and ordered before API/local fallbacks after setup.
 - Startup migration: PASS in source tests; setup writes one shared per-user startup entry and removes only the six exact legacy per-provider entries.

@@ -36,6 +36,13 @@ test('valid keys are encrypted; optional failures never activate',async()=>{
   assert.deepEqual(config.providers.filter(x=>x.enabled).map(x=>x.id),['openrouter']);
   assert.deepEqual((await loadConfig(paths)).providers.find(x=>x.id==='openrouter').models.filter(x=>x.enabled&&x.allowed).map(x=>x.modelId),['openrouter/free']);
 });
+test('setup accepts any supported free provider credentials and counts Cloudflare once',async()=>{
+  const {paths,protector}=await context();
+  const five={GROQ_API_KEY:'fixture-groq',GEMINI_API_KEY:'fixture-gemini',MISTRAL_API_KEY:'fixture-mistral',COHERE_API_KEY:'fixture-cohere',CLOUDFLARE_API_TOKEN:'fixture-cloudflare',CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32)};
+  const accepted=await configure({keys:{...five,CEREBRAS_API_KEY:'fixture-cerebras'},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  assert.equal(accepted.accepted.length,6);
+  assert.deepEqual(accepted.accepted,['groq','gemini','mistral','cohere','cerebras','cloudflare']);
+});
 test('failed replacement preserves existing key and ignores edited endpoint',async()=>{
   const {paths,protector}=await context();
   await configure({keys:{OPENROUTER_API_KEY:fixture},freeOnlyConfirmed:true},paths,{protector,factory:success});

@@ -36,7 +36,7 @@ $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
 $intro = New-Object Windows.Forms.Label
-$intro.Text = 'Any one suitable free provider is enough. Keys stay on this Windows account. Antigravity sign-in stays in Antigravity.'
+$intro.Text = 'Configure any suitable free providers. Keys stay on this Windows account. Antigravity sign-in stays in Antigravity.'
 $intro.SetBounds(15,12,650,36)
 $form.Controls.Add($intro)
 if($Simple) {$intro.Text='Paste your API keys below. Use Get key if you need one. Leave any others blank; saved keys are kept.'}
