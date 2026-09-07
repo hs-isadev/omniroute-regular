@@ -113,6 +113,7 @@ interface ExecutionState {
   orchestrator: AttributionRecord["orchestrator"];
   usage: Usage;
   worker: ModelSelection;
+  parallelWorkers: NonNullable<AttributionRecord["parallelWorkers"]>;
   reviewers: AttributionRecord["reviewers"];
   fallbackAttempts: AttributionRecord["fallbacksAttempted"];
   policyDecisions: string[];
@@ -184,7 +185,7 @@ export class OmniRouter {
     if (mode === "orchestrator" && !orchestrator) throw new SafeError("ORCHESTRATION_UNAVAILABLE", "The configured orchestrator provider is unavailable", 503);
     const orchestratorEffort = mode === "orchestrator" && modelPreference !== "lightweight" ? this.orchestratorEffort(signals) : "none";
     const initialWorker = mode === "regular" ? this.selectDirectWorker(snapshot, signals, request, modelPreference) : { providerId: orchestratorModel!.providerId, modelId: orchestratorModel!.modelId, reasoningEffort: orchestratorEffort, maxOutputTokens: 1 };
-    const state: ExecutionState = { modelPreference, orchestrator: mode === "regular" ? { providerId: "omniroute", modelId: "deterministic-direct", reasoningEffort: "none" } : { providerId: orchestratorModel!.providerId, modelId: orchestratorModel!.modelId, reasoningEffort: orchestratorEffort }, usage: { ...emptyUsage(), estimatedCostUsd: 0 }, worker: initialWorker, reviewers: [], fallbackAttempts: [], reservedBudgetUsd: 0, policyDecisions: [
+    const state: ExecutionState = { modelPreference, orchestrator: mode === "regular" ? { providerId: "omniroute", modelId: "deterministic-direct", reasoningEffort: "none" } : { providerId: orchestratorModel!.providerId, modelId: orchestratorModel!.modelId, reasoningEffort: orchestratorEffort }, usage: { ...emptyUsage(), estimatedCostUsd: 0 }, worker: initialWorker, parallelWorkers: [], reviewers: [], fallbackAttempts: [], reservedBudgetUsd: 0, policyDecisions: [
       `deterministic signals suggested ${signals.suggestedClass}`,
       `intent ${signals.intent}; ${modelPreference} model preference`,
       ...(demandingWorker ? ['coding quality floor: configured tier >=4; rankings provisional pending executable benchmarks'] : []),
@@ -195,7 +196,9 @@ export class OmniRouter {
     try {
       let plan: RoutingPlan;
       if (mode === "regular") {
-        plan = this.directPlan(initialWorker, signals);
+        const swarm = this.regularSwarmPlan(initialWorker, signals, snapshot);
+        plan = swarm.plan ?? this.directPlan(initialWorker, signals);
+        if (swarm.decision) state.policyDecisions.push(swarm.decision);
         const directCost = this.estimatePlanCost(plan, snapshot, signals);
         if (directCost === null) throw new SafeError("DIRECT_COST_UNKNOWN", "Regular mode requires known pricing metadata");
         await this.updateBudgetReservation(state, directCost);
@@ -222,6 +225,7 @@ export class OmniRouter {
         hostModelAuthoritative: request.hostModelAuthoritative,
         orchestrator: state.orchestrator,
         worker: state.worker,
+        ...(state.parallelWorkers.length > 0 ? { parallelWorkers: this.orderedParallelWorkers(state.parallelWorkers) } : {}),
         reviewers: state.reviewers,
         fallbacksAttempted: state.fallbackAttempts,
         taskClass: plan.taskClass,
@@ -237,6 +241,28 @@ export class OmniRouter {
       return { routeId, answer, badge: attributionBadge(attribution), attribution, plan };
     } catch (error) {
       const message = globalRedactor.redactText(error instanceof Error ? error.message : String(error));
+      const endedAt = new Date();
+      const failedAttribution: AttributionRecord = {
+        routeId,
+        startedAt: startedAt.toISOString(),
+        endedAt: endedAt.toISOString(),
+        sourceClient: request.sourceClient,
+        hostApplication: request.hostApplication,
+        hostModel: request.hostModelAuthoritative ? request.hostModel : null,
+        hostModelAuthoritative: request.hostModelAuthoritative,
+        orchestrator: state.orchestrator,
+        worker: state.worker,
+        ...(state.parallelWorkers.length > 0 ? { parallelWorkers: this.orderedParallelWorkers(state.parallelWorkers) } : {}),
+        reviewers: state.reviewers,
+        fallbacksAttempted: state.fallbackAttempts,
+        taskClass: signals.suggestedClass,
+        policyDecisions: state.policyDecisions,
+        usage: state.usage,
+        latencyMs: endedAt.getTime() - startedAt.getTime(),
+        status: signal.aborted ? "cancelled" : "failed",
+        registrySnapshotId: snapshot.id,
+      };
+      try { await this.#audit.append(failedAttribution); } catch { /* Preserve the original routing error. */ }
       await this.#logger.write("error", "route.failed", { routeId, error: message, fallbacksAttempted: state.fallbackAttempts, policyDecisions: state.policyDecisions });
       await onEvent({ type: "route.failed", routeId, error: message, at: new Date().toISOString() });
       throw error;
@@ -322,6 +348,57 @@ export class OmniRouter {
       fallbacks: [],
       shortRationale: "Regular mode used deterministic free-policy model selection without an LLM planner.",
     };
+  }
+
+  private regularSwarmPlan(primary: ModelSelection, signals: TaskSignals, snapshot: RegistrySnapshot): { plan: RoutingPlan | null; decision: string | null } {
+    const complexEnough = signals.intent === "high_risk" || (signals.requiredCapabilities.includes("coding") && signals.intent === "complex_task");
+    if (!complexEnough || primary.providerId.endsWith("-consumer") || this.#config.routing.maxParallelWorkers < 2 || this.#config.routing.maxSubtasks < 2) return { plan: null, decision: null };
+    const maximumWorkers = Math.min(3, this.#config.routing.maxParallelWorkers, this.#config.routing.maxSubtasks);
+    const subtaskOutputTokens = Math.min(primary.maxOutputTokens, this.#config.routing.expectedSubtaskOutputTokens);
+    const primaryModel = modelFrom(snapshot, primary);
+    const synthesisTokens = signals.estimatedInputTokens + maximumWorkers * subtaskOutputTokens + primary.maxOutputTokens + 512;
+    if (primaryModel.contextWindow === null || synthesisTokens > primaryModel.contextWindow) {
+      return { plan: null, decision: `regular swarm skipped: synthesis context estimate ${synthesisTokens} exceeds ${primary.providerId}/${primary.modelId} limit` };
+    }
+    const seed = { ...primary, maxOutputTokens: subtaskOutputTokens };
+    const candidates = this.#freeFailover.enabled(seed, snapshot)
+      ? this.#freeFailover.candidates(seed, snapshot, signals.requiredCapabilities, signals.estimatedInputTokens + 256, "quality").filter((selection) => !selection.providerId.endsWith("-consumer"))
+      : [seed];
+    if (candidates.length === 0) return { plan: null, decision: "regular swarm skipped: no healthy eligible API workers" };
+    const roles = maximumWorkers === 2 ? [
+      { id: "implementation", goal: "Produce a concrete implementation or transformation draft for the requested work." },
+      { id: "tests-review", goal: "Produce tests, edge cases, regression risks, and corrections for the requested work." },
+    ] : [
+      { id: "implementation", goal: "Produce a concrete implementation or transformation draft for the requested work." },
+      { id: "tests", goal: "Produce targeted tests and repetitive supporting code for the requested work." },
+      { id: "review", goal: "Review the requested work for bugs, edge cases, safety issues, and regressions." },
+    ];
+    const subtasks: RouteSubtask[] = roles.map((role, index) => {
+      const selection = candidates[index % candidates.length]!;
+      return { ...role, dependencies: [], providerId: selection.providerId, modelId: selection.modelId, reasoningEffort: selection.reasoningEffort };
+    });
+    return {
+      plan: {
+        schemaVersion: 1,
+        taskClass: signals.suggestedClass,
+        complexityScore: signals.suggestedClass === "medium" ? 55 : signals.suggestedClass === "large" ? 80 : 95,
+        riskLevel: signals.riskLevel,
+        confidence: 1,
+        requiredCapabilities: signals.requiredCapabilities,
+        executionMode: "decomposed",
+        primary,
+        subtasks,
+        review: { required: false, providerId: "", modelId: "", criteria: [] },
+        fallbacks: [],
+        shortRationale: "Regular mode used a bounded API-worker swarm for substantive parallel drafts followed by one final synthesis.",
+      },
+      decision: `regular swarm enabled with ${subtasks.length} API workers under maxParallelWorkers=${this.#config.routing.maxParallelWorkers}`,
+    };
+  }
+
+  private orderedParallelWorkers(workers: NonNullable<AttributionRecord["parallelWorkers"]>): NonNullable<AttributionRecord["parallelWorkers"]> {
+    const order = new Map(["implementation", "tests-review", "tests", "review"].map((role, index) => [role, index]));
+    return [...workers].sort((left, right) => (order.get(left.role) ?? 999) - (order.get(right.role) ?? 999) || left.subtaskId.localeCompare(right.subtaskId));
   }
 
   private orchestratorEffort(signals: TaskSignals): ReasoningEffort {
@@ -544,7 +621,7 @@ export class OmniRouter {
       if (ready.length === 0) throw new SafeError("DECOMPOSITION_DEADLOCK", "No dependency-ready subtask remains");
       for (let offset = 0; offset < ready.length; offset += this.#config.routing.maxParallelWorkers) {
         const wave = ready.slice(offset, offset + this.#config.routing.maxParallelWorkers);
-        const completed = await Promise.all(wave.map(async (subtask) => {
+        const completed = await Promise.allSettled(wave.map(async (subtask) => {
           const selection: ModelSelection = {
             providerId: subtask.providerId,
             modelId: subtask.modelId,
@@ -553,10 +630,22 @@ export class OmniRouter {
           };
           const context = subtask.dependencies.map((id) => `Dependency ${id}:\n${outputs.get(id)}`).join("\n\n");
           const prompt = `Overall request:\n${request.prompt}\n\nYour bounded subtask:\n${subtask.goal}${context ? `\n\nValidated dependency outputs:\n${context}` : ""}\n\nReturn only the subtask result; do not claim to complete the overall request.`;
-          const output = await this.executeSelection(routeId, selection, prompt, snapshot, signal, onEvent, state, subtask.id, plan.requiredCapabilities);
-          return [subtask.id, output] as const;
+          try {
+            const result = await this.executeSelectionResult(routeId, selection, prompt, snapshot, signal, onEvent, state, subtask.id, plan.requiredCapabilities);
+            state.parallelWorkers.push({ subtaskId: subtask.id, role: subtask.id, providerId: result.selection.providerId, modelId: result.selection.modelId, reasoningEffort: result.selection.reasoningEffort, outcome: "completed" });
+            return [subtask.id, result.value] as const;
+          } catch (error) {
+            state.parallelWorkers.push({ subtaskId: subtask.id, role: subtask.id, providerId: selection.providerId, modelId: selection.modelId, reasoningEffort: selection.reasoningEffort, outcome: signal.aborted ? "cancelled" : "failed" });
+            throw error;
+          }
         }));
-        for (const [id, output] of completed) { outputs.set(id, output); pending.delete(id); }
+        const rejected = completed.find((result): result is PromiseRejectedResult => result.status === "rejected");
+        if (rejected) throw rejected.reason;
+        for (const result of completed) if (result.status === "fulfilled") {
+          const [id, output] = result.value;
+          outputs.set(id, output);
+          pending.delete(id);
+        }
       }
     }
     return outputs;
@@ -600,9 +689,17 @@ export class OmniRouter {
     signal: AbortSignal, onEvent: RouteEventHandler, state: ExecutionState, subtaskId: string | null,
     required: Capability[],
   ): Promise<string> {
-    const result = await this.#freeFailover.run(selection, snapshot, required, estimateTokens(prompt), signal, state, subtaskId ?? "worker", (candidate, automatic) => this.executeSelectionOnce(routeId, candidate, prompt, snapshot, signal, onEvent, state, subtaskId, automatic), state.modelPreference);
+    const result = await this.executeSelectionResult(routeId, selection, prompt, snapshot, signal, onEvent, state, subtaskId, required);
     if (subtaskId === null || subtaskId === "draft" || subtaskId === "revision") state.worker = result.selection;
     return result.value;
+  }
+
+  private async executeSelectionResult(
+    routeId: string, selection: ModelSelection, prompt: string, snapshot: RegistrySnapshot,
+    signal: AbortSignal, onEvent: RouteEventHandler, state: ExecutionState, subtaskId: string | null,
+    required: Capability[],
+  ): Promise<{ value: string; selection: ModelSelection }> {
+    return this.#freeFailover.run(selection, snapshot, required, estimateTokens(prompt), signal, state, subtaskId ?? "worker", (candidate, automatic) => this.executeSelectionOnce(routeId, candidate, prompt, snapshot, signal, onEvent, state, subtaskId, automatic), state.modelPreference);
   }
 
   private async executeSelectionOnce(

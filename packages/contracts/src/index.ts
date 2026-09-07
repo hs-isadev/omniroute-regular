@@ -184,6 +184,14 @@ export interface AttributionRecord {
   hostModelAuthoritative: boolean;
   orchestrator: { providerId: string; modelId: string; reasoningEffort: ReasoningEffort };
   worker: ModelSelection;
+  parallelWorkers?: Array<{
+    subtaskId: string;
+    role: string;
+    providerId: string;
+    modelId: string;
+    reasoningEffort: ReasoningEffort;
+    outcome: "completed" | "failed" | "cancelled";
+  }>;
   reviewers: Array<{ providerId: string; modelId: string; reasoningEffort: ReasoningEffort }>;
   fallbacksAttempted: Array<{ providerId: string; modelId: string; outcome: string }>;
   taskClass: TaskClass;
@@ -519,8 +527,12 @@ export function newRouteId(now = Date.now()): string {
 
 export function attributionBadge(record: AttributionRecord): string {
   const hostNote = record.hostModelAuthoritative && record.hostModel ? ` · host: ${record.hostModel}` : "";
+  const parallel = record.parallelWorkers?.length
+    ? [`parallel workers: ${record.parallelWorkers.map((worker) => `${worker.role}=${worker.providerId}/${worker.modelId} (${worker.outcome})`).join(", ")}`]
+    : [];
   return [
     `OmniRoute · orchestrator: ${record.orchestrator.providerId}/${record.orchestrator.modelId} (${record.orchestrator.reasoningEffort})`,
+    ...parallel,
     `worker: ${record.worker.providerId}/${record.worker.modelId} (${record.worker.reasoningEffort}) · task: ${record.taskClass} · route: ${record.routeId}${hostNote}`,
   ].join("\n");
 }
