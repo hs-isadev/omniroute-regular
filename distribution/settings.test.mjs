@@ -16,6 +16,7 @@ test('regular policy is free-only, isolated and rejects external configuration',
   assert.equal(config.daemon.port,47839); assert.equal(config.budgets.monthlyUsd,0);
   assert.equal(config.providers.find(x=>x.id==='openrouter').baseUrl,'https://openrouter.ai/api/');
   assert.deepEqual(config.providers.find(x=>x.id==='openrouter').freeModelOrder,['openrouter/free']);
+  assert.deepEqual(config.routing.directProviderOrder.slice(0,6),['claude-consumer','zai-consumer','qwen-consumer','kimi-consumer','deepseek-consumer','perplexity-consumer']);
   assert.ok(config.providers.every(x=>!x.enabled));
 });
 test('consent and required key validation fail closed',async()=>{

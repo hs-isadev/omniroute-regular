@@ -20,7 +20,7 @@ export function regularConfig() {
   const existing = structuredClone(DEFAULT_CONFIG);
   existing.routing.defaultMode = 'regular'; existing.routing.freeOnly = true;
   existing.routing.orchestratorProviderId = 'openrouter'; existing.routing.orchestratorModelId = 'openrouter/free';
-  existing.routing.directProviderOrder = ['groq','cerebras','sambanova','gemini','mistral','cohere','cloudflare','huggingface','zai','kilo','nvidia','vercel','opencode-zen','openrouter'];
+  existing.routing.directProviderOrder = ['claude-consumer','zai-consumer','qwen-consumer','kimi-consumer','deepseek-consumer','perplexity-consumer','groq','cerebras','sambanova','gemini','mistral','cohere','cloudflare','huggingface','zai','kilo','nvidia','vercel','opencode-zen','openrouter'];
   existing.daemon.port = 47839; existing.daemon.allowedOrigins = ['http://127.0.0.1:47839'];
   existing.reliability.retryLimit=0;
   for (const provider of existing.providers) {

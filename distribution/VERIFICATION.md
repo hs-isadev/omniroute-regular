@@ -14,6 +14,7 @@ Verification date: 2026-09-05. This file records commands actually run against t
 - API-key provider selection: PASS; setup accepts all supported free provider credentials in one submission, and Cloudflare's token/account pair remains one provider record.
 - `npm audit --omit=dev`: PASS, 0 production vulnerabilities.
 - Shared model registry/routing ladder: PASS in source tests; Claude, Z.AI, Qwen, Kimi, DeepSeek, and Perplexity browser consumers are present and ordered before API/local fallbacks after setup.
+- Browser routing priority: PASS; a Regular key configuration preserves the six browser consumers ahead of Groq and other API providers, while context, output, capability, and health filters still prevent ineligible browser dispatch.
 - Startup migration: PASS in source tests; setup writes one shared per-user startup entry and removes only the six exact legacy per-provider entries.
 - Browser launch: PASS locally with Chrome using one profile, one loopback CDP endpoint, and six tabs. Opera GX auto-detection found the installed executable but did not expose CDP while an existing Opera process tree was running; see Known limitations.
 
