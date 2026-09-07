@@ -1,9 +1,11 @@
-# OmniRoute Private 0.6.0 — BYOK + six shared browser consumers
+# OmniRoute Private 0.6.1 — bounded worker swarms + six shared browser consumers
 
-The current release is `OmniRoute Private 0.6.0`. It adds one shared,
-isolated Chromium-family browser session for Claude, Z.AI, Qwen, Kimi,
-DeepSeek, and Perplexity, alongside the existing API-key and host integrations.
-See the complete release guide in [`release/OmniRoute-Private-0.6.0-private.1/README.md`](release/OmniRoute-Private-0.6.0-private.1/README.md).
+The current release is `OmniRoute Private 0.6.1`. It adds bounded parallel API
+workers for complex coding and high-risk requests, followed by one attributed
+final synthesis. Casual and easy repetitive work stays single-worker. The shared,
+isolated Chromium-family browser session still supports Claude, Z.AI, Qwen, Kimi,
+DeepSeek, and Perplexity alongside the API-key and host integrations.
+See the complete release guide in [`release/OmniRoute-Private-0.6.1-private.1/README.md`](release/OmniRoute-Private-0.6.1-private.1/README.md).
 
 ## Current release setup
 

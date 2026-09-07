@@ -1,4 +1,4 @@
-# OmniRoute Private 0.6.0 — BYOK + six shared browser consumers
+# OmniRoute Private 0.6.1 — bounded worker swarms + six shared browser consumers
 
 One download for Windows 10/11 x64 and Linux x64 desktops. No Codex subscription
 needed. No API keys, accounts, vaults or personal projects are included.
@@ -27,7 +27,9 @@ require approval. Antigravity may show its own first-run onboarding.
 
 - **OmniRoute OpenCode:** OmniRoute is the main model. Small questions prefer
   lightweight workers; coding/complex requests prefer stronger eligible workers.
-  Same-provider free fallbacks are tried before moving to another provider.
+  Complex coding and high-risk requests can use two or three substantive API
+  workers in parallel, capped by `maxParallelWorkers`, followed by one final
+  synthesis. Same-provider free fallbacks are tried before moving to another provider.
 - **OmniRoute Antigravity, Codex, and Claude Code:** each host's own model is the
   main agent; OmniRoute provides MCP workers. Rules encourage delegation but
   cannot guarantee every host call uses a worker. Each host's own quota applies.
@@ -77,6 +79,13 @@ terms still apply. Browser credentials remain only in the one dedicated local
 profile created after installation and are never included in the package. Setup
 does not copy or merge cookies, login databases, passwords, OAuth tokens, local
 storage, or any other authentication material from another profile.
+
+Browser consumers remain single-call routes. Swarm fan-out uses healthy eligible
+API workers only and is skipped for casual/light work or when the original input,
+bounded worker drafts, and requested final output would exceed the synthesis
+model's context window. Groq can participate when healthy, but provider rotation
+and failover may select other configured free providers. Every parallel worker
+outcome and the final synthesis worker are recorded in route attribution.
 
 Each browser consumer exposes `none` and `high` reasoning, and normal browser-consumer
 routing defaults to `high`. The adapter activates the site's visible Thinking, Extended Thinking,
