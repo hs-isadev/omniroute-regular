@@ -96,6 +96,107 @@ test("regular routing rotates healthy API providers across independent API-only 
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("regular routing keeps casual and easy repetitive coding requests on one worker", async () => {
+  const root = await mkdtemp(join(tmpdir(), "omniroute-router-single-worker-"));
+  try {
+    const groq = new MockProvider("groq");
+    groq.responses.push({ text: "casual answer" }, { text: "generated helpers" });
+    const config = freeConfigFixture();
+    for (const provider of config.providers) provider.enabled = provider.id === "groq";
+    config.routing.directProviderOrder = ["groq"];
+    const groqModel = modelFixture({ providerId: "groq", modelId: "groq/free", pricing: { inputPerMillionUsd: 0, outputPerMillionUsd: 0, cachedInputPerMillionUsd: 0, updatedAt: null } });
+    const router = new OmniRouter({ config, providers: new Map([[groq.id, groq]]), registry: async () => registryFixture([groqModel]), audit: new AuditStore(join(root, "routes.jsonl")), logger: new JsonlLogger(join(root, "log.jsonl")) });
+
+    const casual = await router.route({ ...request("What is a closure?"), routingMode: "regular" }, AbortSignal.timeout(5000));
+    const repetitive = await router.route({ ...request("Write five repetitive TypeScript getter functions."), routingMode: "regular", requestedCapabilities: ["coding"] }, AbortSignal.timeout(5000));
+
+    assert.equal(casual.plan.executionMode, "direct");
+    assert.equal(repetitive.plan.executionMode, "direct");
+    assert.equal(casual.attribution.parallelWorkers, undefined);
+    assert.equal(repetitive.attribution.parallelWorkers, undefined);
+    assert.equal(groq.calls.length, 2, "easy work is executed directly by one worker per request");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("regular routing fans complex coding work out to a bounded API swarm and synthesizes once", async () => {
+  const root = await mkdtemp(join(tmpdir(), "omniroute-router-swarm-"));
+  try {
+    const groq = new MockProvider("groq"), gemini = new MockProvider("gemini");
+    groq.responses.push({ text: "implementation draft" }, { text: "synthesized answer" });
+    gemini.responses.push({ text: "test and edge-case draft" });
+    const config = freeConfigFixture();
+    for (const provider of config.providers) provider.enabled = ["groq", "gemini"].includes(provider.id);
+    config.routing.directProviderOrder = ["groq", "gemini"];
+    config.routing.maxParallelWorkers = 2;
+    const free = { inputPerMillionUsd: 0, outputPerMillionUsd: 0, cachedInputPerMillionUsd: 0, updatedAt: null };
+    const groqModel = modelFixture({ providerId: "groq", modelId: "groq/free", pricing: free });
+    const geminiModel = modelFixture({ providerId: "gemini", modelId: "gemini/free", pricing: free });
+    const audit = new AuditStore(join(root, "routes.jsonl"));
+    const router = new OmniRouter({ config, providers: new Map([[groq.id, groq], [gemini.id, gemini]]), registry: async () => registryFixture([groqModel, geminiModel]), audit, logger: new JsonlLogger(join(root, "log.jsonl")) });
+
+    const result = await router.route({ ...request("Implement a production-quality multi-file TypeScript refactor across the repository, including tests and a regression review."), routingMode: "regular", requestedCapabilities: ["coding"] }, AbortSignal.timeout(5000));
+
+    assert.equal(result.plan.executionMode, "decomposed");
+    assert.equal(result.plan.subtasks.length, 2);
+    assert.equal(result.answer, "synthesized answer");
+    assert.equal(groq.calls.length + gemini.calls.length, 3, "two substantive workers plus one final synthesis");
+    assert.deepEqual(result.attribution.parallelWorkers?.map((worker) => worker.role), ["implementation", "tests-review"]);
+    assert.ok(result.attribution.parallelWorkers?.every((worker) => worker.outcome === "completed"));
+    assert.equal(result.attribution.worker.providerId, "groq", "the final synthesis worker remains the primary attribution");
+    assert.deepEqual((await audit.recent(1))[0]?.parallelWorkers, result.attribution.parallelWorkers);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("regular routing skips swarm fan-out when synthesis context would overflow", async () => {
+  const root = await mkdtemp(join(tmpdir(), "omniroute-router-swarm-context-"));
+  try {
+    const groq = new MockProvider("groq");
+    groq.responses.push({ text: "single safe answer" });
+    const config = freeConfigFixture();
+    for (const provider of config.providers) provider.enabled = provider.id === "groq";
+    config.routing.directProviderOrder = ["groq"];
+    config.routing.maxParallelWorkers = 3;
+    const groqModel = modelFixture({ providerId: "groq", modelId: "groq/free", contextWindow: 1_600, maxOutputTokens: 1_000, pricing: { inputPerMillionUsd: 0, outputPerMillionUsd: 0, cachedInputPerMillionUsd: 0, updatedAt: null } });
+    const router = new OmniRouter({ config, providers: new Map([[groq.id, groq]]), registry: async () => registryFixture([groqModel]), audit: new AuditStore(join(root, "routes.jsonl")), logger: new JsonlLogger(join(root, "log.jsonl")) });
+
+    const result = await router.route({ ...request(`Implement a production-quality multi-file TypeScript refactor across the repository. ${"x".repeat(1_000)}`), routingMode: "regular", requestedCapabilities: ["coding"], maxOutputTokens: 500 }, AbortSignal.timeout(5000));
+
+    assert.equal(result.plan.executionMode, "direct");
+    assert.equal(result.attribution.parallelWorkers, undefined);
+    assert.equal(groq.calls.length, 1);
+    assert.ok(result.attribution.policyDecisions.some((decision) => decision.includes("swarm skipped: synthesis context")));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("regular swarm records rate-limit fallback outcomes and completes with another healthy API provider", async () => {
+  const root = await mkdtemp(join(tmpdir(), "omniroute-router-swarm-fallback-"));
+  class RateLimitedGroq extends MockProvider {
+    override classifyError(error: unknown) {
+      return { category: "rate_limit" as const, message: error instanceof Error ? error.message : String(error), retryable: true, retryAfterMs: 60_000, providerStatus: 429 };
+    }
+  }
+  try {
+    const groq = new RateLimitedGroq("groq"), gemini = new MockProvider("gemini");
+    groq.responses.push({ text: "", error: new Error("quota exhausted") });
+    gemini.responses.push({ text: "worker one" }, { text: "worker two" }, { text: "fallback synthesis" });
+    const config = freeConfigFixture();
+    for (const provider of config.providers) provider.enabled = ["groq", "gemini"].includes(provider.id);
+    config.routing.directProviderOrder = ["groq", "gemini"];
+    config.routing.maxParallelWorkers = 2;
+    const free = { inputPerMillionUsd: 0, outputPerMillionUsd: 0, cachedInputPerMillionUsd: 0, updatedAt: null };
+    const groqModel = modelFixture({ providerId: "groq", modelId: "groq/free", pricing: free });
+    const geminiModel = modelFixture({ providerId: "gemini", modelId: "gemini/free", pricing: free });
+    const router = new OmniRouter({ config, providers: new Map([[groq.id, groq], [gemini.id, gemini]]), registry: async () => registryFixture([groqModel, geminiModel]), audit: new AuditStore(join(root, "routes.jsonl")), logger: new JsonlLogger(join(root, "log.jsonl")) });
+
+    const result = await router.route({ ...request("Implement a production-quality multi-file TypeScript refactor across the repository, including tests and regression review."), routingMode: "regular", requestedCapabilities: ["coding"] }, AbortSignal.timeout(5000));
+
+    assert.equal(result.answer, "fallback synthesis");
+    assert.equal(result.attribution.worker.providerId, "gemini");
+    assert.equal(result.attribution.parallelWorkers?.length, 2);
+    assert.ok(result.attribution.fallbacksAttempted.some((attempt) => attempt.providerId === "groq" && attempt.outcome.includes("rate_limit")));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("regular routing prefers Claude consumer for small work but excludes it from medium work", async () => {
   const run = async (prompt: string) => {
     const root = await mkdtemp(join(tmpdir(), "omniroute-claude-scope-"));
