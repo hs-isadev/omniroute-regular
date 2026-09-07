@@ -5,7 +5,7 @@ Verification date: 2026-09-05. This file records commands actually run against t
 ## Source and distribution
 
 - `npm run build`: PASS.
-- `npm test`: PASS, 162/162 TypeScript tests.
+- `npm test`: PASS, 163/163 TypeScript tests.
 - `npm run test:regular`: PASS, 111 passed, 0 failed, 2 platform-specific skips, 113 total.
 - Focused shared-browser tests: PASS, 9/9 after the final launcher/startup/probe/prompt-timing changes.
 - Browser high-thinking dispatch: PASS in source tests; `high` is forwarded to all six adapters, which activate a visible provider thinking control or fail retryably.
@@ -15,6 +15,7 @@ Verification date: 2026-09-05. This file records commands actually run against t
 - `npm audit --omit=dev`: PASS, 0 production vulnerabilities.
 - Shared model registry/routing ladder: PASS in source tests; Claude, Z.AI, Qwen, Kimi, DeepSeek, and Perplexity browser consumers are present and ordered before API/local fallbacks after setup.
 - Browser routing priority: PASS; a Regular key configuration preserves the six browser consumers ahead of Groq and other API providers, while context, output, capability, and health filters still prevent ineligible browser dispatch.
+- API routing rotation: PASS; successive healthy API-only Regular-mode requests rotate their initial provider (Groq then Gemini in the regression fixture), while same-request retries remain provider-first.
 - Startup migration: PASS in source tests; setup writes one shared per-user startup entry and removes only the six exact legacy per-provider entries.
 - Browser launch: PASS locally with Chrome using one profile, one loopback CDP endpoint, and six tabs. Opera GX auto-detection found the installed executable but did not expose CDP while an existing Opera process tree was running; see Known limitations.
 

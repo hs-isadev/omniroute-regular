@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { OmniConfig } from "@omniroute/config";
-import { FreeModelFailover, type ModelPreference } from "./free-failover.js";
+import { FreeModelFailover, supports, type ModelPreference } from "./free-failover.js";
 import {
   attributionBadge,
   CAPABILITIES,
@@ -149,6 +149,7 @@ export class OmniRouter {
   readonly #freeFailover: FreeModelFailover;
   #reservedProjectedUsd = 0;
   #budgetQueue: Promise<void> = Promise.resolve();
+  #apiProviderCursor = 0;
 
   constructor(dependencies: RouterDependencies) {
     this.#config = dependencies.config;
@@ -209,6 +210,7 @@ export class OmniRouter {
       await onEvent({ type: "route.planned", routeId, plan, at: new Date().toISOString() });
       state.worker = plan.primary;
       const answer = await this.executePlan(routeId, plan, request, snapshot, signal, onEvent, state);
+      if (mode === "regular") this.advanceApiProviderCursor(state.worker.providerId);
       const endedAt = new Date();
       const attribution: AttributionRecord = {
         routeId,
@@ -253,7 +255,8 @@ export class OmniRouter {
 
   private selectDirectWorker(snapshot: RegistrySnapshot, signals: TaskSignals, request: RouteRequest, preference: ModelPreference): ModelSelection {
     if (this.#config.routing.freeOnly && this.#config.routing.freeModelFailoverEnabled) {
-      const candidates = this.#freeFailover.candidates({ providerId: this.#config.routing.directProviderOrder[0] ?? "", modelId: "", reasoningEffort: preference === "lightweight" ? "none" : "low", maxOutputTokens: request.maxOutputTokens ?? (preference === "lightweight" ? Math.min(2048, this.#config.routing.maxOutputTokensPerRequest) : this.#config.routing.maxOutputTokensPerRequest) }, snapshot, signals.requiredCapabilities, signals.estimatedInputTokens, preference);
+      const maxOutputTokens = request.maxOutputTokens ?? (preference === "lightweight" ? Math.min(2048, this.#config.routing.maxOutputTokensPerRequest) : this.#config.routing.maxOutputTokensPerRequest);
+      const candidates = this.#freeFailover.candidates({ providerId: this.nextDirectProviderId(snapshot, signals.requiredCapabilities, signals.estimatedInputTokens, maxOutputTokens), modelId: "", reasoningEffort: preference === "lightweight" ? "none" : "low", maxOutputTokens }, snapshot, signals.requiredCapabilities, signals.estimatedInputTokens, preference);
       if(request.sourceClient==='antigravity-mcp') {
         const tier=(s:ModelSelection)=>snapshot.models.find(m=>m.providerId===s.providerId&&m.modelId===s.modelId)?.intelligenceTier;
         candidates.sort((a,b)=>preference==='lightweight' ? (tier(a)??999)-(tier(b)??999) : (tier(b)??0)-(tier(a)??0));
@@ -280,6 +283,28 @@ export class OmniRouter {
     const maximum = Math.min(request.maxOutputTokens ?? (preference === "lightweight" ? 2048 : this.#config.routing.maxOutputTokensPerRequest), selected.maxOutputTokens ?? this.#config.routing.maxOutputTokensPerRequest, this.#config.routing.maxOutputTokensPerRequest);
     const effort: ReasoningEffort = selected.providerId.endsWith("-consumer") && selected.reasoningEfforts.includes("high") ? "high" : preference === "lightweight" && selected.reasoningEfforts.includes("none") ? "none" : selected.reasoningEfforts.includes("low") ? "low" : selected.reasoningEfforts.includes("none") ? "none" : selected.reasoningEfforts[0] ?? "none";
     return { providerId: selected.providerId, modelId: selected.modelId, reasoningEffort: effort, maxOutputTokens: maximum };
+  }
+
+  private nextDirectProviderId(snapshot: RegistrySnapshot, required: Capability[], inputTokens: number, requestedOutputTokens: number): string {
+    const configured = this.#config.routing.directProviderOrder;
+    const eligible = (providerId: string): boolean => {
+      const settings = this.#config.providers.find(provider => provider.id === providerId);
+      return !!settings?.enabled && settings.freeTierOnly && this.#providers.has(providerId) && snapshot.models.some(model =>
+        model.providerId === providerId && model.enabled && model.allowed && model.health.status === "healthy" &&
+        model.pricing.inputPerMillionUsd === 0 && model.pricing.outputPerMillionUsd === 0 &&
+        model.contextWindow !== null && model.maxOutputTokens !== null && model.maxOutputTokens > 0 && model.reasoningEfforts.length > 0 &&
+        required.every(capability => supports(model, capability)) &&
+        inputTokens + Math.min(requestedOutputTokens, model.maxOutputTokens, this.#config.routing.maxOutputTokensPerRequest) <= model.contextWindow,
+      );
+    };
+    const browser = configured.find(providerId => providerId.endsWith("-consumer") && eligible(providerId));
+    if (browser) return browser;
+    const apis = configured.filter(providerId => !providerId.endsWith("-consumer") && eligible(providerId));
+    return apis[this.#apiProviderCursor % apis.length] ?? configured[0] ?? "";
+  }
+
+  private advanceApiProviderCursor(providerId: string): void {
+    if (!providerId.endsWith("-consumer") && this.#config.routing.directProviderOrder.includes(providerId)) this.#apiProviderCursor = (this.#apiProviderCursor + 1) % Number.MAX_SAFE_INTEGER;
   }
 
   private directPlan(primary: ModelSelection, signals: TaskSignals): RoutingPlan {

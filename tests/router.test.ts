@@ -77,6 +77,25 @@ test("regular mode bypasses orchestration and deterministically selects the pref
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("regular routing rotates healthy API providers across independent API-only requests", async () => {
+  const root = await mkdtemp(join(tmpdir(), "omniroute-router-api-rotation-"));
+  try {
+    const groq = new MockProvider("groq"), gemini = new MockProvider("gemini");
+    groq.responses.push({ text: "groq answer" }); gemini.responses.push({ text: "gemini answer" });
+    const config = freeConfigFixture();
+    for (const provider of config.providers) provider.enabled = ["groq", "gemini"].includes(provider.id);
+    config.routing.directProviderOrder = ["groq", "gemini"];
+    const groqModel = modelFixture({ providerId: "groq", modelId: "groq/free", pricing: { inputPerMillionUsd: 0, outputPerMillionUsd: 0, cachedInputPerMillionUsd: 0, updatedAt: null } });
+    const geminiModel = modelFixture({ providerId: "gemini", modelId: "gemini/free", pricing: { inputPerMillionUsd: 0, outputPerMillionUsd: 0, cachedInputPerMillionUsd: 0, updatedAt: null } });
+    const router = new OmniRouter({ config, providers: new Map([[groq.id, groq], [gemini.id, gemini]]), registry: async () => registryFixture([groqModel, geminiModel]), audit: new AuditStore(join(root, "routes.jsonl")), logger: new JsonlLogger(join(root, "log.jsonl")) });
+    const first = await router.route({ ...request(), routingMode: "regular" }, AbortSignal.timeout(5000));
+    const second = await router.route({ ...request(), routingMode: "regular" }, AbortSignal.timeout(5000));
+    assert.equal(first.attribution.worker.providerId, "groq");
+    assert.equal(second.attribution.worker.providerId, "gemini");
+    assert.equal(groq.calls.length, 1); assert.equal(gemini.calls.length, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("regular routing prefers Claude consumer for small work but excludes it from medium work", async () => {
   const run = async (prompt: string) => {
     const root = await mkdtemp(join(tmpdir(), "omniroute-claude-scope-"));
