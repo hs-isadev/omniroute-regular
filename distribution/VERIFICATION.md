@@ -1,12 +1,13 @@
-# Verification — OmniRoute Private 0.6.1-private.1
+# Verification — OmniRoute Private 0.6.2-private.1
 
-Verification date: 2026-09-08. This file records commands actually run against the source tree and final package. It does not claim a live provider succeeded unless listed below.
+Verification date: 2026-09-09. This file records commands actually run against the source tree and final package. It does not claim a live provider succeeded unless listed below.
 
 ## Source and distribution
 
 - `npm run build`: PASS.
 - `npm test`: PASS, 169/169 TypeScript tests.
-- `npm run test:regular`: PASS, 111 passed, 0 failed, 2 platform-specific skips, 113 total.
+- `npm run test:regular`: PASS, 117 passed, 0 failed, 2 platform-specific skips, 119 total.
+- Focused consumer usage-guard coverage: PASS, 93.08% lines, 91.80% branches, and 82.98% functions.
 - Focused shared-browser tests: PASS, 9/9 after the final launcher/startup/probe/prompt-timing changes.
 - Browser high-thinking dispatch: PASS in source tests; `high` is forwarded to all six adapters, which activate a visible provider thinking control or fail retryably.
 - Browser prompt timing: PASS; all six consumers focus the prompt input, wait a fixed 150 ms, then fill it before submitting.
@@ -23,8 +24,8 @@ Verification date: 2026-09-08. This file records commands actually run against t
 
 ## Final package checks
 
-- Windows manifest: PASS, 1,522 payload files.
-- Linux manifest: PASS, 1,519 payload files.
+- Windows manifest: PASS, 1,523 payload files.
+- Linux manifest: PASS, 1,520 payload files.
 - Windows install-only smoke: PASS twice and idempotent (`changed: true`, then `false`); bundled Node 22.23.2 and OpenCode 1.18.25 executed.
 - Ubuntu WSL install-only smoke: PASS twice and idempotent (`changed: true`, then `false`); bundled Node 22.23.2 and OpenCode 1.18.25 executed.
 - Secret-value scan: PASS, 3,054 files checked, zero matches, and no secret values printed.

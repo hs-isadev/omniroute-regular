@@ -1,6 +1,6 @@
-# OmniRoute Private Family Package
+# OmniRoute Shareable Family Package
 
-This package is for private, local/family use only. Do not publish or upload it.
+This package is intended for personal and family use. It may be shared as an intact verified archive; every recipient must use their own accounts and provider keys.
 
 Run `Install-Windows.cmd` on Windows or `sh Install-Linux.sh` on Linux. Setup keeps the existing BYOK and developer-host features, then opens one dedicated Opera/Chromium profile with sign-in tabs for Claude, Z.AI, Qwen, Kimi, DeepSeek, and Perplexity. The shared window minimizes after all six sites are ready and restarts in the background at user login.
 

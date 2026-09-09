@@ -1,4 +1,4 @@
-# OmniRoute Private 0.6.1 — bounded worker swarms + six shared browser consumers
+# OmniRoute Private 0.6.2 — guarded browser consumers + bounded worker swarms
 
 One download for Windows 10/11 x64 and Linux x64 desktops. No Codex subscription
 needed. No API keys, accounts, vaults or personal projects are included.
@@ -94,6 +94,11 @@ on the signed-in account and selected web model; if the control is unavailable,
 the adapter reports a retryable failure and routing continues to the next provider.
 Before inserting a browser prompt, each adapter focuses the input and waits 150 ms.
 This small deterministic UI-settle delay is not represented as stealth or bot-evasion.
+Browser-consumer requests are serialized, spaced by at least 20 seconds plus up
+to 5 seconds of jitter, and limited to 30 starts per hour per adapter process.
+Rate-limit, verification, unusual-traffic, and access-block notices stop automated
+submission and open an escalating cooldown. These safeguards reduce burst risk;
+they cannot guarantee service permission or prevent an account restriction.
 
 ## Failed provider? You can still finish
 

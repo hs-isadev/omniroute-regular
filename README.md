@@ -1,11 +1,13 @@
-# OmniRoute Private 0.6.1 — bounded worker swarms + six shared browser consumers
+# OmniRoute Private 0.6.2 — guarded browser consumers + bounded worker swarms
 
-The current release is `OmniRoute Private 0.6.1`. It adds bounded parallel API
+The current release is `OmniRoute Private 0.6.2`. It adds conservative request
+spacing, rolling budgets, and blocking-notice cooldowns for browser consumers,
+alongside bounded parallel API
 workers for complex coding and high-risk requests, followed by one attributed
 final synthesis. Casual and easy repetitive work stays single-worker. The shared,
 isolated Chromium-family browser session still supports Claude, Z.AI, Qwen, Kimi,
 DeepSeek, and Perplexity alongside the API-key and host integrations.
-See the complete release guide in [`release/OmniRoute-Private-0.6.1-private.1/README.md`](release/OmniRoute-Private-0.6.1-private.1/README.md).
+See the complete release guide and downloads on the [`v0.6.2-private.1` GitHub Release](https://github.com/hs-isadev/omniroute-regular/releases/tag/v0.6.2-private.1).
 
 ## Current release setup
 

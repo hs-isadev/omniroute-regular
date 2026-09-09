@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-bundle="$repo/release/OmniRoute-Private-0.6.1-private.1/Linux"
+bundle="$repo/release/OmniRoute-Private-0.6.2-private.1/Linux"
 stage=$(mktemp -d /tmp/omniroute-private-linux-XXXXXX)
 sh "$bundle/Setup.sh" --install-root "$stage/install" --install-only
 sh "$bundle/Setup.sh" --install-root "$stage/install" --install-only
