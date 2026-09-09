@@ -52,6 +52,30 @@ test('consumer usage guard enforces a rolling request budget', async () => {
   assert.deepEqual(starts, [5_000, 5_000, 15_000]);
 });
 
+test('diagnostic calls share the queue without consuming request pacing', async () => {
+  let now = 8_000;
+  const starts = [];
+  const guard = new ConsumerUsageGuard({
+    minIntervalMs: 1_000,
+    jitterMs: 0,
+    maxRequests: 100,
+    windowMs: 60_000,
+    now: () => now,
+    sleep: async milliseconds => { now += milliseconds; },
+    random: () => 0,
+  });
+
+  await guard.run(async () => { starts.push(['query', now]); });
+  await guard.run(async () => { starts.push(['diagnostic', now]); }, { metered: false });
+  await guard.run(async () => { starts.push(['query', now]); });
+
+  assert.deepEqual(starts, [
+    ['query', 8_000],
+    ['diagnostic', 8_000],
+    ['query', 9_000],
+  ]);
+});
+
 test('consumer usage guard opens a cooldown after a verification or throttle signal', async () => {
   let now = 20_000;
   let calls = 0;
