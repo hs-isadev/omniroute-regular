@@ -1,5 +1,6 @@
 import {chromium} from 'playwright';
 import {focusPauseAndFill} from '../../browser-consumer-adapter/src/prompt-input.mjs';
+import {assertNoConsumerChallenge,createConsumerUsageGuard} from '../../browser-consumer-adapter/src/usage-guard.mjs';
 
 const endpointIndex=process.argv.indexOf('--endpoint');
 const endpoint=endpointIndex>=0?process.argv[endpointIndex+1]:process.env.CLAUDE_CDP_ENDPOINT||'http://127.0.0.1:9222';
@@ -8,6 +9,7 @@ const input='[data-testid="chat-input"][contenteditable="true"],.ProseMirror[con
 const responses='[data-testid="assistant-message"],[data-testid*="assistant"],[data-is-streaming],.font-claude-response';
 const result=(value,isError=false)=>({content:[{type:'text',text:JSON.stringify(value)}],...(isError?{isError:true}:{})});
 let browser,page;
+const usageGuard=createConsumerUsageGuard();
 
 async function connect(){
   if(!browser||!browser.isConnected())browser=await chromium.connectOverCDP(endpoint);
@@ -38,16 +40,19 @@ async function stable(target){
   return last;
 }
 async function call(name,args={}){
+  if(name!=='claude_query'&&name!=='test_connection')return result({error:`Unknown tool: ${name}`},true);
+  const prompt=typeof args.prompt==='string'?args.prompt.trim():'';
+  if(name==='claude_query'&&!prompt)return result({error:'prompt must be a non-empty string'},true);
   try{
-    const target=await connect();await ready(target);
-    if(name==='test_connection')return result({status:'ready',browser:'dedicated-chromium-cdp',endpoint});
-    if(name!=='claude_query')return result({error:`Unknown tool: ${name}`},true);
-    const prompt=typeof args.prompt==='string'?args.prompt.trim():'';if(!prompt)return result({error:'prompt must be a non-empty string'},true);
-    if(args.highThinking===true)await enableHighThinking(target);
-    await focusPauseAndFill(target,input,prompt);await target.keyboard.press('Enter');
-    await target.waitForSelector(responses,{state:'attached',timeout:60000});
-    const output=await stable(target);if(!output)throw new Error('Claude returned no readable response.');
-    return result({output,usage:{model:'claude-web-consumer',estimatedTokens:Math.ceil((prompt.length+output.length)/4)},metadata:{transport:'browser-cdp',highThinking:args.highThinking===true,timestamp:new Date().toISOString()}});
+    if(name==='test_connection')return await usageGuard.run(async()=>{const target=await connect();await ready(target);await assertNoConsumerChallenge(target,'Claude');return result({status:'ready',browser:'dedicated-chromium-cdp',endpoint});},{metered:false});
+    return await usageGuard.run(async()=>{
+      const target=await connect();await ready(target);await assertNoConsumerChallenge(target,'Claude');
+      if(args.highThinking===true)await enableHighThinking(target);
+      await focusPauseAndFill(target,input,prompt);await target.keyboard.press('Enter');
+      await target.waitForSelector(responses,{state:'attached',timeout:60000});
+      const output=await stable(target);if(!output)throw new Error('Claude returned no readable response.');
+      return result({output,usage:{model:'claude-web-consumer',estimatedTokens:Math.ceil((prompt.length+output.length)/4)},metadata:{transport:'browser-cdp',highThinking:args.highThinking===true,timestamp:new Date().toISOString()}});
+    });
   }catch(error){return result({error:error.message},true);}finally{await closePage();}
 }
 function send(id,payload){process.stdout.write(`${JSON.stringify({jsonrpc:'2.0',id,...payload})}\n`);}

@@ -1,6 +1,7 @@
 import {chromium} from 'playwright';
 import {ZAI_ASSISTANT_RESPONSE_SELECTOR,ZAI_FLASH_SWITCH_PATTERN,ZAI_PEAK_HOUR_PATTERN,cleanAssistantParts,decidePeakHourAction} from './dom.mjs';
 import {focusPauseAndFill} from '../../browser-consumer-adapter/src/prompt-input.mjs';
+import {assertNoConsumerChallenge,createConsumerUsageGuard} from '../../browser-consumer-adapter/src/usage-guard.mjs';
 
 const endpointIndex=process.argv.indexOf('--endpoint');
 const endpoint=endpointIndex>=0?process.argv[endpointIndex+1]:process.env.ZAI_CDP_ENDPOINT||'http://127.0.0.1:9222';
@@ -20,6 +21,7 @@ const stopButton='button[aria-label*="Stop" i],[data-testid="stop-button"],butto
 const userMenu='#nux-user-menu-btn,button[aria-label="Open User Menu"]';
 const result=(value,isError=false)=>({content:[{type:'text',text:JSON.stringify(value)}],...(isError?{isError:true}:{})});
 let browser,page;
+const usageGuard=createConsumerUsageGuard();
 
 async function connect(){
   if(!browser||!browser.isConnected())browser=await chromium.connectOverCDP(endpoint);
@@ -97,15 +99,18 @@ async function submit(target,prompt){
   else await target.keyboard.press('Enter');
 }
 async function call(name,args={}){
+  if(name!=='zai_query'&&name!=='test_connection')return result({error:`Unknown tool: ${name}`},true);
+  const prompt=typeof args.prompt==='string'?args.prompt.trim():'';
+  if(name==='zai_query'&&!prompt)return result({error:'prompt must be a non-empty string'},true);
   try{
-    const target=await connect();await ready(target);
-    if(name==='test_connection')return result({status:'ready',browser:'chromium-cdp',endpoint});
-    if(name!=='zai_query')return result({error:`Unknown tool: ${name}`},true);
-    const prompt=typeof args.prompt==='string'?args.prompt.trim():'';if(!prompt)return result({error:'prompt must be a non-empty string'},true);
-    if(args.highThinking===true)await enableHighThinking(target);
-    const before=await responseState(target);await submit(target,prompt);
-    const output=await stable(target,before);if(!output)throw new Error('Z.AI returned no readable response.');
-    return result({output,usage:{model:'glm-web-consumer',estimatedTokens:Math.ceil((prompt.length+output.length)/4)},metadata:{transport:'browser-cdp',highThinking:args.highThinking===true,timestamp:new Date().toISOString()}});
+    if(name==='test_connection')return await usageGuard.run(async()=>{const target=await connect();await ready(target);await assertNoConsumerChallenge(target,'Z.AI');return result({status:'ready',browser:'chromium-cdp',endpoint});},{metered:false});
+    return await usageGuard.run(async()=>{
+      const target=await connect();await ready(target);await assertNoConsumerChallenge(target,'Z.AI');
+      if(args.highThinking===true)await enableHighThinking(target);
+      const before=await responseState(target);await submit(target,prompt);
+      const output=await stable(target,before);if(!output)throw new Error('Z.AI returned no readable response.');
+      return result({output,usage:{model:'glm-web-consumer',estimatedTokens:Math.ceil((prompt.length+output.length)/4)},metadata:{transport:'browser-cdp',highThinking:args.highThinking===true,timestamp:new Date().toISOString()}});
+    });
   }catch(error){return result({error:error instanceof Error?error.message:String(error)},true);}finally{await closePage();}
 }
 function send(id,payload){process.stdout.write(`${JSON.stringify({jsonrpc:'2.0',id,...payload})}\n`);}
