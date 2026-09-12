@@ -15,7 +15,7 @@ const promptInput=await import('../packages/browser-consumer-adapter/src/prompt-
 
 const expected={
   qwen:{url:'https://chat.qwen.ai/',modelId:'qwen-web-consumer'},
-  kimi:{url:'https://www.kimi.ai/login',modelId:'kimi-web-consumer'},
+  kimi:{url:'https://www.kimi.ai/',modelId:'kimi-web-consumer'},
   deepseek:{url:'https://chat.deepseek.com/',modelId:'deepseek-web-consumer'},
   perplexity:{url:'https://www.perplexity.ai/',modelId:'perplexity-web-consumer'},
 };
@@ -25,7 +25,7 @@ test('private consumer registry shares one browser endpoint and profile',()=>{
   const session=runtime.getSharedSessionDefinition();
   assert.equal(session.port,47842);
   assert.equal(session.profileName,'browser-consumer-profile');
-  assert.deepEqual(session.urls,['https://claude.ai/new','https://chat.z.ai/','https://chat.qwen.ai/','https://www.kimi.ai/login','https://chat.deepseek.com/','https://www.perplexity.ai/']);
+  assert.deepEqual(session.urls,['https://claude.ai/new','https://chat.z.ai/','https://chat.qwen.ai/','https://www.kimi.ai/','https://chat.deepseek.com/','https://www.perplexity.ai/']);
   for(const [id,want] of Object.entries(expected)){
     const item=runtime.getConsumerDefinition(id);
     assert.equal(item.port,session.port);
@@ -65,6 +65,19 @@ test('auth detection uses URL and visible UI only, never browser storage',()=>{
   assert.equal(runtime.isLoginUrl(runtime.getConsumerDefinition('qwen'),'https://chat.qwen.ai/login?redirect=%2F'),true);
   assert.equal(runtime.isLoginUrl(runtime.getConsumerDefinition('perplexity'),'https://www.perplexity.ai/'),false);
   assert.doesNotMatch(String(runtime.waitForConsumerAuthentication),/cookies|localStorage|sessionStorage/i);
+});
+
+test('auth detection waits through transient signed-out controls during page startup',async()=>{
+  const definition=runtime.getConsumerDefinition('qwen');
+  let signedOutChecks=0;
+  const page={
+    url:()=>definition.url,
+    locator:selector=>({first:()=>({isVisible:async()=>selector===definition.inputSelector?true:signedOutChecks++===0})}),
+    waitForTimeout:async()=>{},
+  };
+  assert.equal(await runtime.waitForConsumerAuthentication(page,{definition,timeoutMs:50,pollMs:1}),true);
+  const adapter=await readFile(new URL('../packages/browser-consumer-adapter/src/adapter.mjs',import.meta.url),'utf8');
+  assert.match(adapter,/waitForConsumerAuthentication\(target/);
 });
 
 test('all browser consumers configure against one endpoint and install one Linux autostart',async()=>{

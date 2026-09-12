@@ -1,13 +1,15 @@
-# OmniRoute Private 0.6.2 — guarded browser consumers + bounded worker swarms
+# OmniRoute Private 0.6.3 — popup-tolerant browser startup
 
-The current release is `OmniRoute Private 0.6.2`. It adds conservative request
-spacing, rolling budgets, and blocking-notice cooldowns for browser consumers,
+The current release is `OmniRoute Private 0.6.3`. It waits through transient
+startup overlays before judging a browser consumer signed out and opens Kimi at
+its authenticated home route. It retains conservative request spacing, rolling
+budgets, and blocking-notice cooldowns for browser consumers,
 alongside bounded parallel API
 workers for complex coding and high-risk requests, followed by one attributed
 final synthesis. Casual and easy repetitive work stays single-worker. The shared,
 isolated Chromium-family browser session still supports Claude, Z.AI, Qwen, Kimi,
 DeepSeek, and Perplexity alongside the API-key and host integrations.
-See the complete release guide and downloads on the [`v0.6.2-private.1` GitHub Release](https://github.com/hs-isadev/omniroute-regular/releases/tag/v0.6.2-private.1).
+See the complete release guide and downloads on the [`v0.6.3-private.1` GitHub Release](https://github.com/hs-isadev/omniroute-regular/releases/tag/v0.6.3-private.1).
 
 ## Current release setup
 

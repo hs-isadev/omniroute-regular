@@ -3,7 +3,7 @@ import {win32} from 'node:path';
 
 const sharedInput='textarea,[contenteditable="true"][role="textbox"],[contenteditable="true"][data-lexical-editor="true"]';
 const signOutControls=(...labels)=>labels.flatMap(label=>[`button:has-text("${label}")`,`a:has-text("${label}")`,`[role="button"]:has-text("${label}")`]).join(',');
-const sharedSession={id:'shared',displayName:'OmniRoute browser consumers',port:47842,profileName:'browser-consumer-profile',urls:['https://claude.ai/new','https://chat.z.ai/','https://chat.qwen.ai/','https://www.kimi.ai/login','https://chat.deepseek.com/','https://www.perplexity.ai/']};
+const sharedSession={id:'shared',displayName:'OmniRoute browser consumers',port:47842,profileName:'browser-consumer-profile',urls:['https://claude.ai/new','https://chat.z.ai/','https://chat.qwen.ai/','https://www.kimi.ai/','https://chat.deepseek.com/','https://www.perplexity.ai/']};
 const definitions={
   qwen:{
     id:'qwen',providerId:'qwen-consumer',displayName:'Qwen',modelId:'qwen-web-consumer',toolName:'qwen_query',port:sharedSession.port,url:'https://chat.qwen.ai/',profileName:sharedSession.profileName,
@@ -14,7 +14,7 @@ const definitions={
     highThinkingSelector:'button:has-text("Thinking"),[role="button"]:has-text("Thinking")',
   },
   kimi:{
-    id:'kimi',providerId:'kimi-consumer',displayName:'Kimi',modelId:'kimi-web-consumer',toolName:'kimi_query',port:sharedSession.port,url:'https://www.kimi.ai/login',profileName:sharedSession.profileName,
+    id:'kimi',providerId:'kimi-consumer',displayName:'Kimi',modelId:'kimi-web-consumer',toolName:'kimi_query',port:sharedSession.port,url:'https://www.kimi.ai/',profileName:sharedSession.profileName,
     loginPattern:/^https:\/\/(?:www\.)?kimi\.ai\/(?:login|auth)(?:[/?#]|$)/i,
     inputSelector:`.chat-input-editor[role="textbox"],${sharedInput}`,
     responseSelector:'[data-message-author-role="assistant"],[data-role="assistant"],.segment-assistant,.assistant-message,.markdown',

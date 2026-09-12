@@ -1,4 +1,4 @@
-# OmniRoute Private 0.6.2 — guarded browser consumers + bounded worker swarms
+# OmniRoute Private 0.6.3 — popup-tolerant browser startup
 
 One download for Windows 10/11 x64 and Linux x64 desktops. No Codex subscription
 needed. No API keys, accounts, vaults or personal projects are included.

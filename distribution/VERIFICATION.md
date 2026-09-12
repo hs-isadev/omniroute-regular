@@ -1,14 +1,14 @@
-# Verification — OmniRoute Private 0.6.2-private.1
+# Verification — OmniRoute Private 0.6.3-private.1
 
-Verification date: 2026-09-09. This file records commands actually run against the source tree and final package. It does not claim a live provider succeeded unless listed below.
+Verification date: 2026-09-12. This file records commands actually run against the source tree and final package. It does not claim a live provider succeeded unless listed below.
 
 ## Source and distribution
 
 - `npm run build`: PASS.
 - `npm test`: PASS, 169/169 TypeScript tests.
-- `npm run test:regular`: PASS, 117 passed, 0 failed, 2 platform-specific skips, 119 total.
+- `npm run test:regular`: PASS, 118 passed, 0 failed, 2 platform-specific skips, 120 total.
 - Focused consumer usage-guard coverage: PASS, 93.08% lines, 91.80% branches, and 82.98% functions.
-- Focused shared-browser tests: PASS, 9/9 after the final launcher/startup/probe/prompt-timing changes.
+- Focused shared-browser and usage-guard tests: PASS, 16/16 after the popup-tolerant readiness and Kimi home-route changes.
 - Browser high-thinking dispatch: PASS in source tests; `high` is forwarded to all six adapters, which activate a visible provider thinking control or fail retryably.
 - Browser prompt timing: PASS; all six consumers focus the prompt input, wait a fixed 150 ms, then fill it before submitting.
 - `npm run test:security`: PASS, 15/15 security and vault tests.
@@ -28,15 +28,15 @@ Verification date: 2026-09-09. This file records commands actually run against t
 - Linux manifest: PASS, 1,520 payload files.
 - Windows install-only smoke: PASS twice and idempotent (`changed: true`, then `false`); bundled Node 22.23.2 and OpenCode 1.18.25 executed.
 - Ubuntu WSL install-only smoke: PASS twice and idempotent (`changed: true`, then `false`); bundled Node 22.23.2 and OpenCode 1.18.25 executed.
-- Secret-value scan: PASS, 3,054 files checked, zero matches, and no secret values printed.
+- Secret-value scan: PASS, 3,056 files checked, zero matches, and no secret values printed.
 - Final ZIP checksum: recorded in the adjacent `.sha256` file after sealing.
 
 ## Live browser checks
 
 The shared browser profile was opened locally without reading cookies, local storage, password stores, or authentication databases. No challenge was solved or bypassed automatically.
 
-- Six-provider `test_connection`: PARTIAL — Claude, Z.AI, Qwen, DeepSeek, and Perplexity passed in the first corrected-domain run; Kimi awaited manual sign-in. After restarting the stalled shared Chromium process with the corrected six-tab launch list, Z.AI and Kimi require manual sign-in in the current session.
-- Six harmless exact-response prompts: PENDING successful `test_connection` for every provider.
+- Six-provider `test_connection`: PASS — Claude, Z.AI, Qwen, Kimi, DeepSeek, and Perplexity all reported ready after the startup-overlay readiness fix.
+- Six harmless exact-response prompts: NOT RUN in this verification pass to avoid consuming account quotas; readiness was checked with non-requesting `test_connection` calls.
 
 ## Known limitations
 
@@ -46,4 +46,4 @@ The shared browser profile was opened locally without reading cookies, local sto
 - Startup minimization uses Chromium's `--start-minimized` flag and a hidden Windows startup host. Window-manager/browser policy can override minimization.
 - This private package is unsigned. Its manifest, checksum, dependency audit, and secret scan reduce risk but are not a formal security certification.
 
-The source publication target is the public Git repository only. The private ZIP is not uploaded or sent to a package registry.
+The source and intact family ZIP are published through the public GitHub repository and its versioned release. No package-registry publication is performed.
