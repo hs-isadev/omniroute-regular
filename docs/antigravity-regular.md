@@ -63,9 +63,20 @@ Diagnostic JSONL logs rotate at 5 MB with one previous file; route history conta
 
 Close active host/MCP sessions first. Verify and extract the new archive, then rerun Setup with the same InstallRoot (Windows) or --install-root (Linux). New payloads live in immutable-looking `versions/<version>-<digest>` directories selected by `active-version.txt`. Files are checksum-verified on install and repeated install; checksums are not signatures. Root launcher edits cause a conflict instead of overwrite. User data stays in place.
 
-After update, rerun Launch for each previously connected project with --apply so its absolute MCP paths point to the new version. User-modified rules/MCP entries are not overwritten; reconcile those changes manually from the backup.
+After update, setup resolves the active version, verifies its bundled Node executable
+and MCP entrypoint, and repairs package-owned host registrations before reporting
+success. A missing executable makes the registration unhealthy and setup stops.
+User-modified rules/MCP entries are not overwritten; reconcile conflicts manually
+from the backup.
 
-Run `Manage.cmd rollback` or `./Manage.sh rollback` to select the previous version, then rerun its Launch --workspace PATH --apply for each project. Generic root wrappers use the selected version. Only v0.2+ versions use this rollback pointer. Upgrading a v0.1 Windows layout retains old app/node/OpenCode files and backs up old launchers; automatic downgrade into that legacy layout is not offered. For a v0.1 Linux symlink-based install, use a new install root; keep the old root until migration is verified.
+Run `Manage.cmd rollback` or `./Manage.sh rollback` to select the previous version.
+The current management runtime then resolves that version and repairs package-owned
+host registrations to its verified Node and MCP paths. Generic root wrappers use
+the selected version. Only v0.2+ versions use this rollback pointer. Upgrading a
+v0.1 Windows layout retains old app/node/OpenCode files and backs up old launchers;
+automatic downgrade into that legacy layout is not offered. For a v0.1 Linux
+symlink-based install, use a new install root; keep the old root until migration
+is verified.
 
 Separate GPT/Claude orchestrator configs and credentials are untouched. Do not manually point Antigravity's regular entrypoint at their data root. No legacy OpenCode user-data directories are deleted.
 

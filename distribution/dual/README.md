@@ -1,6 +1,8 @@
-# OmniRoute Private 0.6.3 — popup-tolerant browser startup
+# OmniRoute Private 0.6.5 — verified providers and host runtime
 
-This update fixes browser-enabled MCP startup and balances eligible free providers.
+This update verifies the installed MCP runtime before host registration, repairs
+registrations after update or rollback, isolates provider health deadlines, and
+adds content-free live provider diagnostics.
 See ROUTING-POLICY.md for diagnostics/pins and HOST-ORCHESTRATION.md for bounded
 worker context budgets. API and browser availability still determine eligibility.
 
@@ -110,14 +112,16 @@ Valid keys are saved even when another provider fails. The form reports failed
 provider names; failed new keys are not activated and existing saved keys remain.
 If none work, the form stays open so you can retry or use another free provider.
 
-Previous owner-account checks: Groq, Gemini, Mistral, Cohere, Cloudflare, OpenRouter,
-Kilo and OpenCode Zen passed inference when recorded in VERIFICATION.md. If Z.AI reports that GLM is
+The 2026-09-13 owner-account check used only the fixed synthetic prompt documented
+in VERIFICATION.md. Kilo Auto Free succeeded. Z.AI's first Flash model returned 429
+and its second configured Flash model succeeded. All three configured OpenCode Zen
+free IDs returned HTTP 400 and remain unhealthy. Mistral was disabled and had no
+stored credential, so it was not tested; no historical result is treated as current.
+If Z.AI reports that GLM is
 in peak hour, the adapter first looks for the visible **Switch to GLM 5.3 Flash**
 action by its text. If it cannot select that action safely, the route fails as
-retryable so OmniRoute continues down the free-provider ladder. Kilo's Auto Free returned
-503 but its free fallback worked. The separate Z.AI API-key route returned 429 /
-a timeout; it remains an available slot for your own account. NVIDIA, Cerebras and SambaNova are untested with a
-live owner key. Their adapters have mock-backed protocol tests only. These
+retryable so OmniRoute continues down the free-provider ladder. Other disabled or
+unconfigured API providers were not probed. Their adapters have mock-backed protocol tests only. These
 results are not guarantees for another account or proof of large-project coding
 quality. See MODEL-LIMITS.md for documented, observed, and unknown limits and
 large-task recommendations.

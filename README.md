@@ -1,15 +1,13 @@
-# OmniRoute Private 0.6.3 — popup-tolerant browser startup
+# OmniRoute Private 0.6.5 — verified providers and host runtime
 
-The current release is `OmniRoute Private 0.6.3`. It waits through transient
-startup overlays before judging a browser consumer signed out and opens Kimi at
-its authenticated home route. It retains conservative request spacing, rolling
-budgets, and blocking-notice cooldowns for browser consumers,
-alongside bounded parallel API
-workers for complex coding and high-risk requests, followed by one attributed
-final synthesis. Casual and easy repetitive work stays single-worker. The shared,
-isolated Chromium-family browser session still supports Claude, Z.AI, Qwen, Kimi,
-DeepSeek, and Perplexity alongside the API-key and host integrations.
-See the complete release guide and downloads on the [`v0.6.3-private.1` GitHub Release](https://github.com/hs-isadev/omniroute-regular/releases/tag/v0.6.3-private.1).
+`OmniRoute Private 0.6.5-private.1` is the local replacement candidate for the
+published 0.6.4-private.1 package. It verifies bundled Node/MCP runtime paths before
+host registration, repairs registrations across update and rollback, isolates
+provider health deadlines, and adds metadata-only safe provider diagnostics. It
+retains the free-only routing and guarded browser-consumer limits. Each recipient
+supplies their own keys and account sign-ins; no credentials, cookies, profiles or
+sessions are included. The candidate is intentionally not published while local
+verification is in progress. See [its release notes](docs/releases/v0.6.5-private.1.md).
 
 ## Current release setup
 
