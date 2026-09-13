@@ -984,11 +984,11 @@ function applyConfiguredCapabilities(base: ModelCapabilities, settings: Provider
 }
 
 export async function buildRegistry(config: OmniConfig, providers: Map<string, ProviderAdapter>, signal?: AbortSignal): Promise<RegistrySnapshot> {
-  const models: ModelEntry[] = [];
   const now = new Date().toISOString();
-  for (const settings of config.providers.filter((provider) => provider.enabled)) {
+  const providerModels = await Promise.all(config.providers.filter((provider) => provider.enabled).map(async (settings): Promise<ModelEntry[]> => {
+    const models: ModelEntry[] = [];
     const provider = providers.get(settings.id);
-    if (!provider) continue;
+    if (!provider) return models;
     const health = await provider.healthCheck(signal);
     let discovered: ProviderModel[] = [];
     try { discovered = health.status === "healthy" ? await provider.listModels(signal) : []; } catch { /* health already records failure */ }
@@ -1043,8 +1043,9 @@ export async function buildRegistry(config: OmniConfig, providers: Map<string, P
         source: "discovered",
       });
     }
-  }
-  return { id: newRouteId(), createdAt: now, models };
+    return models;
+  }));
+  return { id: newRouteId(), createdAt: now, models: providerModels.flat() };
 }
 
 export async function retryProviderCall<T>(

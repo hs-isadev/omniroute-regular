@@ -23,8 +23,18 @@ const SHARED_BROWSER_ENDPOINT=`http://127.0.0.1:${SHARED_BROWSER_SESSION.port}`;
 async function safe(path){for(let p=resolve(path);;p=dirname(p)){try{const info=await lstat(p);if(info.isSymbolicLink()||(info.isFile()&&info.nlink!==1))throw new Error('Linked setup path rejected');}catch(e){if(e.code!=='ENOENT')throw e;}if(p===dirname(p))break;}}
 async function optional(path){await safe(path);try{return await readFile(path,'utf8');}catch(e){if(e.code==='ENOENT')return null;throw e;}}
 async function atomic(path,text,before){await safe(path);await mkdir(dirname(path),{recursive:true,mode:0o700});if(await optional(path)!==before)throw new Error('Concurrent configuration conflict');if(before!==null)await copyFile(path,path+'.backup-'+randomUUID());const temp=path+'.tmp-'+randomUUID();await writeFile(temp,text,{flag:'wx',mode:0o600});if(await optional(path)!==before)throw new Error('Concurrent configuration conflict');await rename(temp,path);}
+async function requireRuntimeFile(path,label){await safe(path);try{if(!(await lstat(path)).isFile())throw new Error();}catch{throw new Error(`OmniRoute registration unhealthy: ${label} is missing.`);}}
+export async function resolveActiveRuntime(root){
+  if(!isAbsolute(root))throw new Error('Absolute install root required');
+  const active=(await readFile(join(root,'active-version.txt'),'utf8')).trim();
+  if(!/^versions\/[a-zA-Z0-9.-]+$/.test(active))throw new Error('Invalid active version');
+  const payload=join(root,active),node=join(payload,'node',process.platform==='win32'?'node.exe':'node'),entrypoint=join(payload,'app/distribution/mcp-regular.mjs');
+  await requireRuntimeFile(node,'active Node executable');await requireRuntimeFile(entrypoint,'active MCP entrypoint');
+  return {active,payload,node,entrypoint};
+}
 export async function connectAntigravity({home=homedir(),root,node=process.execPath,entrypoint=fileURLToPath(new URL('./mcp-regular.mjs',import.meta.url))}) {
   for(const path of [home,root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute paths required');
+  await requireRuntimeFile(node,'Node executable');await requireRuntimeFile(entrypoint,'MCP entrypoint');
   const file=join(home,'.gemini/config/mcp_config.json'),raw=await optional(file);
   const config=raw===null?{}:JSON.parse(raw.replace(/^\uFEFF/,''));
   if(!config||Array.isArray(config)||typeof config!=='object'||(config.mcpServers!==undefined&&(!config.mcpServers||Array.isArray(config.mcpServers)||typeof config.mcpServers!=='object')))throw new Error('Invalid existing MCP configuration');
@@ -57,6 +67,12 @@ export async function connectDeveloperHosts({home=homedir(),root,node=process.ex
   const connected=[];
   for(const target of ['codex','claude-code']){const plan=await manager.plan(target,'install');if(plan.changed)await manager.apply(plan);connected.push(target);}
   return {connected};
+}
+export async function repairHostRegistrations({root,home=homedir()}){
+  const runtime=await resolveActiveRuntime(root);
+  const antigravity=await connectAntigravity({home,root,node:runtime.node,entrypoint:runtime.entrypoint});
+  const developers=await connectDeveloperHosts({home,root,node:runtime.node,entrypoint:runtime.entrypoint});
+  return {...runtime,antigravity,developers};
 }
 export async function configureClaudeConsumer({root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/claude-consumer-adapter/src/adapter.mjs',import.meta.url))}) {
   for(const path of [root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute Claude consumer paths required');
@@ -225,8 +241,7 @@ export async function showUsage(root) {
 export async function setupBoth(root,{noKeys=false,noLaunch=false,home=homedir()}={}) {
   const paths=getRuntimePaths(join(root,'data'));
   if(await optional(paths.config)===null){const config=regularConfig();for(const p of config.providers){p.enabled=false;p.freeTierConfirmed=false;}await saveConfig(config,paths);}
-  await connectAntigravity({root,home});
-  await connectDeveloperHosts({root,home});
+  await repairHostRegistrations({root,home});
   console.log('Four hosts configured: OpenCode = OmniRoute main model; Antigravity, Codex and Claude Code = OmniRoute MCP workers.');
   if(!noKeys)await openKeyForm(root);
   await configureClaudeConsumer({root});
@@ -248,6 +263,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
     else if(action==='keys')await openKeyForm(root);
     else if(action==='usage')await showUsage(root);
     else if(action==='setup')await setupBoth(root,{noKeys:args.includes('--no-keys'),noLaunch:args.includes('--no-launch')});
+    else if(action==='repair-hosts')await repairHostRegistrations({root});
     else throw new Error('Unknown setup action');
   }catch(e){console.error(e.message);process.exitCode=1;}
 }

@@ -6,7 +6,7 @@ import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {verifyPackage} from '../distribution/install.mjs';
 
-const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-Private-0.6.4-private.1';
+const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-Private-0.6.5-private.1';
 const archive=resolve(process.argv[2]??join(repo,'release',name+'.zip'));
 const temp=await mkdtemp(join(repo,'test-artifacts/family-smoke-'));
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');

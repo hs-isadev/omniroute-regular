@@ -5,7 +5,7 @@ import {join,resolve,relative} from 'node:path';
 import {prepareRuntimePayload} from './prepare-runtime-payload.mjs';
 import {verifyPackage} from '../distribution/install.mjs';
 
-const repo=resolve(import.meta.dirname,'..'),version='0.6.4-private.1',release=join(repo,'release','OmniRoute-Private-'+version);
+const repo=resolve(import.meta.dirname,'..'),version='0.6.5-private.1',release=join(repo,'release','OmniRoute-Private-'+version);
 try{await access(release);throw new Error('Private package folder exists; preserve it before rebuilding.');}catch(error){if(error.code!=='ENOENT')throw error;}
 await mkdir(release,{recursive:true});const work=await mkdtemp(join(repo,'.build','private-'));
 async function run(command,args){await new Promise((resolvePromise,reject)=>{const child=spawn(command,args,{stdio:'inherit',windowsHide:true});child.once('error',reject);child.once('exit',code=>code===0?resolvePromise():reject(new Error(`${command} failed ${code}`)));});}
@@ -22,7 +22,7 @@ for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']])
   await cp(join(repo,'package.json'),join(payload,'app/package.json'),{force:true});await cp(join(repo,'package-lock.json'),join(payload,'app/package-lock.json'),{force:true});
   for(const name of ['dual-chat.mjs','dual-setup.mjs','gui-keys.mjs','settings-gui.py','Settings.ps1','settings.mjs','key-editor.mjs','mcp-regular.mjs','regular-policy.mjs','antigravity.mjs','install.mjs'])await cp(join(repo,'distribution',name),join(payload,'app/distribution',name));
   await cp(join(repo,'distribution/dual'),join(payload,'app/distribution/dual'),{recursive:true});
-  const windows=platform==='windows-x64',wrappers=windows?['Launch.ps1','Launch.cmd','Connect.ps1','Connect.cmd']:['Launch.sh','Connect.sh'];
+  const windows=platform==='windows-x64',wrappers=windows?['Launch.ps1','Launch.cmd','Connect.ps1','Connect.cmd','Manage.ps1']:['Launch.sh','Connect.sh','Manage.sh'];
   for(const name of wrappers)await cp(join(repo,'distribution/dual',name),join(payload,name));for(const name of windows?['Setup.ps1','Setup.cmd']:['Setup.sh'])await cp(join(repo,'distribution/dual',name),join(target,name));
   const archive=join(repo,'.cache',`opencode-${platform}-1.18.25.tgz`);if(createHash('sha512').update(await readFile(archive)).digest('base64')!==integrity[platform])throw new Error('OpenCode official npm checksum mismatch');
   const extracted=join(work,platform);await mkdir(extracted);await run(process.platform==='win32'?'tar.exe':'tar',['-xzf',archive,'-C',extracted]);await mkdir(join(payload,'opencode'));await cp(join(extracted,'package/bin',windows?'opencode.exe':'opencode'),join(payload,'opencode',windows?'opencode.exe':'opencode'));await cp(join(repo,'distribution/OPENCODE-LICENSE.txt'),join(payload,'opencode/LICENSE.txt'));await cp(join(repo,'THIRD-PARTY-NOTICES.md'),join(payload,'app/THIRD-PARTY-NOTICES.md'));if(!windows)await chmod(join(payload,'opencode/opencode'),0o755);

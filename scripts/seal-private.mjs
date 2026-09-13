@@ -4,7 +4,7 @@ import {spawn} from 'node:child_process';
 import {join,resolve,basename,dirname} from 'node:path';
 import {verifyPackage} from '../distribution/install.mjs';
 
-const release=resolve(import.meta.dirname,'../release/OmniRoute-Private-0.6.3-private.1');
+const release=resolve(import.meta.dirname,'../release/OmniRoute-Private-0.6.5-private.1');
 await access(join(release,'VERIFICATION.md'));
 for(const [label,platform] of [['Windows','windows-x64'],['Linux','linux-x64']])await verifyPackage(join(release,label),platform);
 const archive=release+'.zip';try{await access(archive);throw new Error('Archive already exists; never silently overwrite a private package.');}catch(error){if(error.code!=='ENOENT')throw error;}

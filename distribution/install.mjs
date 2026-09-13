@@ -31,6 +31,8 @@ export async function verifyPackage(bundle,expectedPlatform=platform()) {
     if(!validRelative(entry.path)||! /^[a-f0-9]{64}$/.test(entry.sha256)||expected.has(entry.path.toLowerCase())) throw new Error('Unsafe or duplicate manifest path.');
     expected.set(entry.path.toLowerCase(),entry.sha256);
   }
+  const requiredRuntime=[expectedPlatform==='windows-x64'?'node/node.exe':'node/node','app/distribution/mcp-regular.mjs'];
+  for(const path of requiredRuntime)if(!expected.has(path))throw new Error('Package is missing required runtime file: '+path);
   const seen=new Set();
   async function walk(dir) {
     await noLinks(dir);
