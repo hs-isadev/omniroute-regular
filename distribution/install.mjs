@@ -82,16 +82,19 @@ export async function installPackage(bundle,root) {
     const stage=join(versions,id);
     await checkLaunchers(root,old);
     if(old?.active===active) {await verifyInstalled(stage,manifest);return {root,version:manifest.version,changed:false};}
-    // Refuse to reuse an incomplete prior stage; it remains available for inspection.
-    await mkdir(stage,{mode:0o700});
-    for(const entry of manifest.files) {
-      const source=join(bundle,'payload',entry.path),dest=join(stage,entry.path);
-      await noLinks(source);await mkdir(dirname(dest),{recursive:true,mode:0o700});
-      await copyFile(source,dest);
-      if(hash(await readFile(dest))!==entry.sha256) throw new Error('Payload changed while copying; active version was not changed.');
-      if(process.platform!=='win32') await chmod(dest,entry.path==='node/node'||entry.path.endsWith('.sh')?0o700:0o600);
+    let staged=false;try{await access(stage);staged=true;}catch(error){if(error.code!=='ENOENT')throw error;}
+    if(staged)await verifyInstalled(stage,manifest);
+    else{
+      await mkdir(stage,{mode:0o700});
+      for(const entry of manifest.files) {
+        const source=join(bundle,'payload',entry.path),dest=join(stage,entry.path);
+        await noLinks(source);await mkdir(dirname(dest),{recursive:true,mode:0o700});
+        await copyFile(source,dest);
+        if(hash(await readFile(dest))!==entry.sha256) throw new Error('Payload changed while copying; active version was not changed.');
+        if(process.platform!=='win32') await chmod(dest,entry.path==='node/node'||entry.path.endsWith('.sh')?0o700:0o600);
+      }
+      await writeFile(join(stage,'package-manifest.json'),JSON.stringify(manifest),{mode:0o600});
     }
-    await writeFile(join(stage,'package-manifest.json'),JSON.stringify(manifest),{mode:0o600});
     // Back up root launchers (including v0.1.x) before installing owned wrappers.
     const backup=join(root,'installer-backups',randomUUID());await mkdir(backup,{recursive:true,mode:0o700});
     const launcherHashes={},undo=[];

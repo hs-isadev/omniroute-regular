@@ -43,8 +43,16 @@ async function inspect(dir) {
 }
 await inspect(family);
 const platform=process.platform==='win32'?'Windows':'Linux',bundle=join(family,platform),install=join(temp,'Install With Spaces');
-if(process.platform==='win32') await run('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(bundle,'Setup.ps1'),'-InstallRoot',install,'-InstallOnly']);
-else await run(join(bundle,'payload/node/node'),[join(bundle,'payload/app/distribution/install.mjs'),'install',bundle,install]);
+const previousBundle=join(repo,'release','OmniRoute-Private-0.6.4-private.1',platform);
+await verifyPackage(previousBundle,process.platform==='win32'?'windows-x64':'linux-x64');
+if(process.platform==='win32'){
+  await run('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(previousBundle,'Setup.ps1'),'-InstallRoot',install,'-InstallOnly']);
+  await run('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(bundle,'Setup.ps1'),'-InstallRoot',install,'-InstallOnly']);
+}else{
+  await run(join(previousBundle,'payload/node/node'),[join(previousBundle,'payload/app/distribution/install.mjs'),'install',previousBundle,install]);
+  await run(join(bundle,'payload/node/node'),[join(bundle,'payload/app/distribution/install.mjs'),'install',bundle,install]);
+}
+const previousActive=JSON.parse(await readFile(join(install,'installed.json'),'utf8')).previous;
 const active=(await readFile(join(install,'active-version.txt'),'utf8')).trim();
 const app=join(install,active,'app'),node=join(install,active,'node',process.platform==='win32'?'node.exe':'node');
 const moduleAt=path=>import(pathToFileURL(join(app,path)).href);
@@ -54,6 +62,34 @@ const config=structuredClone(DEFAULT_CONFIG);for(const p of config.providers)p.e
 const qwen=config.providers.find(p=>p.id==='qwen-consumer'),adapter=join(app,'packages/browser-consumer-adapter/runtime/adapter.mjs');
 Object.assign(qwen,{enabled:true,freeTierConfirmed:true,mcpCommand:node,mcpArgs:[adapter,'--provider','qwen','--endpoint',qwen.baseUrl],mcpWorkingDirectory:dirname(adapter)});
 assertRegularProviderPolicy(config);
+
+let registeredHandshakes=0;
+if(process.platform==='win32'){
+  const hostHome=join(temp,'Antigravity Home With Spaces');await mkdir(hostHome,{recursive:true});
+  const runtimePaths=(await moduleAt('packages/config/dist/index.js')).getRuntimePaths(join(install,'data'));
+  const runtimeConfig=(await moduleAt('distribution/settings.mjs')).regularConfig();for(const provider of runtimeConfig.providers)provider.enabled=false;
+  await (await moduleAt('packages/config/dist/index.js')).saveConfig(runtimeConfig,runtimePaths);
+  const runtimeVault=await (await moduleAt('packages/vault/dist/index.js')).SecretVault.load(runtimePaths.vault);try{await runtimeVault.save(runtimePaths.vault);}finally{runtimeVault.dispose();}
+  const cleanEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/KEY|TOKEN|SECRET|PASSWORD|NODE_OPTIONS|OMNIROUTE|OPENCODE/i.test(key)));
+  Object.assign(cleanEnv,{HOME:hostHome,USERPROFILE:hostHome,APPDATA:join(hostHome,'AppData/Roaming'),OMNIROUTE_REGULAR_ROOT:install,OMNIROUTE_HOME:join(install,'data')});
+  const hostConfig=join(hostHome,'.gemini/config/mcp_config.json');
+  const repair=async()=>{await (await import(pathToFileURL(join(install,(await readFile(join(install,'active-version.txt'),'utf8')).trim(),'app/distribution/dual-setup.mjs')).href)).repairHostRegistrations({root:install,home:hostHome});};
+  const handshake=async expectedActive=>{
+    const entry=JSON.parse(await readFile(hostConfig,'utf8')).mcpServers.omniroute_regular;
+    assert.equal(entry.command,join(install,expectedActive,'node/node.exe'));assert.deepEqual(entry.args,[join(install,expectedActive,'app/distribution/mcp-regular.mjs')]);
+    const server=spawn(entry.command,entry.args,{windowsHide:true,env:{...cleanEnv,...entry.env},stdio:['pipe','pipe','pipe']});
+    const requests=new Map();let input='',requestId=0;
+    server.stderr.on('data',()=>{});server.stdout.on('data',bytes=>{input+=bytes;while(input.includes('\n')){const at=input.indexOf('\n'),line=input.slice(0,at);input=input.slice(at+1);if(!line)continue;const response=JSON.parse(line),pending=requests.get(response.id);if(pending){requests.delete(response.id);clearTimeout(pending.timer);response.error?pending.reject(Error('Registered MCP protocol error')):pending.resolve(response.result);}}});
+    const invoke=(method,params)=>new Promise((resolvePromise,reject)=>{const id=++requestId,timer=setTimeout(()=>{requests.delete(id);reject(Error('Registered MCP timeout'));},30000);requests.set(id,{resolve:resolvePromise,reject,timer});server.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');});
+    try{const initialized=await invoke('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'antigravity-registration-smoke',version:'1'}});assert.equal(initialized.serverInfo.name,'omniroute');server.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');const tools=await invoke('tools/list',{});assert.deepEqual(tools.tools.map(tool=>tool.name).sort(),['omni_models','omni_route','omni_routes','omni_usage']);registeredHandshakes++;}
+    finally{server.stdin.end();server.kill();for(const pending of requests.values())clearTimeout(pending.timer);}
+  };
+  await repair();await handshake(active);
+  await run('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(install,'Manage.ps1'),'-Action','rollback'],{env:cleanEnv});
+  assert.equal((await readFile(join(install,'active-version.txt'),'utf8')).trim(),previousActive);await handshake(previousActive);
+  await run('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(bundle,'Setup.ps1'),'-InstallRoot',install,'-InstallOnly'],{env:cleanEnv});
+  await repair();assert.equal((await readFile(join(install,'active-version.txt'),'utf8')).trim(),active);await handshake(active);
+}
 
 const child=spawn(node,[join(repo,'scripts/package-protocol-fixture.mjs'),app,temp],{windowsHide:true,stdio:['pipe','pipe','pipe']});
 const pending=new Map();let buffer='',id=0;
@@ -72,6 +108,6 @@ try {
   const rejected=await call('tools/call',{name:'omni_route',arguments:{prompt:'Bounded task',routingMode:'regular',taskPacket:{...taskPacket,independent:false}}});
   assert.equal(rejected.isError,true);
 } finally {child.stdin.end();child.kill();}
-const evidence={archive,sha256:hash(await readFile(archive)),filesScanned:scanned,windowsOrLinuxInstall:platform,bothPayloadManifests:'passed',mcpProtocol:'passed with fake provider',browserRegistration:'passed without browser requests',liveInference:false,nativeOtherPlatformSmoke:false,temp};
+const evidence={archive,sha256:hash(await readFile(archive)),filesScanned:scanned,windowsOrLinuxInstall:platform,bothPayloadManifests:'passed',requiredRuntime:'bundled Node and MCP entrypoint verified',updateRollback:'active version and host registration repaired',registeredAntigravityHandshakes:registeredHandshakes,mcpProtocol:'passed with fake provider',browserRegistration:'passed without browser requests',liveInference:false,nativeOtherPlatformSmoke:false,temp};
 await writeFile(join(repo,'test-artifacts/family-smoke-result.json'),JSON.stringify(evidence,null,2)+'\n');
 console.log(JSON.stringify(evidence,null,2));
