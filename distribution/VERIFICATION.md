@@ -17,6 +17,8 @@
   spaces, verify the bundled Node executable and MCP entrypoint, repair the exact
   Antigravity registration, complete initialize/tools-list, roll back and repeat
   the registered-command handshake, then roll forward and repeat it again.
+- Enabled browser-consumer runtime paths are repaired to the active version before
+  host registration without changing their enablement, endpoint, models or limits.
 - A separate live check on 2026-09-13 used only `Reply with OK only.` against
   enabled, configured, free-policy-approved API routes. Kilo Auto Free succeeded.
   Z.AI GLM 4.7 Flash returned HTTP 429 before GLM 4.5 Flash succeeded. OpenCode

@@ -10,6 +10,9 @@ Date: 2026-09-13.
 - Antigravity connection accepted missing command/entrypoint paths.
 - Rollback left host registration on the superseded version; rolling forward into
   an already staged verified version failed with `EEXIST`.
+- An update preserved enabled browser-consumer adapter paths from 0.6.4, causing
+  the real 0.6.5 MCP command to exit at strict policy initialization even though
+  its Node executable and entrypoint existed.
 - Safe-provider validation lacked stable metadata-only reason codes and model
   discovery exclusions.
 
@@ -21,7 +24,7 @@ Date: 2026-09-13.
   hosts with the current management code; verified inactive stages can be reused.
 - Validation tests distinguish disabled/unconfigured routes, safe failure classes,
   false success, and unsupported discovery results without generation.
-- Focused installer, host and provider validation suite: 25/25 passed.
+- Focused installer, host and provider validation suite: 26/26 passed.
 - Full gates: TypeScript/build passed; core 185/185; routing evaluations 15/15;
   distribution 139 passed, two platform skips, zero failures; security/vault 15/15;
   production dependency audit zero vulnerabilities.

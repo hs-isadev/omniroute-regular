@@ -56,6 +56,20 @@ test('host registration repair follows active-version through update and rollbac
     assert.equal(entry.command,expected.node);assert.deepEqual(entry.args,[expected.entrypoint]);
   }
 });
+test('host registration repair updates enabled browser consumers to the active runtime without changing policy fields',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'dual-consumer-cycle-')),root=join(home,'Install With Spaces'),active='versions/0.6.5-private.1-new',payload=join(root,active);
+  const node=join(payload,'node',process.platform==='win32'?'node.exe':'node'),mcp=join(payload,'app/distribution/mcp-regular.mjs');
+  const claude=join(payload,'app/packages/claude-consumer-adapter/src/adapter.mjs'),zai=join(payload,'app/packages/zai-consumer-adapter/src/adapter.mjs'),browser=join(payload,'app/packages/browser-consumer-adapter/src/adapter.mjs');
+  for(const file of [node,mcp,claude,zai,browser]){await mkdir(join(file,'..'),{recursive:true});await writeFile(file,'fixture');}
+  await writeFile(join(root,'active-version.txt'),active+'\n');
+  const paths=getRuntimePaths(join(root,'data')),config=regularConfig();for(const provider of config.providers)provider.enabled=false;
+  const enabled=config.providers.find(provider=>provider.id==='qwen-consumer');enabled.enabled=true;enabled.freeTierConfirmed=true;enabled.mcpCommand=join(root,'versions/0.6.4-private.1-old/node/node.exe');enabled.mcpArgs=[join(root,'versions/0.6.4-private.1-old/app/packages/browser-consumer-adapter/src/adapter.mjs'),'--provider','qwen','--endpoint',enabled.baseUrl];enabled.mcpWorkingDirectory=join(root,'versions/0.6.4-private.1-old/app/packages/browser-consumer-adapter/src');
+  const preserved={baseUrl:enabled.baseUrl,maxTaskClass:enabled.maxTaskClass,models:structuredClone(enabled.models)};await saveConfig(config,paths);
+  await mod.repairHostRegistrations({root,home});
+  const repaired=(await loadConfig(paths)).providers.find(provider=>provider.id==='qwen-consumer');
+  assert.equal(repaired.mcpCommand,node);assert.deepEqual(repaired.mcpArgs,[browser,'--provider','qwen','--endpoint',preserved.baseUrl]);assert.equal(repaired.mcpWorkingDirectory,join(browser,'..'));
+  assert.equal(repaired.enabled,true);assert.equal(repaired.baseUrl,preserved.baseUrl);assert.equal(repaired.maxTaskClass,preserved.maxTaskClass);assert.deepEqual(repaired.models,preserved.models);
+});
 test('OpenCode environment excludes upstream credentials and points both models at local router',()=>{
   assert.equal(typeof mod.openCodeEnvironment,'function','isolated environment missing');
   const env=mod.openCodeEnvironment({PATH:'fixture',HOME:'/user',GROQ_API_KEY:'never-forward',NODE_OPTIONS:'--require evil'},'/install','{}');

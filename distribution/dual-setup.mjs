@@ -68,11 +68,30 @@ export async function connectDeveloperHosts({home=homedir(),root,node=process.ex
   for(const target of ['codex','claude-code']){const plan=await manager.plan(target,'install');if(plan.changed)await manager.apply(plan);connected.push(target);}
   return {connected};
 }
+export async function repairBrowserConsumerRuntime({root,runtime}){
+  const paths=getRuntimePaths(join(root,'data'));if(await optional(paths.config)===null)return {changed:false,providers:[]};
+  const config=await loadConfig(paths),repaired=[];
+  const specs=new Map([
+    ['claude-consumer',{adapter:join(runtime.payload,'app/packages/claude-consumer-adapter/src/adapter.mjs'),args:[]}],
+    ['zai-consumer',{adapter:join(runtime.payload,'app/packages/zai-consumer-adapter/src/adapter.mjs'),args:[]}],
+    ...PRIVATE_BROWSER_CONSUMERS.map(item=>[item.providerId,{adapter:join(runtime.payload,'app/packages/browser-consumer-adapter/src/adapter.mjs'),args:['--provider',item.id]}]),
+  ]);
+  for(const provider of config.providers.filter(candidate=>candidate.enabled&&specs.has(candidate.id))){
+    const spec=specs.get(provider.id);await requireRuntimeFile(spec.adapter,`${provider.id} adapter`);
+    const args=[spec.adapter,...spec.args,'--endpoint',provider.baseUrl],workingDirectory=dirname(spec.adapter);
+    if(provider.mcpCommand!==runtime.node||JSON.stringify(provider.mcpArgs)!==JSON.stringify(args)||provider.mcpWorkingDirectory!==workingDirectory){
+      Object.assign(provider,{mcpCommand:runtime.node,mcpArgs:args,mcpWorkingDirectory:workingDirectory});repaired.push(provider.id);
+    }
+  }
+  if(repaired.length)await saveConfig(config,paths);
+  return {changed:repaired.length>0,providers:repaired};
+}
 export async function repairHostRegistrations({root,home=homedir()}){
   const runtime=await resolveActiveRuntime(root);
+  const browserConsumers=await repairBrowserConsumerRuntime({root,runtime});
   const antigravity=await connectAntigravity({home,root,node:runtime.node,entrypoint:runtime.entrypoint});
   const developers=await connectDeveloperHosts({home,root,node:runtime.node,entrypoint:runtime.entrypoint});
-  return {...runtime,antigravity,developers};
+  return {...runtime,browserConsumers,antigravity,developers};
 }
 export async function configureClaudeConsumer({root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/claude-consumer-adapter/src/adapter.mjs',import.meta.url))}) {
   for(const path of [root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute Claude consumer paths required');
