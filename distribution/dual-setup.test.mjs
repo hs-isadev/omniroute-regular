@@ -37,6 +37,25 @@ test('active runtime resolution follows the installed marker and supports spaces
   await writeFile(join(root,'active-version.txt'),'versions/stale-missing\n');
   await assert.rejects(mod.resolveActiveRuntime(root),/missing|unhealthy|runtime/i);
 });
+
+test('host registration repair follows active-version through update and rollback',async()=>{
+  assert.equal(typeof mod.repairHostRegistrations,'function','host repair helper missing');
+  const home=await mkdtemp(join(tmpdir(),'dual-host-cycle-')),root=join(home,'Install With Spaces');
+  const makeRuntime=async active=>{
+    const payload=join(root,active),node=join(payload,'node',process.platform==='win32'?'node.exe':'node'),entrypoint=join(payload,'app/distribution/mcp-regular.mjs');
+    await mkdir(join(payload,'node'),{recursive:true});await mkdir(join(payload,'app/distribution'),{recursive:true});
+    await writeFile(node,'fixture');await writeFile(entrypoint,'fixture');return {node,entrypoint};
+  };
+  const oldActive='versions/0.6.4-private.1-old',newActive='versions/0.6.5-private.1-new';
+  const oldRuntime=await makeRuntime(oldActive),newRuntime=await makeRuntime(newActive);
+  const configPath=join(home,'.gemini/config/mcp_config.json');
+  for(const [active,expected] of [[oldActive,oldRuntime],[newActive,newRuntime],[oldActive,oldRuntime]]){
+    await mkdir(root,{recursive:true});await writeFile(join(root,'active-version.txt'),active+'\n');
+    await mod.repairHostRegistrations({root,home});
+    const entry=JSON.parse(await readFile(configPath,'utf8')).mcpServers.omniroute_regular;
+    assert.equal(entry.command,expected.node);assert.deepEqual(entry.args,[expected.entrypoint]);
+  }
+});
 test('OpenCode environment excludes upstream credentials and points both models at local router',()=>{
   assert.equal(typeof mod.openCodeEnvironment,'function','isolated environment missing');
   const env=mod.openCodeEnvironment({PATH:'fixture',HOME:'/user',GROQ_API_KEY:'never-forward',NODE_OPTIONS:'--require evil'},'/install','{}');
@@ -60,6 +79,10 @@ test('installer entrypoints include user-friendly editor workflow and no GitHub 
   assert.match(ps,/dual-setup/);assert.match(ps,/setup/);assert.doesNotMatch(ps,/git push|gh release|curl.*\|/);
   const sh=await readFile(new URL('./dual/Setup.sh',import.meta.url),'utf8').catch(e=>{if(e.code!=='ENOENT')throw e;return '';});
   assert.match(sh,/dual-setup/);assert.match(sh,/secret-tool/);assert.doesNotMatch(sh,/--no-sandbox/);
+  const managePs=await readFile(new URL('./dual/Manage.ps1',import.meta.url),'utf8');
+  const manageSh=await readFile(new URL('./dual/Manage.sh',import.meta.url),'utf8');
+  assert.match(managePs,/repair-hosts/);assert.match(managePs,/\$active\+'\/app\/distribution\/dual-setup\.mjs'/);
+  assert.match(manageSh,/repair-hosts/);assert.match(manageSh,/\$active\/app\/distribution\/dual-setup\.mjs/);
 });
 test('new setup saves keys before starting Antigravity so its MCP sees the saved profile',async()=>{
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');

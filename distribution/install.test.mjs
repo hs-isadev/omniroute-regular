@@ -31,6 +31,8 @@ test('versioned installs are idempotent, preserve data and rollback safely',asyn
   await rollbackPackage(f.install);
   assert.equal(await readFile(join(f.install,'active-version.txt'),'utf8'),initial);
   assert.equal(await readFile(join(f.install,'data/user-data'),'utf8'),'keep');
+  await installPackage(next.bundle,f.install);
+  assert.equal((await readFile(join(f.install,'active-version.txt'),'utf8')).trim().includes('0.2.1'),true);
 });
 test('installer rejects unmarked destinations, unsafe manifests and extra files',async()=>{
   const f=await fixture();await mkdir(f.install);
