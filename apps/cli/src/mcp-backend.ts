@@ -12,6 +12,8 @@ export function createCliMcpBackend(client: Pick<DaemonClient, "request" | "mode
       const routingMode = enforcedMode ?? request.routingMode;
       const route: RouteRequest = {
         prompt: request.prompt,
+        ...(request.taskPacket ? {taskPacket: request.taskPacket} : {}),
+        ...(request.selectionPin ? {selectionPin: {providerId: request.selectionPin.providerId, ...(request.selectionPin.modelId ? {modelId: request.selectionPin.modelId} : {})}} : {}),
         ...(routingMode ? { routingMode } : {}),
         sourceClient: "omniroute-mcp",
         hostApplication: request.hostApplication,

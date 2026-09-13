@@ -134,6 +134,8 @@ export interface TaskSignals {
 
 export interface RouteRequest {
   prompt: string;
+  taskPacket?: WorkerTaskPacket;
+  selectionPin?: { providerId: string; modelId?: string };
   routingMode?: RoutingMode;
   sourceClient: string;
   hostApplication: string;
@@ -144,6 +146,19 @@ export interface RouteRequest {
   maxOutputTokens: number | null;
   privacyMode: boolean | null;
   metadata: Record<string, string>;
+}
+
+export interface WorkerTaskPacket {
+  objective: string;
+  excerpts: Array<{path: string; text: string}>;
+  constraints: string[];
+  acceptanceCriteria: string[];
+  requestedOutput: string;
+  independent: boolean;
+  worthwhile: boolean;
+  responseTokens: number;
+  instructionReserveTokens: number;
+  synthesisReserveTokens: number;
 }
 
 export interface Usage {
@@ -200,6 +215,18 @@ export interface AttributionRecord {
   latencyMs: number;
   status: "completed" | "failed" | "cancelled" | "partial";
   registrySnapshotId: string;
+  routingDiagnostics?: RoutingDiagnostic[];
+}
+
+/** Only registry identifiers, numeric limits and reason codes; never request/error text. */
+export interface RoutingDiagnostic {
+  phase: "selection" | "execution";
+  reason: string;
+  selected: { providerId: string; modelId: string } | null;
+  taskClass?: TaskClass;
+  requiredCapabilities: Capability[];
+  inputTokens: number;
+  candidates: Array<{ providerId: string; modelId: string; health: string; eligible: boolean; reasons: string[] }>;
 }
 
 export type RouteEvent =

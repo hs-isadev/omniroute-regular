@@ -38,6 +38,7 @@ export interface ProviderSettings {
   mcpArgs?: string[];
   mcpWorkingDirectory?: string;
   maxTaskClass?: TaskClass;
+  maxConcurrentRequests?: number;
   discoveryTtlSeconds: number;
   models: Array<{
     modelId: string;
@@ -74,6 +75,8 @@ export interface OmniConfig {
     orchestratorProviderId: string;
     orchestratorModelId: string;
     directProviderOrder: string[];
+    selectionPolicy?: "balanced" | "priority";
+    providerPriorities?: Record<string, number>;
     defaultOrchestratorEffort: ReasoningEffort;
     ambiguousOrchestratorEffort: ReasoningEffort;
     repairInvalidPlanOnce: boolean;
@@ -167,6 +170,8 @@ export const DEFAULT_CONFIG: OmniConfig = {
     orchestratorProviderId: "openrouter",
     orchestratorModelId: "openrouter/free",
     directProviderOrder: ["claude-consumer", "zai-consumer", "qwen-consumer", "kimi-consumer", "deepseek-consumer", "perplexity-consumer", "groq", "gemini", "openrouter", "ollama"],
+    selectionPolicy: "balanced",
+    providerPriorities: {},
     defaultOrchestratorEffort: "low",
     ambiguousOrchestratorEffort: "medium",
     repairInvalidPlanOnce: true,
@@ -300,6 +305,9 @@ export function validateConfig(config: OmniConfig): void {
   if (!Number.isInteger(config.routing.freeModelCooldownMs) || config.routing.freeModelCooldownMs < 1000 || config.routing.freeModelCooldownMs > 86_400_000) throw new Error("free model cooldown must be 1000–86400000 milliseconds");
   if (!config.routing.orchestratorProviderId || !config.routing.orchestratorModelId) throw new Error("orchestrator provider and model are required");
   if (!REASONING_EFFORTS.includes(config.routing.defaultOrchestratorEffort) || !REASONING_EFFORTS.includes(config.routing.ambiguousOrchestratorEffort)) throw new Error("orchestrator reasoning effort is invalid");
+  if (config.routing.selectionPolicy !== undefined && !["balanced", "priority"].includes(config.routing.selectionPolicy)) throw new Error("invalid selection policy");
+  for (const priority of Object.values(config.routing.providerPriorities ?? {})) if (!Number.isFinite(priority)) throw new Error("invalid provider priority");
+  for (const provider of config.providers) if (provider.maxConcurrentRequests !== undefined && (!Number.isInteger(provider.maxConcurrentRequests) || provider.maxConcurrentRequests < 1 || provider.maxConcurrentRequests > 64)) throw new Error("invalid provider concurrency");
   for (const value of [config.routing.maxSubtasks, config.routing.maxParallelWorkers, config.daemon.maxConcurrentRoutes]) if (!Number.isInteger(value) || value < 1 || value > 64) throw new Error("concurrency/fan-out setting is invalid");
   for (const value of [config.budgets.dailyUsd, config.budgets.monthlyUsd, config.budgets.perRequestUsd]) if (value !== null && (!Number.isFinite(value) || value < 0)) throw new Error("budget values must be non-negative or null");
   const providerIds = new Set<string>();

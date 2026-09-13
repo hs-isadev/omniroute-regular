@@ -1,6 +1,8 @@
+export {prepareWorkerTask, renderWorkerTask} from "./delegation.js";
+import {prepareWorkerTask, renderWorkerTask} from "./delegation.js";
 import { createHash } from "node:crypto";
 import type { OmniConfig } from "@omniroute/config";
-import { FreeModelFailover, supports, type ModelPreference } from "./free-failover.js";
+import { FreeModelFailover, type ModelPreference, type SelectionPolicy } from "./free-failover.js";
 import {
   attributionBadge,
   CAPABILITIES,
@@ -18,6 +20,7 @@ import {
   type RouteResult,
   type RouteSubtask,
   type RoutingPlan,
+  type RoutingDiagnostic,
   type TaskClass,
   type TaskSignals,
   type Usage,
@@ -46,7 +49,7 @@ export function estimateTokens(text: string): number {
 export function classifyTask(request: RouteRequest): TaskSignals {
   // Only the isolated Antigravity worker path opts into these local Malay cues.
   // This is intent normalization, not translation of the worker's actual prompt.
-  const boundedWorker = request.sourceClient === "antigravity-mcp" && request.metadata?.workerTextOnly === "true";
+  const boundedWorker = ["antigravity-mcp", "regular-mcp"].includes(request.sourceClient) && request.metadata?.workerTextOnly === "true";
   const malay: Record<string, string> = { "seni bina": "architecture", "berbilang fail": "multi-file", "keseluruhan": "entire", "tulis": "write", "fungsi": "function", "kod": "code", "baiki": "fix", "bina": "build", "uji": "test", "ringkaskan": "summarize", "terjemah": "translate", "keselamatan": "security", "padam": "delete" };
   const prompt = boundedWorker ? request.prompt.replace(/\b(?:seni bina|berbilang fail|keseluruhan|tulis|fungsi|kod|baiki|bina|uji|ringkaskan|terjemah|keselamatan|padam)\b/gi, word => malay[word.toLowerCase()] ?? word) : request.prompt;
   const lower = prompt.toLowerCase();
@@ -109,6 +112,8 @@ export interface RouterDependencies {
 export type RouteEventHandler = (event: RouteEvent) => void | Promise<void>;
 
 interface ExecutionState {
+  routingDiagnostics: RoutingDiagnostic[];
+  selectionPolicy: SelectionPolicy;
   modelPreference: ModelPreference;
   orchestrator: AttributionRecord["orchestrator"];
   usage: Usage;
@@ -150,7 +155,6 @@ export class OmniRouter {
   readonly #freeFailover: FreeModelFailover;
   #reservedProjectedUsd = 0;
   #budgetQueue: Promise<void> = Promise.resolve();
-  #apiProviderCursor = 0;
 
   constructor(dependencies: RouterDependencies) {
     this.#config = dependencies.config;
@@ -165,8 +169,13 @@ export class OmniRouter {
     const startedAt = new Date();
     const routeId = newRouteId(startedAt.getTime());
     await onEvent({ type: "route.started", routeId, at: startedAt.toISOString() });
+    if (request.taskPacket) {
+      if (!request.taskPacket.independent || !request.taskPacket.worthwhile) throw new SafeError("HOST_WORK_PREFERRED", "Keep coupled or low-value work with the host", 400);
+      request = {...request, prompt: renderWorkerTask(request.taskPacket), maxOutputTokens: request.taskPacket.responseTokens};
+    }
     this.validateRequest(request);
     const signals = classifyTask(request);
+    if (request.taskPacket) signals.estimatedInputTokens += request.taskPacket.instructionReserveTokens + request.taskPacket.synthesisReserveTokens;
     const modelPreference: ModelPreference = this.#config.routing.freeOnly && this.#config.routing.intentRoutingEnabled && ["casual_question", "light_task"].includes(signals.intent) ? "lightweight" : "quality";
     const mode = request.routingMode ?? this.#config.routing.defaultMode;
     const registered = await this.#registry();
@@ -174,18 +183,20 @@ export class OmniRouter {
       const maximum = this.#config.providers.find((provider) => provider.id === model.providerId)?.maxTaskClass;
       return maximum === undefined || TASK_ORDER.indexOf(signals.suggestedClass) <= TASK_ORDER.indexOf(maximum);
     }) };
-    const demandingWorker = mode === 'regular' && request.sourceClient === 'antigravity-mcp' && signals.requiredCapabilities.includes('coding') && ['complex_task','high_risk'].includes(signals.intent);
+    const demandingWorker = mode === 'regular' && ['antigravity-mcp', 'regular-mcp'].includes(request.sourceClient) && signals.requiredCapabilities.includes('coding') && ['complex_task','high_risk'].includes(signals.intent);
     // A conservative configured tier floor, not a claim of benchmark superiority.
     // Filter the immutable route snapshot so EVERY retry observes the same floor.
     const snapshot = demandingWorker ? {...taskScoped,models:taskScoped.models.filter(model=>(model.intelligenceTier??0)>=4)} : taskScoped;
-    const freePlanner = mode === "orchestrator" && this.#config.routing.freeOnly && this.#config.routing.freeModelFailoverEnabled ? this.#freeFailover.candidates({ providerId: this.#config.routing.orchestratorProviderId, modelId: this.#config.routing.orchestratorModelId, reasoningEffort: modelPreference === "lightweight" ? "none" : this.orchestratorEffort(signals), maxOutputTokens: 4000 }, snapshot, ["text", "structured_output"], 0, modelPreference)[0] : undefined;
+    const freePlanner = mode === "orchestrator" && this.#config.routing.freeOnly && this.#config.routing.freeModelFailoverEnabled ? this.#freeFailover.candidates({ providerId: this.#config.routing.orchestratorProviderId, modelId: this.#config.routing.orchestratorModelId, reasoningEffort: modelPreference === "lightweight" ? "none" : this.orchestratorEffort(signals), maxOutputTokens: 4000 }, snapshot, ["text", "structured_output"], 0, modelPreference, {taskClass: signals.suggestedClass})[0] : undefined;
     const orchestratorModel = mode === "orchestrator" ? snapshot.models.find((model) => model.providerId === (freePlanner?.providerId ?? this.#config.routing.orchestratorProviderId) && model.modelId === (freePlanner?.modelId ?? this.#config.routing.orchestratorModelId) && model.enabled && model.allowed && model.health.status === "healthy" && model.capabilities.structuredOutput === true) ?? null : null;
     if (mode === "orchestrator" && !orchestratorModel) throw new SafeError("ORCHESTRATION_UNAVAILABLE", `Configured orchestrator ${this.#config.routing.orchestratorProviderId}/${this.#config.routing.orchestratorModelId} is not enabled, healthy, allowed, free-policy compliant, and structured-output capable`, 503);
     const orchestrator = orchestratorModel ? this.#providers.get(orchestratorModel.providerId) ?? null : null;
     if (mode === "orchestrator" && !orchestrator) throw new SafeError("ORCHESTRATION_UNAVAILABLE", "The configured orchestrator provider is unavailable", 503);
     const orchestratorEffort = mode === "orchestrator" && modelPreference !== "lightweight" ? this.orchestratorEffort(signals) : "none";
-    const initialWorker = mode === "regular" ? this.selectDirectWorker(snapshot, signals, request, modelPreference) : { providerId: orchestratorModel!.providerId, modelId: orchestratorModel!.modelId, reasoningEffort: orchestratorEffort, maxOutputTokens: 1 };
-    const state: ExecutionState = { modelPreference, orchestrator: mode === "regular" ? { providerId: "omniroute", modelId: "deterministic-direct", reasoningEffort: "none" } : { providerId: orchestratorModel!.providerId, modelId: orchestratorModel!.modelId, reasoningEffort: orchestratorEffort }, usage: { ...emptyUsage(), estimatedCostUsd: 0 }, worker: initialWorker, parallelWorkers: [], reviewers: [], fallbackAttempts: [], reservedBudgetUsd: 0, policyDecisions: [
+    const routingDiagnostics: RoutingDiagnostic[] = [];
+    const selectionPolicy: SelectionPolicy = { taskClass: signals.suggestedClass, ...(request.taskPacket ? {minimumOutputTokens: request.taskPacket.responseTokens, reserveTokens: request.taskPacket.instructionReserveTokens + request.taskPacket.synthesisReserveTokens} : {}), ...(demandingWorker ? {minimumTier: 4} : {}), ...(request.selectionPin ? {pin: request.selectionPin} : {}) };
+    const initialWorker = mode === "regular" ? this.selectDirectWorker(registered, signals, request, modelPreference, selectionPolicy, routingDiagnostics) : { providerId: orchestratorModel!.providerId, modelId: orchestratorModel!.modelId, reasoningEffort: orchestratorEffort, maxOutputTokens: 1 };
+    const state: ExecutionState = { routingDiagnostics, selectionPolicy, modelPreference, orchestrator: mode === "regular" ? { providerId: "omniroute", modelId: "deterministic-direct", reasoningEffort: "none" } : { providerId: orchestratorModel!.providerId, modelId: orchestratorModel!.modelId, reasoningEffort: orchestratorEffort }, usage: { ...emptyUsage(), estimatedCostUsd: 0 }, worker: initialWorker, parallelWorkers: [], reviewers: [], fallbackAttempts: [], reservedBudgetUsd: 0, policyDecisions: [
       `deterministic signals suggested ${signals.suggestedClass}`,
       `intent ${signals.intent}; ${modelPreference} model preference`,
       ...(demandingWorker ? ['coding quality floor: configured tier >=4; rankings provisional pending executable benchmarks'] : []),
@@ -194,9 +205,15 @@ export class OmniRouter {
       request.privacyMode ?? this.#config.privacy.privacyMode ? "privacy envelope enabled" : "standard compact envelope",
     ] };
     try {
+      if (!initialWorker.modelId) throw new SafeError(request.selectionPin ? "PIN_UNAVAILABLE" : "DIRECT_MODEL_UNAVAILABLE", "No eligible free worker; inspect content-free route diagnostics", 503);
+      if (request.taskPacket) {
+        const budget = prepareWorkerTask(request.taskPacket, modelFrom(snapshot, initialWorker));
+        state.policyDecisions.push(budget.reason);
+        if (!budget.shouldDelegate) throw new SafeError(budget.reason, "Task packet does not fit the validated worker limits; shorten it or keep it with the host", 400);
+      }
       let plan: RoutingPlan;
       if (mode === "regular") {
-        const swarm = this.regularSwarmPlan(initialWorker, signals, snapshot);
+        const swarm = request.selectionPin || request.taskPacket ? {plan: null, decision: null} : this.regularSwarmPlan(initialWorker, signals, snapshot);
         plan = swarm.plan ?? this.directPlan(initialWorker, signals);
         if (swarm.decision) state.policyDecisions.push(swarm.decision);
         const directCost = this.estimatePlanCost(plan, snapshot, signals);
@@ -210,10 +227,10 @@ export class OmniRouter {
           state.policyDecisions.push("validated plan requires stronger execution; lightweight preference lifted");
         }
       }
+      state.selectionPolicy.taskClass = TASK_ORDER[Math.max(TASK_ORDER.indexOf(signals.suggestedClass), TASK_ORDER.indexOf(plan.taskClass))]!;
       await onEvent({ type: "route.planned", routeId, plan, at: new Date().toISOString() });
       state.worker = plan.primary;
       const answer = await this.executePlan(routeId, plan, request, snapshot, signal, onEvent, state);
-      if (mode === "regular") this.advanceApiProviderCursor(state.worker.providerId);
       const endedAt = new Date();
       const attribution: AttributionRecord = {
         routeId,
@@ -234,6 +251,7 @@ export class OmniRouter {
         latencyMs: endedAt.getTime() - startedAt.getTime(),
         status: "completed",
         registrySnapshotId: snapshot.id,
+        routingDiagnostics: state.routingDiagnostics,
       };
       await this.#audit.append(attribution);
       await this.#logger.write("info", "route.completed", { routeId, attribution });
@@ -261,9 +279,10 @@ export class OmniRouter {
         latencyMs: endedAt.getTime() - startedAt.getTime(),
         status: signal.aborted ? "cancelled" : "failed",
         registrySnapshotId: snapshot.id,
+        routingDiagnostics: state.routingDiagnostics,
       };
       try { await this.#audit.append(failedAttribution); } catch { /* Preserve the original routing error. */ }
-      await this.#logger.write("error", "route.failed", { routeId, error: message, fallbacksAttempted: state.fallbackAttempts, policyDecisions: state.policyDecisions });
+      await this.#logger.write("error", "route.failed", { routeId, error: "Worker failed; details returned to caller", routingDiagnostics: state.routingDiagnostics, fallbacksAttempted: state.fallbackAttempts, policyDecisions: state.policyDecisions });
       await onEvent({ type: "route.failed", routeId, error: message, at: new Date().toISOString() });
       throw error;
     } finally {
@@ -276,21 +295,22 @@ export class OmniRouter {
     if (Buffer.byteLength(request.prompt, "utf8") > this.#config.daemon.maxRequestBytes) throw new SafeError("REQUEST_TOO_LARGE", "Prompt exceeds the configured request-size limit", 413);
     for (const capability of request.requestedCapabilities) if (!CAPABILITIES.includes(capability)) throw new SafeError("CAPABILITY_INVALID", `Unknown capability: ${capability}`, 400);
     if (request.routingMode !== undefined && request.routingMode !== "regular" && request.routingMode !== "orchestrator") throw new SafeError("ROUTING_MODE_INVALID", "Routing mode must be regular or orchestrator", 400);
+    if (request.maxOutputTokens !== null && (!Number.isInteger(request.maxOutputTokens) || request.maxOutputTokens < 1)) throw new SafeError("OUTPUT_LIMIT_INVALID", "Output limit must be a positive integer", 400);
+    if (request.selectionPin && (!request.selectionPin.providerId || typeof request.selectionPin.providerId !== "string" || (request.selectionPin.modelId !== undefined && (typeof request.selectionPin.modelId !== "string" || !request.selectionPin.modelId)))) throw new SafeError("PIN_INVALID", "Pin requires a provider ID and optional model ID", 400);
+    if (request.selectionPin && (request.routingMode ?? this.#config.routing.defaultMode) !== "regular") throw new SafeError("PIN_MODE_INVALID", "Explicit worker pins require regular mode", 400);
     if (request.hostModel && !request.hostModelAuthoritative) request.hostModel = null;
   }
 
-  private selectDirectWorker(snapshot: RegistrySnapshot, signals: TaskSignals, request: RouteRequest, preference: ModelPreference): ModelSelection {
-    if (this.#config.routing.freeOnly && this.#config.routing.freeModelFailoverEnabled) {
+  private selectDirectWorker(snapshot: RegistrySnapshot, signals: TaskSignals, request: RouteRequest, preference: ModelPreference, policy: SelectionPolicy, diagnostics: RoutingDiagnostic[]): ModelSelection {
+    if (this.#config.routing.freeOnly) {
       const maxOutputTokens = request.maxOutputTokens ?? (preference === "lightweight" ? Math.min(2048, this.#config.routing.maxOutputTokensPerRequest) : this.#config.routing.maxOutputTokensPerRequest);
-      const candidates = this.#freeFailover.candidates({ providerId: this.nextDirectProviderId(snapshot, signals.requiredCapabilities, signals.estimatedInputTokens, maxOutputTokens), modelId: "", reasoningEffort: preference === "lightweight" ? "none" : "low", maxOutputTokens }, snapshot, signals.requiredCapabilities, signals.estimatedInputTokens, preference);
-      if(request.sourceClient==='antigravity-mcp') {
-        const tier=(s:ModelSelection)=>snapshot.models.find(m=>m.providerId===s.providerId&&m.modelId===s.modelId)?.intelligenceTier;
-        candidates.sort((a,b)=>preference==='lightweight' ? (tier(a)??999)-(tier(b)??999) : (tier(b)??0)-(tier(a)??0));
-      }
-      const selected=candidates[0];
-      if (!selected) throw new SafeError("DIRECT_MODEL_UNAVAILABLE", "No eligible free worker meets capability/context requirements outside its cooldown", 503);
-      const selectedModel=snapshot.models.find(model=>model.providerId===selected.providerId&&model.modelId===selected.modelId);
-      return selected.providerId.endsWith("-consumer")&&selectedModel?.reasoningEfforts.includes("high")?{...selected,reasoningEffort:"high"}:selected;
+      const seed = {providerId: this.#config.routing.directProviderOrder[0] ?? "", modelId: "", reasoningEffort: preference === "lightweight" ? "none" as const : "low" as const, maxOutputTokens};
+      const result = this.#freeFailover.select(seed, snapshot, signals.requiredCapabilities, signals.estimatedInputTokens, preference, policy);
+      diagnostics.push(result.diagnostic);
+      const selected = result.selection;
+      if (!selected) return seed;
+      const selectedModel = snapshot.models.find(model => model.providerId === selected.providerId && model.modelId === selected.modelId);
+      return selected.providerId.endsWith("-consumer") && selectedModel?.reasoningEfforts.includes("high") ? {...selected, reasoningEffort: "high"} : selected;
     }
     const supports = (model: ModelEntry, capability: Capability): boolean => ({
       text: model.capabilities.text,
@@ -309,28 +329,6 @@ export class OmniRouter {
     const maximum = Math.min(request.maxOutputTokens ?? (preference === "lightweight" ? 2048 : this.#config.routing.maxOutputTokensPerRequest), selected.maxOutputTokens ?? this.#config.routing.maxOutputTokensPerRequest, this.#config.routing.maxOutputTokensPerRequest);
     const effort: ReasoningEffort = selected.providerId.endsWith("-consumer") && selected.reasoningEfforts.includes("high") ? "high" : preference === "lightweight" && selected.reasoningEfforts.includes("none") ? "none" : selected.reasoningEfforts.includes("low") ? "low" : selected.reasoningEfforts.includes("none") ? "none" : selected.reasoningEfforts[0] ?? "none";
     return { providerId: selected.providerId, modelId: selected.modelId, reasoningEffort: effort, maxOutputTokens: maximum };
-  }
-
-  private nextDirectProviderId(snapshot: RegistrySnapshot, required: Capability[], inputTokens: number, requestedOutputTokens: number): string {
-    const configured = this.#config.routing.directProviderOrder;
-    const eligible = (providerId: string): boolean => {
-      const settings = this.#config.providers.find(provider => provider.id === providerId);
-      return !!settings?.enabled && settings.freeTierOnly && this.#providers.has(providerId) && snapshot.models.some(model =>
-        model.providerId === providerId && model.enabled && model.allowed && model.health.status === "healthy" &&
-        model.pricing.inputPerMillionUsd === 0 && model.pricing.outputPerMillionUsd === 0 &&
-        model.contextWindow !== null && model.maxOutputTokens !== null && model.maxOutputTokens > 0 && model.reasoningEfforts.length > 0 &&
-        required.every(capability => supports(model, capability)) &&
-        inputTokens + Math.min(requestedOutputTokens, model.maxOutputTokens, this.#config.routing.maxOutputTokensPerRequest) <= model.contextWindow,
-      );
-    };
-    const browser = configured.find(providerId => providerId.endsWith("-consumer") && eligible(providerId));
-    if (browser) return browser;
-    const apis = configured.filter(providerId => !providerId.endsWith("-consumer") && eligible(providerId));
-    return apis[this.#apiProviderCursor % apis.length] ?? configured[0] ?? "";
-  }
-
-  private advanceApiProviderCursor(providerId: string): void {
-    if (!providerId.endsWith("-consumer") && this.#config.routing.directProviderOrder.includes(providerId)) this.#apiProviderCursor = (this.#apiProviderCursor + 1) % Number.MAX_SAFE_INTEGER;
   }
 
   private directPlan(primary: ModelSelection, signals: TaskSignals): RoutingPlan {
@@ -678,7 +676,7 @@ export class OmniRouter {
       } catch (error) {
         lastError = error;
         if (signal.aborted || (error instanceof SafeError && error.code === "STREAM_PARTIAL")) throw error;
-        if (index === 0 && plan.fallbacks.length > 0) state.fallbackAttempts.push({ providerId: selection.providerId, modelId: selection.modelId, outcome: globalRedactor.redactText((error as Error).message) });
+        if (index === 0 && plan.fallbacks.length > 0) state.fallbackAttempts.push({ providerId: selection.providerId, modelId: selection.modelId, outcome: error instanceof SafeError ? error.code : "WORKER_FAILED" });
       }
     }
     throw lastError;
@@ -699,7 +697,7 @@ export class OmniRouter {
     signal: AbortSignal, onEvent: RouteEventHandler, state: ExecutionState, subtaskId: string | null,
     required: Capability[],
   ): Promise<{ value: string; selection: ModelSelection }> {
-    return this.#freeFailover.run(selection, snapshot, required, estimateTokens(prompt), signal, state, subtaskId ?? "worker", (candidate, automatic) => this.executeSelectionOnce(routeId, candidate, prompt, snapshot, signal, onEvent, state, subtaskId, automatic), state.modelPreference);
+    return this.#freeFailover.run(selection, snapshot, required, estimateTokens(prompt), signal, state, subtaskId ?? "worker", (candidate, automatic) => this.executeSelectionOnce(routeId, candidate, prompt, snapshot, signal, onEvent, state, subtaskId, automatic), state.modelPreference, state.selectionPolicy);
   }
 
   private async executeSelectionOnce(
@@ -773,7 +771,7 @@ export class OmniRouter {
 
   private async generateRouted(model: ModelEntry, request: GenerateRequest, snapshot: RegistrySnapshot, state: ExecutionState, label: string, required: Capability[]): Promise<{ text: string; usage: Usage; selection: ModelSelection }> {
     const initial = { providerId: model.providerId, modelId: model.modelId, reasoningEffort: request.reasoningEffort, maxOutputTokens: request.maxOutputTokens };
-    const result = await this.#freeFailover.run(initial, snapshot, required, estimateTokens(request.prompt), request.signal, state, label, (candidate, automatic) => this.generateNonStreaming(this.#providers.get(candidate.providerId)!, modelFrom(snapshot, candidate), { ...request, modelId: candidate.modelId, reasoningEffort: candidate.reasoningEffort, maxOutputTokens: candidate.maxOutputTokens }, automatic), state.modelPreference);
+    const result = await this.#freeFailover.run(initial, snapshot, required, estimateTokens(request.prompt), request.signal, state, label, (candidate, automatic) => this.generateNonStreaming(this.#providers.get(candidate.providerId)!, modelFrom(snapshot, candidate), { ...request, modelId: candidate.modelId, reasoningEffort: candidate.reasoningEffort, maxOutputTokens: candidate.maxOutputTokens }, automatic), state.modelPreference, state.selectionPolicy);
     return { ...result.value, selection: result.selection };
   }
 

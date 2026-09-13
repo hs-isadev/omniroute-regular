@@ -1,5 +1,9 @@
 # OmniRoute Private 0.6.3 — popup-tolerant browser startup
 
+This update fixes browser-enabled MCP startup and balances eligible free providers.
+See ROUTING-POLICY.md for diagnostics/pins and HOST-ORCHESTRATION.md for bounded
+worker context budgets. API and browser availability still determine eligibility.
+
 One download for Windows 10/11 x64 and Linux x64 desktops. No Codex subscription
 needed. No API keys, accounts, vaults or personal projects are included.
 

@@ -14,8 +14,8 @@ export async function createRegularBackend(options={}) {
   const paths=options.paths??getRuntimePaths();
   if(!options.config) await access(paths.config);
   const config=options.config??await loadConfig(paths);
-  if(!config.routing.freeOnly) throw new Error('Antigravity MCP requires free-only configuration.');
-  if(config.routing.defaultMode!=='regular') throw new Error('Antigravity MCP requires an isolated regular profile, not an orchestrator profile.');
+  if(!config.routing.freeOnly) throw new Error('Regular MCP requires free-only configuration.');
+  if(config.routing.defaultMode!=='regular') throw new Error('Regular MCP requires an isolated regular profile, not an orchestrator profile.');
   // Check before loading/decrypting any credentials, not only during key entry.
   assertRegularProviderPolicy(config);
   let router=options.router,registry=options.registry,recent=options.recent,usageSummary=options.usageSummary;
@@ -57,7 +57,7 @@ export async function createRegularBackend(options={}) {
       busy=true;
       routeSignal=AbortSignal.any([...(signal?[signal]:[]),AbortSignal.timeout(Math.min(config.daemon.routeTimeoutMs,300_000))]);
       try {
-        return await router.route({prompt,routingMode:'regular',sourceClient:'antigravity-mcp',hostApplication:input.hostApplication??'antigravity',hostModel:input.hostModelAuthoritative?input.hostModel??null:null,hostModelAuthoritative:input.hostModelAuthoritative===true,attachments:[],requestedCapabilities:input.requiredCapabilities??[],maxOutputTokens:null,privacyMode:null,metadata:{workerTextOnly:'true'}},routeSignal);
+        return await router.route({prompt,...(input.taskPacket?{taskPacket:input.taskPacket}:{}),...(input.selectionPin?{selectionPin:input.selectionPin}:{}),routingMode:'regular',sourceClient:'regular-mcp',hostApplication:input.hostApplication??'antigravity',hostModel:input.hostModelAuthoritative?input.hostModel??null:null,hostModelAuthoritative:input.hostModelAuthoritative===true,attachments:[],requestedCapabilities:input.requiredCapabilities??[],maxOutputTokens:null,privacyMode:null,metadata:{workerTextOnly:'true'}},routeSignal);
       } catch(error) {throw new Error(globalRedactor.redactText(error instanceof Error?error.message:'Worker request failed'));}
       finally {busy=false;routeSignal=undefined;}
     },

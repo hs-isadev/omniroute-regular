@@ -87,17 +87,19 @@ export async function createChatBackend(root,{protector,providerOptions={},trans
     const required=['text',...(input.tools?.length?['tool_calling']:[]),...(intent.requiredCapabilities.includes('coding')?['coding']:[])];
     const audit={fallbackAttempts:[],policyDecisions:[]},routeId=randomUUID();
     // The registry must contain the seed; candidates will be filtered and ordered deterministically.
-    const candidates=failover.candidates(initial,snapshot,required,estimateTokens(JSON.stringify(input)),intent.modelPreference);
-    if(!candidates.length)throw new SafeError('FREE_MODELS_UNAVAILABLE','No free model supports this conversation size and tools',503);
+    const policy={taskClass:intent.suggestedClass};
+    const chosen=failover.select(initial,snapshot,required,estimateTokens(JSON.stringify(input)),intent.modelPreference,policy);
+    audit.routingDiagnostics=[chosen.diagnostic];
+    if(!chosen.selection)throw new SafeError('FREE_MODELS_UNAVAILABLE','No free model supports this conversation size and tools',503);
     try {
-      const result=await failover.run(candidates[0],snapshot,required,estimateTokens(JSON.stringify(input)),signal,audit,'opencode',async selection=>{
+      const result=await failover.run(chosen.selection,snapshot,required,estimateTokens(JSON.stringify(input)),signal,audit,'opencode',async selection=>{
         const {transport,path}=transports.get(selection.providerId);
         const response=await transport.request(selection.providerId,path,{method:'POST',body:JSON.stringify(upstreamBody(input,selection)),signal});
         return normalizeCompletion(await response.json(),selection,routeId,!!input.response_format&&input.response_format.type!=='text');
-      },intent.modelPreference);
-      await logger.write('info','opencode.route',{routeId,intent:intent.intent,provider:result.selection.providerId,model:result.selection.modelId,fallbacks:audit.fallbackAttempts});
+      },intent.modelPreference,policy);
+      await logger.write('info','opencode.route',{routeId,intent:intent.intent,provider:result.selection.providerId,model:result.selection.modelId,fallbacks:audit.fallbackAttempts,routingDiagnostics:audit.routingDiagnostics,taskClass:intent.suggestedClass,sourceClient:"opencode"});
       return result.value;
-    }catch(error){await logger.write('warn','opencode.failed',{routeId,intent:intent.intent,fallbacks:audit.fallbackAttempts});throw error;}
+    }catch(error){await logger.write('warn','opencode.failed',{routeId,intent:intent.intent,fallbacks:audit.fallbackAttempts,routingDiagnostics:audit.routingDiagnostics,taskClass:intent.suggestedClass,sourceClient:"opencode"});throw error;}
   }};
 }
 export async function startChatProxy(backend) {

@@ -34,15 +34,16 @@ test('Antigravity demanding coding fallback skips inadequate tiny models', async
   assert.deepEqual(f.providers.get('groq')!.calls.map(c=>c.modelId),['big']);
   assert.match(result.attribution.policyDecisions.join(' '),/quality floor/);
 });
-test('Antigravity initially chooses the strongest configured eligible tier across providers',async()=>{
+test('Antigravity retains the tier floor while balancing eligible providers',async()=>{
   const f=fixture(),root=await mkdtemp(join(tmpdir(),'omni-initial-quality-'));
   for(const m of f.models) if(m.providerId==='groq'&&m.modelId==='big')m.intelligenceTier=4;
   const router=new OmniRouter({config:f.config,providers:f.providers,registry:async()=>f.snapshot,audit:new AuditStore(join(root,'routes')),logger:new JsonlLogger(join(root,'logs'))});
   const result=await router.route({prompt:'Refactor the entire multi-file coding architecture.',routingMode:'regular',sourceClient:'antigravity-mcp',hostApplication:'antigravity',hostModel:null,hostModelAuthoritative:false,attachments:[],requestedCapabilities:['coding'],maxOutputTokens:100,privacyMode:null,metadata:{workerTextOnly:'true'}},AbortSignal.timeout(5000));
-  assert.equal(result.attribution.worker.providerId,'gemini');
+  assert.equal(result.attribution.worker.providerId,'groq');
+  assert.equal(result.attribution.routingDiagnostics?.[0]?.reason,'BALANCED_LEAST_DISPATCHED');
 });
 
-test("model ladder upgrades to best on the selected provider, exhausts its smaller models, then changes provider", async () => {
+test("model ladder tries the selected model first and changes only after failures", async () => {
   const f = fixture(), calls: string[] = [];
   const ladder = new FreeModelFailover(f.config, f.providers);
   const result = await ladder.run(primary, f.snapshot, ["text"], 20, AbortSignal.timeout(5000), f.audit, "worker", async (selection) => {
@@ -50,7 +51,7 @@ test("model ladder upgrades to best on the selected provider, exhausts its small
     if (selection.providerId === "groq") throw limited();
     return "ok";
   });
-  assert.deepEqual(calls, ["groq/big", "groq/small", "gemini/big"]);
+  assert.deepEqual(calls, ["groq/small", "groq/big", "gemini/big"]);
   assert.equal(result.selection.providerId, "gemini");
   assert.equal(f.audit.fallbackAttempts.length, 3);
 });
@@ -58,7 +59,7 @@ test("model ladder upgrades to best on the selected provider, exhausts its small
 test("429 cooldown is model-specific, persists between routes and expires using Retry-After", async () => {
   const f = fixture(); let now = 10000;
   const ladder = new FreeModelFailover(f.config, f.providers, () => now);
-  await ladder.run(primary, f.snapshot, ["text"], 20, AbortSignal.timeout(5000), f.audit, "worker", async (selection) => { if (selection.modelId === "big") throw limited("groq", 2000); return "small"; });
+  await ladder.run({...primary, modelId: "big"}, f.snapshot, ["text"], 20, AbortSignal.timeout(5000), f.audit, "worker", async (selection) => { if (selection.modelId === "big") throw limited("groq", 2000); return "small"; });
   assert.equal(ladder.candidates(primary, f.snapshot, ["text"], 20)[0]?.modelId, "small");
   now += 2001;
   assert.equal(ladder.candidates(primary, f.snapshot, ["text"], 20)[0]?.modelId, "big");
@@ -66,7 +67,7 @@ test("429 cooldown is model-specific, persists between routes and expires using 
 
 test("HTTP 413 token quota tries the smaller same-provider model next", async () => {
   const f = fixture(), calls: string[] = [];
-  const result = await new FreeModelFailover(f.config, f.providers).run(primary, f.snapshot, ["text"], 20, AbortSignal.timeout(5000), f.audit, "worker", async (selection) => {
+  const result = await new FreeModelFailover(f.config, f.providers).run({...primary, modelId: "big"}, f.snapshot, ["text"], 20, AbortSignal.timeout(5000), f.audit, "worker", async (selection) => {
     calls.push(`${selection.providerId}/${selection.modelId}`);
     if (selection.modelId === "big") throw new ProviderHttpError("groq", 413, null, JSON.stringify({ error: { code: "rate_limit_exceeded" } }));
     return "ok";
@@ -116,7 +117,7 @@ for (const mode of ["regular", "orchestrator"] as const) test(`${mode} routes do
   try {
     const router = new OmniRouter({ config: f.config, providers: f.providers, registry: async () => f.snapshot, audit: new AuditStore(join(root, "audit.jsonl")), logger: new JsonlLogger(join(root, "log.jsonl")) });
     const result = await router.route({ prompt: "Explain this design.", routingMode: mode, sourceClient: "test", hostApplication: "test", hostModel: null, hostModelAuthoritative: false, attachments: [], requestedCapabilities: [], maxOutputTokens: 100, privacyMode: null, metadata: {} }, AbortSignal.timeout(5000));
-    assert.deepEqual(f.providers.get("groq")!.calls.map((call) => call.modelId), ["big", "small"]);
+    assert.deepEqual(f.providers.get("groq")!.calls.map((call) => call.modelId), mode === "regular" ? ["big", "small"] : ["small", "big"]);
     assert.equal(result.attribution.worker.providerId, "gemini");
     assert.equal(result.attribution.worker.modelId, "big");
     assert.equal(result.attribution.fallbacksAttempted.length, 3);
@@ -154,14 +155,14 @@ test("subtasks, reviewer and revision share cooldowns and preserve final attribu
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-for (const mode of ["regular", "orchestrator"] as const) test(`${mode}: casual questions stay on the light worker instead of being upgraded by failover`, async () => {
+for (const mode of ["regular", "orchestrator"] as const) test(`${mode}: execution preserves the selected worker without silently changing models`, async () => {
   const f = fixture(), root = await mkdtemp(join(tmpdir(), "omni-intent-"));
   f.providers.get("openrouter")!.responses.push({ text: JSON.stringify(planFixture({ primary: { ...primary, modelId: "big" } })) });
   f.providers.get("groq")!.responses.push({ text: "short answer" });
   try {
     const router = new OmniRouter({ config: f.config, providers: f.providers, registry: async () => f.snapshot, audit: new AuditStore(join(root, "audit.jsonl")), logger: new JsonlLogger(join(root, "log.jsonl")) });
     const result = await router.route({ prompt: "Why is the sky blue?", routingMode: mode, sourceClient: "test", hostApplication: "test", hostModel: null, hostModelAuthoritative: false, attachments: [], requestedCapabilities: [], maxOutputTokens: null, privacyMode: null, metadata: {} }, AbortSignal.timeout(5000));
-    assert.equal(result.attribution.worker.modelId, "small");
+    assert.equal(result.attribution.worker.modelId, mode === "regular" ? "small" : "big");
     assert.ok(result.attribution.policyDecisions.includes("intent casual_question; lightweight model preference"));
     if (mode === "regular") {
       assert.equal(f.providers.get("openrouter")!.calls.length, 0);
@@ -182,7 +183,7 @@ test("lightweight fallback stays within the provider before changing providers",
   assert.equal(result.selection.modelId, "small");
 });
 
-for (const mode of ["regular", "orchestrator"] as const) for (const prompt of ["Debug this Python code.", "Write a tiny Python function to add two numbers.", "Review this code for errors."]) test(`${mode}: coding prefers GPT OSS 120B: ${prompt}`, async () => {
+for (const mode of ["regular", "orchestrator"] as const) for (const prompt of ["Debug this Python code.", "Write a tiny Python function to add two numbers.", "Review this code for errors."]) test(`${mode}: coding selection respects intent and the planner decision: ${prompt}`, async () => {
   const f = fixture(), root = await mkdtemp(join(tmpdir(), "omni-coding-intent-"));
   for (const model of f.models.filter(model => model.providerId === "groq")) model.modelId = model.modelId === "big" ? "openai/gpt-oss-120b" : "openai/gpt-oss-20b";
   f.config.providers.find(provider => provider.id === "groq")!.freeModelOrder = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
@@ -191,7 +192,7 @@ for (const mode of ["regular", "orchestrator"] as const) for (const prompt of ["
   try {
     const router = new OmniRouter({ config: f.config, providers: f.providers, registry: async () => f.snapshot, audit: new AuditStore(join(root, "audit.jsonl")), logger: new JsonlLogger(join(root, "log.jsonl")) });
     const result = await router.route({ prompt, routingMode: mode, sourceClient: "test", hostApplication: "test", hostModel: null, hostModelAuthoritative: false, attachments: [], requestedCapabilities: [], maxOutputTokens: 100, privacyMode: null, metadata: {} }, AbortSignal.timeout(5000));
-    assert.equal(result.attribution.worker.modelId, "openai/gpt-oss-120b");
+    assert.equal(result.attribution.worker.modelId, mode === "regular" ? "openai/gpt-oss-120b" : "openai/gpt-oss-20b");
     assert.ok(result.attribution.policyDecisions.includes("intent coding; quality model preference"));
   } finally { await rm(root, { recursive: true, force: true }); }
 });

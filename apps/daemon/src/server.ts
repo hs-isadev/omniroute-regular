@@ -205,11 +205,14 @@ export class OmniDaemonServer {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new SafeError("REQUEST_INVALID", "Route request must be an object", 400);
     const raw = input as Record<string, unknown>;
     const prompt = typeof raw.prompt === "string" ? raw.prompt : typeof defaults.prompt === "string" ? defaults.prompt : "";
+    if (raw.selectionPin !== undefined && (!raw.selectionPin || typeof raw.selectionPin !== "object" || Array.isArray(raw.selectionPin))) throw new SafeError("PIN_INVALID", "Pin must be an object", 400);
     const requestedMode = typeof raw.routingMode === "string" ? raw.routingMode : defaults.routingMode ?? this.#runtime.config.routing.defaultMode;
     if (!ROUTING_MODES.includes(requestedMode as RoutingMode)) throw new SafeError("ROUTING_MODE_INVALID", "routingMode must be regular or orchestrator", 400);
     const capabilities = Array.isArray(raw.requestedCapabilities) ? raw.requestedCapabilities.filter((item): item is Capability => typeof item === "string" && CAPABILITIES.includes(item as Capability)) : defaults.requestedCapabilities ?? [];
     return {
       prompt,
+      ...(raw.taskPacket !== undefined ? {taskPacket: raw.taskPacket as NonNullable<RouteRequest["taskPacket"]>} : {}),
+      ...(raw.selectionPin !== undefined ? {selectionPin: raw.selectionPin as NonNullable<RouteRequest["selectionPin"]>} : {}),
       routingMode: requestedMode as RoutingMode,
       sourceClient: typeof raw.sourceClient === "string" ? raw.sourceClient : defaults.sourceClient ?? "local-api",
       hostApplication: typeof raw.hostApplication === "string" ? raw.hostApplication : defaults.hostApplication ?? "standalone",

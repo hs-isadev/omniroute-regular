@@ -1,10 +1,11 @@
 import {access,readFile,writeFile,readdir,mkdir,cp,mkdtemp,chmod} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
 import {join,resolve,relative} from 'node:path';
+import {prepareRuntimePayload} from './prepare-runtime-payload.mjs';
 import {verifyPackage} from '../distribution/install.mjs';
 
-const repo=resolve(import.meta.dirname,'..'),version='0.6.3-private.1',release=join(repo,'release','OmniRoute-Private-'+version);
+const repo=resolve(import.meta.dirname,'..'),version='0.6.4-private.1',release=join(repo,'release','OmniRoute-Private-'+version);
 try{await access(release);throw new Error('Private package folder exists; preserve it before rebuilding.');}catch(error){if(error.code!=='ENOENT')throw error;}
 await mkdir(release,{recursive:true});const work=await mkdtemp(join(repo,'.build','private-'));
 async function run(command,args){await new Promise((resolvePromise,reject)=>{const child=spawn(command,args,{stdio:'inherit',windowsHide:true});child.once('error',reject);child.once('exit',code=>code===0?resolvePromise():reject(new Error(`${command} failed ${code}`)));});}
@@ -19,16 +20,20 @@ for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']])
   for(const name of browserPackages)await cp(join(repo,'packages',name),join(payload,'app/packages',name),{recursive:true,force:true});
   for(const name of ['playwright','playwright-core'])await cp(join(repo,'node_modules',name),join(payload,'app/node_modules',name),{recursive:true,force:true});
   await cp(join(repo,'package.json'),join(payload,'app/package.json'),{force:true});await cp(join(repo,'package-lock.json'),join(payload,'app/package-lock.json'),{force:true});
-  for(const name of ['dual-chat.mjs','dual-setup.mjs','gui-keys.mjs','settings-gui.py','Settings.ps1','settings.mjs','key-editor.mjs'])await cp(join(repo,'distribution',name),join(payload,'app/distribution',name));
+  for(const name of ['dual-chat.mjs','dual-setup.mjs','gui-keys.mjs','settings-gui.py','Settings.ps1','settings.mjs','key-editor.mjs','mcp-regular.mjs','regular-policy.mjs','antigravity.mjs','install.mjs'])await cp(join(repo,'distribution',name),join(payload,'app/distribution',name));
   await cp(join(repo,'distribution/dual'),join(payload,'app/distribution/dual'),{recursive:true});
   const windows=platform==='windows-x64',wrappers=windows?['Launch.ps1','Launch.cmd','Connect.ps1','Connect.cmd']:['Launch.sh','Connect.sh'];
   for(const name of wrappers)await cp(join(repo,'distribution/dual',name),join(payload,name));for(const name of windows?['Setup.ps1','Setup.cmd']:['Setup.sh'])await cp(join(repo,'distribution/dual',name),join(target,name));
   const archive=join(repo,'.cache',`opencode-${platform}-1.18.25.tgz`);if(createHash('sha512').update(await readFile(archive)).digest('base64')!==integrity[platform])throw new Error('OpenCode official npm checksum mismatch');
   const extracted=join(work,platform);await mkdir(extracted);await run(process.platform==='win32'?'tar.exe':'tar',['-xzf',archive,'-C',extracted]);await mkdir(join(payload,'opencode'));await cp(join(extracted,'package/bin',windows?'opencode.exe':'opencode'),join(payload,'opencode',windows?'opencode.exe':'opencode'));await cp(join(repo,'distribution/OPENCODE-LICENSE.txt'),join(payload,'opencode/LICENSE.txt'));await cp(join(repo,'THIRD-PARTY-NOTICES.md'),join(payload,'app/THIRD-PARTY-NOTICES.md'));if(!windows)await chmod(join(payload,'opencode/opencode'),0o755);
-  await writeFile(join(payload,'dual-provenance.json'),JSON.stringify({version,hosts,status:'shareable-family-package',personalDataIncluded:false,browserSessionsIncluded:false,publishable:true,sourceBaseline:'OmniRoute 0.6.3 family package with popup-tolerant browser readiness, bounded API-worker swarms, guarded browser-consumer usage, and one shared local browser profile',notice:'Each recipient signs in with their own accounts. No credentials or sessions are included, and no CAPTCHA or anti-bot bypass is implemented.'},null,2)+'\n');
+  await writeFile(join(payload,'dual-provenance.json'),JSON.stringify({version,hosts,status:'shareable-family-package',personalDataIncluded:false,browserSessionsIncluded:false,publishable:true,sourceBaseline:'OmniRoute 0.6.4: balanced eligible routing, bounded host task packets, repaired browser MCP startup, and guarded browser consumers',notice:'Each recipient signs in with their own accounts. No credentials or sessions are included, and no CAPTCHA or anti-bot bypass is implemented.'},null,2)+'\n');
+  await writeFile(join(payload,'provenance.json'),JSON.stringify({version,platform,builtAt:new Date().toISOString(),sourceBaseCommit:execFileSync('git',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8',windowsHide:true}).trim(),workingTreeChanges:true,runtimeFormat:'generated/minified JavaScript and required launch assets',developmentSourceIncluded:false,sourceMapsIncluded:false,signature:'unsigned; verify release SHA-256'},null,2)+'\n');
+  console.log(JSON.stringify(await prepareRuntimePayload(payload,repo)));
   const files=[];async function walk(directory){for(const item of await readdir(directory,{withFileTypes:true})){const path=join(directory,item.name),rel=relative(payload,path).replaceAll('\\','/');if(item.isSymbolicLink())throw new Error('No symlinks allowed in payload');if(item.isDirectory())await walk(path);else{if(/(?:^|\/)(?:credentials[^/]*\.txt|vault\.json|auth\.json|\.env(?:\..*)?|.*\.log)$/.test(rel))throw new Error(`Personal/credential file rejected: ${rel}`);files.push({path:rel,sha256:hash(await readFile(path))});}}}await walk(payload);files.sort((a,b)=>a.path.localeCompare(b.path));
-  await writeFile(join(target,'manifest.json'),JSON.stringify({version,platform,host:'antigravity',hosts,privateLocalOnly:true,files},null,2)+'\n');await verifyPackage(target,platform);console.log(`Verified ${label}: ${files.length} payload files`);
+  await writeFile(join(target,'manifest.json'),JSON.stringify({version,platform,host:'antigravity',hosts,privateLocalOnly:false,runtimeArtifactOnly:true,files},null,2)+'\n');await verifyPackage(target,platform);console.log(`Verified ${label}: ${files.length} payload files`);
 }
 await cp(join(repo,'distribution/dual/README.md'),join(release,'README.md'));await cp(join(repo,'distribution/PRIVATE-README.md'),join(release,'README-PRIVATE.md'));await cp(join(repo,'distribution/MODEL-LIMITS.md'),join(release,'MODEL-LIMITS.md'));await cp(join(repo,'distribution/VERIFICATION.md'),join(release,'VERIFICATION.md'));await cp(join(repo,'THIRD-PARTY-NOTICES.md'),join(release,'THIRD-PARTY-NOTICES.md'));await cp(join(repo,'distribution/dual/Install-Windows.cmd'),join(release,'Install-Windows.cmd'));await cp(join(repo,'distribution/dual/Install-Linux.sh'),join(release,'Install-Linux.sh'));
 await writeFile(join(release,'PRIVATE-USE-NOTICE.txt'),'SHAREABLE FAMILY PACKAGE. No API keys, browser profiles, cookies, passwords, or account sessions are included. Each recipient signs in with their own accounts after installation. Setup opens one dedicated local browser profile with six user-controlled sign-in tabs. The adapters pace usage and stop on verification or blocking notices; they do not bypass CAPTCHA, anti-bot, rate-limit, or access controls.\n');
+await cp(join(repo,'docs/routing-policy.md'),join(release,'ROUTING-POLICY.md'));
+await cp(join(repo,'docs/host-orchestration.md'),join(release,'HOST-ORCHESTRATION.md'));
 console.log(`Staged shareable package: ${release}`);

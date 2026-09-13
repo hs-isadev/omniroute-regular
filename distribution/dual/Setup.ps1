@@ -16,7 +16,7 @@ foreach($item in @(@('OmniRoute OpenCode','opencode'),@('OmniRoute Antigravity',
   $shortcut.TargetPath=Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
   $shortcut.Arguments='-NoLogo -NoProfile -STA -ExecutionPolicy Bypass -File "'+(Join-Path $InstallRoot 'Launch.ps1')+'" -Action '+$item[1]
   $shortcut.WorkingDirectory=$InstallRoot
-  if($item[1] -notin @('opencode','usage')){$shortcut.WindowStyle=7}
+  if($item[1] -notin @('opencode','usage')){$shortcut.Arguments='-WindowStyle Hidden '+$shortcut.Arguments;$shortcut.WindowStyle=7}
   $shortcut.Save()
 }
 $env:OMNIROUTE_REGULAR_ROOT=$InstallRoot

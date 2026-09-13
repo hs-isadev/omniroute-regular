@@ -33,8 +33,7 @@ guarantee that every request is understood correctly.
 live parameter-count benchmark across providers. Capability/context/health checks
 still apply; unused web-agent capability loses ties for a plain text question.
 Regular lightweight requests default to 2,048 output tokens and no reasoning
-effort where supported; explicit output limits are preserved. Provider preference
-still takes priority over cross-provider model size.
+effort where supported; explicit output limits are preserved. Explicit provider priorities still take precedence over cross-provider model size; otherwise eligible providers share dispatches.
 
 The intent preference persists through worker execution and retries, including
 free API planners in orchestrator mode. That mode still plans; regular mode does
@@ -51,7 +50,7 @@ not native Codex subagents or ordinary ChatGPT model responses.
 ## Planner behavior
 
 Regular mode has no planner: it selects an eligible free worker using configured
-provider order and deterministic model metadata. Orchestrator mode uses the
+the balanced selector and deterministic model metadata. Orchestrator mode uses the
 configured planner, `openrouter/openrouter/free` by default, with a strict JSON
 contract. The selected underlying OpenRouter model may rotate.
 
@@ -80,12 +79,12 @@ One constrained plan repair is allowed. A second invalid plan fails closed.
 Planner-proposed emergency fallbacks remain disabled by default; the separate
 deterministic free-model ladder is enabled by default.
 
-## Provider-first free-model ladder
+## Selected-model-first free fallback
 
 For regular workers and orchestrator-mode workers, subtasks, reviews, and free
 API planners:
 
-1. Use the selected provider's highest-ranked eligible free model.
+1. Try the selected provider/model exactly. A successful selection is never replaced merely to re-rank it.
 2. On a rate/quota limit, immediately try its next eligible lower-ranked model.
 3. Only after that provider's eligible models are exhausted, try the next
    enabled provider in `routing.directProviderOrder`, starting at its best model.
@@ -132,3 +131,71 @@ limited to classified transient failures and honor `Retry-After`; a stream that
 already emitted output is never retried automatically because that could
 duplicate cost. Emergency fallbacks run only when explicitly enabled and appear
 in attribution.
+
+## Balanced Regular selection and diagnostics
+
+`routing.selectionPolicy` defaults to `balanced`. After all eligibility checks,
+choose the provider with the fewest dispatch selections in this running router.
+Counters advance synchronously at selection, before asynchronous execution or
+success, so simultaneous requests do not all see the same first provider.
+Within that provider preserve intent, curated `freeModelOrder`, intelligence
+and latency ranks; equally ranked models also share selections. Registry ordering
+and `directProviderOrder` break initial ties only. The OpenCode chat backend uses
+the same selector. Counters are process-local and reset on restart; this is not a
+global quota service or a promise of equal traffic across separate host processes.
+
+`routing.providerPriorities` maps provider IDs to numeric priority levels (larger
+wins, default zero). Balance inside the highest eligible priority group. For an
+intentional strict ordered preference set `routing.selectionPolicy` to `priority`;
+this preserves `directProviderOrder` precedence. Existing lists alone do not imply
+an intentional permanent monopoly under balanced mode.
+
+A Regular request may set `selectionPin: {providerId, modelId?}` through HTTP or
+MCP. A provider pin permits only its eligible models; a model pin is exact. An
+unavailable pin fails closed with audit diagnostics; it never silently selects a
+different provider/model or bypasses safety. Pins suppress automatic worker swarms.
+Model pins require a provider ID. Pins in orchestrator mode are rejected.
+
+Eligibility requires an available adapter, enabled and allowed model, healthy
+status, confirmed zero input/output price, known limits, sufficient context and
+all required capabilities. Known quota limits and model cooldowns exclude a
+candidate. Classified transient/unavailable/timeout failures also cool down the
+failed model, avoiding immediate reselection from a stale health snapshot.
+`providers[].maxConcurrentRequests` controls per-provider in-flight calls (browser
+default one, API default daemon route concurrency). Browser adapters retain their
+own spacing, rolling budgets and blocking cooldowns; the selector cannot override
+them. Small-only consumers are excluded for medium/large/critical work, even when
+pinned. Unknown task class excludes a class-limited consumer. The Regular MCP
+coding quality floor remains tier four for demanding coding; ordinary eligible
+text/code requests may use Qwen, Kimi or any other supported browser provider.
+
+The selected candidate is attempted first. Only a failure or current eligibility
+loss permits fallback. Fallback tries remaining eligible models on that provider
+before other configured providers; it never relaxes capability, task, context,
+free-only, pin or cooldown constraints. Authentication/invalid-request failures,
+cancellation and partial streams still fail closed. If no alternative is eligible,
+Groq may receive every request; diagnostics explain the exclusions.
+
+`attribution.routingDiagnostics` is persisted in route history and returned by
+MCP/HTTP. It contains selection/execution phases, selected registry IDs, required
+capability enums, numeric input estimates, task class, health status and candidate
+reason codes. It does not contain prompts, attachments, answers or upstream error
+bodies. The outer attribution supplies source client and host. The shared Regular
+MCP endpoint now identifies itself as `regular-mcp` rather than labeling every
+host as Antigravity.
+
+Selection codes include `BALANCED_LEAST_DISPATCHED`, `EXPLICIT_PIN`,
+`EXPLICIT_PROVIDER_PRIORITY`, `PROVIDER_ORDER_PRIORITY`, and
+`ONLY_ELIGIBLE_PROVIDER`. Exclusions include `TASK_CLASS_LIMIT`, `QUALITY_FLOOR`,
+`CAPABILITY_*`, `CONTEXT_LIMIT`, `LIMITS_UNKNOWN`, `HEALTH_*`, `QUOTA_LIMITED`,
+`COOLDOWN`, `CONCURRENCY_LIMIT`, `ADAPTER_UNAVAILABLE`, `REGISTRY_UNAVAILABLE`,
+`FREE_POLICY`, `MODEL_DENIED`, `MODEL_DISABLED`, `PROVIDER_DISABLED`, and
+`PIN_MISMATCH`. Execution distinguishes `SELECTED_CANDIDATE_SUCCEEDED`,
+`FALLBACK_SELECTED_INELIGIBLE`, and `FALLBACK_AFTER_FAILURE`; fallback attempts
+retain classified failure categories. Even zero-candidate Regular failures are
+now written to the audit store.
+
+`scripts/summarize-route-history.mjs <routes.jsonl>` reports only an allowlisted
+metadata projection and aggregates. Missing historical dimensions are explicitly
+reported as not recorded; present-day configuration cannot establish past health
+or eligibility. Do not copy raw logs or upstream error bodies into reports.

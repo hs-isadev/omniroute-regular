@@ -16,7 +16,7 @@ test('regular MCP locks mode, bounds concurrency and preserves host authority',a
   await assert.rejects(backend.route({...input,routingMode:'orchestrator'}),/regular/i);
   const first=backend.route(input);
   await assert.rejects(backend.route(input),/busy/i);
-  assert.equal(received.routingMode,'regular');assert.equal(received.hostModel,null);assert.equal(received.sourceClient,'antigravity-mcp');
+  assert.equal(received.routingMode,'regular');assert.equal(received.hostModel,null);assert.equal(received.sourceClient,'regular-mcp');
   complete({answer:'ok'});await first;
 });
 

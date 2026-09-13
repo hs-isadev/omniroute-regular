@@ -1,13 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
-import { CAPABILITIES, type ModelEntry, type RouteResult, type TokenSavingsSummary } from "@omniroute/contracts";
+import { CAPABILITIES, type WorkerTaskPacket, type ModelEntry, type RouteResult, type TokenSavingsSummary } from "@omniroute/contracts";
 
 export const MCP_INSTRUCTIONS = `OmniRoute enforces a free-only model policy and returns explicit worker attribution. routingMode=regular deterministically selects a healthy free worker without an LLM planner. routingMode=orchestrator uses the configured free planner. When Claude Code is launched in host-orchestrator mode, Claude should decompose work itself and call omni_route with routingMode=regular for bounded delegations. Preserve attribution verbatim. Never send credentials to any tool.`;
 
 export interface McpBackend {
   route(input: {
     prompt: string;
+    taskPacket?: WorkerTaskPacket | undefined;
+    selectionPin?: {providerId: string; modelId?: string | undefined} | undefined;
     parentTask?: string | undefined;
     requiredCapabilities: string[];
     hostApplication: string;
@@ -34,6 +36,8 @@ export function createOmniMcpServer(backend: McpBackend, options: { regularOnly?
       inputSchema: z.object({
         prompt: z.string().min(1).max(1_000_000).describe("The user's task. Never include credentials."),
         ...(options.regularOnly ? {parentTask: z.string().max(100_000).optional().describe("Bounded parent requirements for continue/teruskan. Ignored for a new task.")} : {}),
+        taskPacket: z.object({objective: z.string().min(1).max(20000), excerpts: z.array(z.object({path: z.string().max(1000), text: z.string().max(100000)})).max(32), constraints: z.array(z.string().max(10000)).max(32), acceptanceCriteria: z.array(z.string().max(10000)).max(32), requestedOutput: z.string().max(10000), independent: z.boolean(), worthwhile: z.boolean(), responseTokens: z.number().int().positive(), instructionReserveTokens: z.number().int().min(256), synthesisReserveTokens: z.number().int().min(256)}).optional().describe("Optional minimized host task packet. Unknown or insufficient validated worker limits suppress delegation; the host owns final synthesis."),
+        selectionPin: z.object({providerId: z.string().min(1).max(100), modelId: z.string().min(1).max(256).optional()}).optional().describe("Strict regular worker pin; never bypasses eligibility or silently changes provider/model."),
         requiredCapabilities: z.array(z.enum(CAPABILITIES)).max(7).default([]),
         hostApplication: z.string().min(1).max(100).default("mcp-host"),
         hostModel: z.string().max(256).nullable().default(null),
