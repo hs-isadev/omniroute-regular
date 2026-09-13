@@ -165,6 +165,35 @@ test("Claude consumer adapter errors are retryable so the free-provider ladder c
   );
 });
 
+test("model registry isolates a slow provider from later provider health checks", async () => {
+  const config = configFixture();
+  const slowSettings = config.providers.find((provider) => provider.id === "openai")!;
+  const fastSettings = structuredClone(slowSettings);
+  fastSettings.id = "fast";
+  fastSettings.type = "openai-compatible";
+  fastSettings.baseUrl = "https://fast.example.com";
+  config.providers.push(fastSettings);
+
+  const slow = new MockProvider("openai");
+  slow.healthCheck = async (signal?: AbortSignal) => new Promise((resolve) => {
+    const finish = () => resolve({ status: "unhealthy", checkedAt: new Date().toISOString(), latencyMs: 20, message: "timeout" });
+    if (signal?.aborted) finish();
+    else signal?.addEventListener("abort", finish, { once: true });
+  });
+  const fast = new MockProvider("fast");
+  fast.models = [{ id: "gpt-5.6-sol", name: "fast", createdAt: null, contextWindow: null, maxOutputTokens: null, capabilities: {}, reasoningEfforts: [] }];
+  fast.healthCheck = async (signal?: AbortSignal) => signal?.aborted
+    ? { status: "unhealthy", checkedAt: new Date().toISOString(), latencyMs: 0, message: "shared deadline already expired" }
+    : fast.health;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error("registry deadline")), 20);
+  const registry = await buildRegistry(config, new Map([[slow.id, slow], [fast.id, fast]]), controller.signal);
+  clearTimeout(timer);
+  assert.equal(registry.models.find((model) => model.providerId === "openai")?.health.status, "unhealthy");
+  assert.equal(registry.models.find((model) => model.providerId === "fast")?.health.status, "healthy");
+});
+
 test("Z.AI consumer adapter sends natural user text through the signed-in web session", async () => {
   const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
   const provider = new ZaiConsumerProvider({

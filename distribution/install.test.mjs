@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -11,7 +11,7 @@ async function fixture(version='0.2.0') {
   await mkdir(join(bundle,'payload'),{recursive:true});
   const platform=process.platform==='win32'?'windows-x64':'linux-x64';
   const files=[];
-  for(const [path,content] of Object.entries({'app/version.txt':version,'Launch.cmd':'fixture launcher','Launch.sh':'#!/bin/sh\n','Settings.cmd':'fixture settings','Settings.sh':'#!/bin/sh\n'})) {
+  for(const [path,content] of Object.entries({'app/version.txt':version,'app/distribution/mcp-regular.mjs':'fixture server','node/node.exe':'fixture node','node/node':'fixture node','Launch.cmd':'fixture launcher','Launch.sh':'#!/bin/sh\n','Settings.cmd':'fixture settings','Settings.sh':'#!/bin/sh\n'})) {
     await mkdir(join(bundle,'payload',path,'..'),{recursive:true});await writeFile(join(bundle,'payload',path),content);
     files.push({path,sha256:createHash('sha256').update(content).digest('hex')});
   }
@@ -38,6 +38,15 @@ test('installer rejects unmarked destinations, unsafe manifests and extra files'
   await writeFile(join(f.bundle,'payload','extra'),'unexpected');await assert.rejects(verifyPackage(f.bundle),/checksum|unexpected/i);
   const manifest=JSON.parse(await readFile(join(f.bundle,'manifest.json')));manifest.files[0].path='../escape';
   await writeFile(join(f.bundle,'manifest.json'),JSON.stringify(manifest));await assert.rejects(verifyPackage(f.bundle),/unsafe/i);
+});
+test('package verification rejects a manifest without its required Node runtime',async()=>{
+  const f=await fixture();
+  const manifest=JSON.parse(await readFile(join(f.bundle,'manifest.json')));
+  const nodePath=process.platform==='win32'?'node/node.exe':'node/node';
+  manifest.files=manifest.files.filter(entry=>entry.path!==nodePath);
+  await unlink(join(f.bundle,'payload',nodePath));
+  await writeFile(join(f.bundle,'manifest.json'),JSON.stringify(manifest));
+  await assert.rejects(verifyPackage(f.bundle),/required runtime|node/i);
 });
 test('reinstall detects installed payload tampering and upgrade preserves edited launchers',async()=>{
   const f=await fixture();await installPackage(f.bundle,f.install);

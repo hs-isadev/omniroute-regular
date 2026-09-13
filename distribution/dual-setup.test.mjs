@@ -10,12 +10,32 @@ test('global Antigravity setup is repeatable and preserves unrelated MCP entries
   assert.equal(typeof mod.connectAntigravity,'function','combined global connector missing');
   const home=await mkdtemp(join(tmpdir(),'dual-host-')),root=join(home,'install');await mkdir(join(home,'.gemini/config'),{recursive:true});
   const path=join(home,'.gemini/config/mcp_config.json');await writeFile(path,JSON.stringify({mcpServers:{existing:{command:'keep'}}}));await writeFile(join(home,'.gemini/GEMINI.md'),'Existing rules\n');
-  const options={home,root,node:process.execPath,entrypoint:join(home,'server.mjs')};
+  const entrypoint=join(home,'server.mjs');await writeFile(entrypoint,'// fixture');
+  const options={home,root,node:process.execPath,entrypoint};
   await mod.connectAntigravity(options);const before=await readFile(path,'utf8');await mod.connectAntigravity(options);
   assert.equal(await readFile(path,'utf8'),before);assert.equal(JSON.parse(before).mcpServers.existing.command,'keep');
   assert.match(await readFile(join(home,'.gemini/GEMINI.md'),'utf8'),/^Existing rules/);
   await writeFile(path,JSON.stringify({mcpServers:{omniroute_regular:{command:'user-owned'}}}));
   await assert.rejects(mod.connectAntigravity(options),/conflict/i);
+});
+test('global Antigravity setup refuses missing runtime files before registration',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'dual-host-missing-')),root=join(home,'install');
+  const configPath=join(home,'.gemini/config/mcp_config.json');
+  await assert.rejects(mod.connectAntigravity({home,root,node:join(home,'missing-node.exe'),entrypoint:join(home,'missing-server.mjs')}),/runtime|executable|entrypoint|missing/i);
+  await assert.rejects(readFile(configPath,'utf8'),/ENOENT/);
+});
+
+test('active runtime resolution follows the installed marker and supports spaces',async()=>{
+  assert.equal(typeof mod.resolveActiveRuntime,'function','active runtime resolver missing');
+  const root=await mkdtemp(join(tmpdir(),'OmniRoute Install With Spaces '));
+  const active='versions/0.6.5-private.1-fixture',payload=join(root,active);
+  const node=join(payload,'node',process.platform==='win32'?'node.exe':'node');
+  const entrypoint=join(payload,'app/distribution/mcp-regular.mjs');
+  await mkdir(join(payload,'node'),{recursive:true});await mkdir(join(payload,'app/distribution'),{recursive:true});
+  await writeFile(node,'fixture');await writeFile(entrypoint,'fixture');await writeFile(join(root,'active-version.txt'),active+'\n');
+  assert.deepEqual(await mod.resolveActiveRuntime(root),{active,payload,node,entrypoint});
+  await writeFile(join(root,'active-version.txt'),'versions/stale-missing\n');
+  await assert.rejects(mod.resolveActiveRuntime(root),/missing|unhealthy|runtime/i);
 });
 test('OpenCode environment excludes upstream credentials and points both models at local router',()=>{
   assert.equal(typeof mod.openCodeEnvironment,'function','isolated environment missing');
