@@ -36,3 +36,15 @@ test('provider validation never reports a failed live probe as success',async()=
   assert.equal(rows[0].tests[0].status,'FAILED');
   assert.equal('message' in rows[0].tests[0],false);
 });
+
+test('provider validation records catalog exclusions without probing an unsupported model',async()=>{
+  const settings={id:'configured',type:'openai-compatible',enabled:true,freeTierOnly:true,freeTierConfirmed:true,baseUrl:'https://configured.example.com/',apiPrefix:'v1/',freeModelOrder:['removed-free'],models:[{modelId:'removed-free',enabled:true,allowed:true,inputPerMillionUsd:0,outputPerMillionUsd:0}]};
+  let generateCalls=0;
+  const rows=await validateConfiguredApiProviders({
+    config:{routing:{freeOnly:true},daemon:{maxConcurrentRoutes:4},providers:[settings]},defaults:{providers:[settings]},
+    vault:{list:()=>[{providerId:'configured'}],get:()=>({API_KEY:'not-a-real-key'})},creditProviders:[],
+    factory:()=>({listModels:async()=>[{id:'other-free'}],generate:async()=>{generateCalls++;return {text:'fake'}},classifyError:error=>error}),
+  });
+  assert.equal(generateCalls,0);assert.equal(rows[0].status,'FAILED');assert.equal(rows[0].reasonCode,'UNSUPPORTED_MODEL');
+  assert.equal(rows[0].tests[0].status,'NOT_TESTED');
+});
