@@ -48,3 +48,16 @@ test('provider validation records catalog exclusions without probing an unsuppor
   assert.equal(generateCalls,0);assert.equal(rows[0].status,'FAILED');assert.equal(rows[0].reasonCode,'UNSUPPORTED_MODEL');
   assert.equal(rows[0].tests[0].status,'NOT_TESTED');
 });
+
+test('provider validation reports every configured credential slot independently',async()=>{
+  const settings={id:'configured',type:'openai-compatible',enabled:true,freeTierOnly:true,freeTierConfirmed:true,baseUrl:'https://configured.example.com/',freeModelOrder:['free'],models:[{modelId:'free',enabled:true,allowed:true,inputPerMillionUsd:0,outputPerMillionUsd:0}]};
+  const credentials=new Map([[1,{API_KEY:'fixture-good'}],[2,{API_KEY:'fixture-bad'}]]);
+  const rows=await validateConfiguredApiProviders({
+    config:{routing:{freeOnly:true},daemon:{maxConcurrentRoutes:4},providers:[settings]},defaults:{providers:[settings]},creditProviders:[],
+    vault:{list:()=>[],listCredentialSlots:()=>[1,2].map(slot=>({providerId:'configured',slot})),getCredentialSlot:(_id,slot)=>credentials.get(slot)},
+    factory:(_trusted,values)=>({listModels:async()=>[{id:'free'}],generate:async()=>{if(values.API_KEY.includes('bad'))throw {category:'authentication',providerStatus:401};return {text:'OK'};},classifyError:error=>error}),
+  });
+  assert.equal(rows[0].credentialCount,2);assert.deepEqual(rows[0].credentialSlots,[1,2]);
+  assert.equal(rows[0].status,'PARTIAL_SUCCESS');assert.equal(rows[0].reasonCode,'SOME_CREDENTIAL_SLOTS_FAILED');
+  assert.deepEqual(rows[0].slotResults.map(item=>[item.slot,item.status,item.reasonCode]),[[1,'SUCCESS','SUCCESS'],[2,'FAILED','INVALID_AUTHENTICATION']]);
+});
