@@ -161,3 +161,9 @@ test("existing config gains new opt-in providers without enabling them or replac
     assert.equal(loaded.providers.find((item) => item.id === "groq")!.models[0]!.enabled, false);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("Groq catalog uses the current supported Qwen model ID", () => {
+  const groq = DEFAULT_CONFIG.providers.find((provider) => provider.id === "groq")!;
+  assert.ok(groq.models.some((model) => model.modelId === "qwen/qwen3.8-27b"));
+  assert.ok(!groq.models.some((model) => model.modelId === "qwen/qwen3.6-27b"));
+});

@@ -37,6 +37,13 @@ test('provider validation never reports a failed live probe as success',async()=
   assert.equal('message' in rows[0].tests[0],false);
 });
 
+test('provider validation reserves enough output for reasoning models to produce visible text',async()=>{
+  const settings={id:'configured',type:'openai-compatible',enabled:true,freeTierOnly:true,freeTierConfirmed:true,baseUrl:'https://configured.example.com/',freeModelOrder:['free'],models:[{modelId:'free',enabled:true,allowed:true,inputPerMillionUsd:0,outputPerMillionUsd:0}]};
+  let requested=0;
+  const rows=await validateConfiguredApiProviders({config:{routing:{freeOnly:true},daemon:{maxConcurrentRoutes:4},providers:[settings]},defaults:{providers:[settings]},creditProviders:[],vault:{list:()=>[{providerId:'configured'}],get:()=>({API_KEY:'fixture'})},factory:()=>({listModels:async()=>[{id:'free'}],generate:async request=>{requested=request.maxOutputTokens;return {text:requested>=512?'OK':''};},classifyError:error=>error})});
+  assert.ok(requested>=512);assert.equal(rows[0].status,'SUCCESS');
+});
+
 test('provider validation records catalog exclusions without probing an unsupported model',async()=>{
   const settings={id:'configured',type:'openai-compatible',enabled:true,freeTierOnly:true,freeTierConfirmed:true,baseUrl:'https://configured.example.com/',apiPrefix:'v1/',freeModelOrder:['removed-free'],models:[{modelId:'removed-free',enabled:true,allowed:true,inputPerMillionUsd:0,outputPerMillionUsd:0}]};
   let generateCalls=0;
