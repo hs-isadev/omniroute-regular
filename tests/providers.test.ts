@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AnthropicProvider, BrowserConsumerProvider, buildRegistry, ClaudeConsumerProvider, OpenAICompatibleProvider, OpenAIProvider, ProviderHttpError, retryProviderCall, ZaiConsumerProvider } from "@omniroute/providers";
+import { AnthropicProvider, BrowserConsumerProvider, buildRegistry, ClaudeConsumerProvider, createProviders, OpenAICompatibleProvider, OpenAIProvider, ProviderHttpError, retryProviderCall, ZaiConsumerProvider } from "@omniroute/providers";
 import { MockProvider } from "@omniroute/testing";
 import { configFixture } from "./helpers.js";
 
@@ -163,6 +163,30 @@ test("Claude consumer adapter errors are retryable so the free-provider ladder c
     provider.generate({ modelId: "claude-web-consumer", prompt: "Hi", instructions: "", reasoningEffort: "none", maxOutputTokens: 64, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null }),
     (error: unknown) => provider.classifyError(error).category === "unavailable" && provider.classifyError(error).retryable,
   );
+});
+
+test("provider credential pool rotates slots and fails over within the same provider", async () => {
+  const config = configFixture();
+  const settings = config.providers.find((provider) => provider.id === "openai")!;
+  settings.enabled = true;
+  const calls: string[] = [];
+  const providers = createProviders(config, {
+    credentials: { openai: [{ OPENAI_API_KEY: "fake-first" }, { OPENAI_API_KEY: "fake-second" }] },
+    skipDnsValidationForTests: true,
+    fetchImpl: async (_url, init) => {
+      const authorization = String((init?.headers as Record<string, string>)?.authorization ?? "");
+      calls.push(authorization);
+      if (authorization.endsWith("fake-first")) return new Response("limited", { status: 429 });
+      return Response.json({ id: "response", output_text: "ok" });
+    },
+  });
+  const provider = providers.get("openai")!;
+  const request = { modelId: "gpt-5.6-sol", prompt: "synthetic", instructions: "reply", reasoningEffort: "low" as const, maxOutputTokens: 16, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null };
+  assert.equal((await provider.generate(request)).text, "ok");
+  assert.deepEqual(calls, ["Bearer fake-first", "Bearer fake-second"]);
+  calls.length = 0;
+  assert.equal((await provider.generate(request)).text, "ok");
+  assert.deepEqual(calls, ["Bearer fake-second"]);
 });
 
 test("model registry isolates a slow provider from later provider health checks", async () => {

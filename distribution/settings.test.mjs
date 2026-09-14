@@ -44,6 +44,31 @@ test('setup accepts any supported free provider credentials and counts Cloudflar
   assert.equal(accepted.accepted.length,6);
   assert.deepEqual(accepted.accepted,['groq','gemini','mistral','cohere','cerebras','cloudflare']);
 });
+test('setup validates and reports five independent slots for one provider',async()=>{
+  const {paths,protector}=await context();
+  const slots={groq:Array.from({length:5},(_,index)=>({GROQ_API_KEY:`fixture-groq-${index+1}`}))};
+  const result=await configure({slots,freeOnlyConfirmed:true},paths,{protector,factory:success});
+  assert.deepEqual(result.accepted,['groq']);
+  assert.deepEqual(result.slotResults.map(item=>[item.providerId,item.slot,item.status,item.reasonCode]),[
+    ['groq',1,'ACCEPTED','SUCCESS'],['groq',2,'ACCEPTED','SUCCESS'],['groq',3,'ACCEPTED','SUCCESS'],['groq',4,'ACCEPTED','SUCCESS'],['groq',5,'ACCEPTED','SUCCESS'],
+  ]);
+  assert.deepEqual(result.stored,[{providerId:'groq',slots:[1,2,3,4,5]}]);
+  const vault=await SecretVault.load(paths.vault,protector);
+  assert.deepEqual(vault.getCredentialSlots('groq').map(item=>item.slot),[1,2,3,4,5]);vault.dispose();
+});
+test('a failed credential slot is identified and does not overwrite that saved slot',async()=>{
+  const {paths,protector}=await context();
+  await configure({slots:{groq:[{GROQ_API_KEY:'fixture-old-one'},{GROQ_API_KEY:'fixture-old-two'}]},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  const result=await configure({slots:{groq:[{}, {GROQ_API_KEY:'fixture-bad-two'}, {GROQ_API_KEY:'fixture-good-three'}]},freeOnlyConfirmed:true},paths,{protector,factory:(_settings,values)=>({generate:async()=>{if(values.GROQ_API_KEY.includes('bad'))throw {category:'authentication',providerStatus:401};return {text:'OK'};},classifyError:error=>error})});
+  assert.deepEqual(result.slotResults.map(item=>[item.slot,item.status,item.reasonCode]),[[2,'FAILED','INVALID_AUTHENTICATION'],[3,'ACCEPTED','SUCCESS']]);
+  const vault=await SecretVault.load(paths.vault,protector);const saved=vault.getCredentialSlots('groq');
+  assert.equal(saved.find(item=>item.slot===2).values.GROQ_API_KEY,'fixture-old-two');
+  assert.equal(saved.find(item=>item.slot===3).values.GROQ_API_KEY,'fixture-good-three');vault.dispose();
+});
+test('setup rejects more than five credential slots per provider',async()=>{
+  const {paths,protector}=await context();
+  await assert.rejects(configure({slots:{groq:Array.from({length:6},()=>({GROQ_API_KEY:'fixture'}))},freeOnlyConfirmed:true},paths,{protector,factory:success}),/five|5/i);
+});
 test('failed replacement preserves existing key and ignores edited endpoint',async()=>{
   const {paths,protector}=await context();
   await configure({keys:{OPENROUTER_API_KEY:fixture},freeOnlyConfirmed:true},paths,{protector,factory:success});

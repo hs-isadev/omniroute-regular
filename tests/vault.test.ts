@@ -35,6 +35,19 @@ test("vault record round-trip and tamper authentication", async () => {
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("vault keeps five independent credential slots while preserving legacy slot one", async () => {
+  const protector = new InMemoryKeyProtector(Buffer.alloc(32, 23));
+  const vault = await SecretVault.create(protector);
+  vault.set("groq", { GROQ_API_KEY: "fake-slot-one" });
+  for (let slot = 2; slot <= 5; slot += 1) vault.setCredentialSlot("groq", slot, { GROQ_API_KEY: `fake-slot-${slot}` });
+  assert.deepEqual(vault.getCredentialSlots("groq").map((item) => [item.slot, item.values.GROQ_API_KEY]), [
+    [1, "fake-slot-one"], [2, "fake-slot-2"], [3, "fake-slot-3"], [4, "fake-slot-4"], [5, "fake-slot-5"],
+  ]);
+  assert.equal(vault.get("groq")?.GROQ_API_KEY, "fake-slot-one");
+  assert.throws(() => vault.setCredentialSlot("groq", 6, { GROQ_API_KEY: "fake-slot-six" }), /slot/i);
+  vault.dispose();
+});
+
 test("Windows DPAPI current-user round-trip", { skip: process.platform !== "win32" }, async () => {
   const protector = new DpapiCurrentUserProtector();
   const plaintext = Buffer.from("dpapi-round-trip-test");
