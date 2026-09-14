@@ -6,8 +6,8 @@ host registration, repairs registrations across update and rollback, isolates
 provider health deadlines, and adds metadata-only safe provider diagnostics. It
 retains the free-only routing and guarded browser-consumer limits. Each recipient
 supplies their own keys and account sign-ins; no credentials, cookies, profiles or
-sessions are included. The candidate is intentionally not published while local
-verification is in progress. See [its release notes](docs/releases/v0.6.5-private.1.md).
+sessions are included. Local verification is complete; this task intentionally did
+not publish the candidate. See [its release notes](docs/releases/v0.6.5-private.1.md).
 
 ## Current release setup
 
