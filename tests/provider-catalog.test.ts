@@ -159,6 +159,8 @@ test("existing config gains new opt-in providers without enabling them or replac
     const loaded = await loadConfig(getRuntimePaths(root));
     for (const profile of EXTRA_FREE_PROVIDERS) assert.equal(loaded.providers.find((item) => item.id === profile.id)?.enabled, false);
     assert.equal(loaded.providers.find((item) => item.id === "groq")!.models[0]!.enabled, false);
+    assert.ok(!loaded.providers.find((item) => item.id === "groq")!.models.some((model) => model.modelId === "qwen/qwen3.6-27b"));
+    assert.ok(loaded.providers.find((item) => item.id === "groq")!.models.some((model) => model.modelId === "qwen/qwen3.8-27b"));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
