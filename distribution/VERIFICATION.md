@@ -35,7 +35,7 @@
 
 Local source gates on 2026-09-13: TypeScript typecheck/build passed; 185/185 core
 tests passed; 15/15 deterministic evaluation fixtures passed; distribution tests
-passed 139 with two platform-inapplicable skips and no failures; 15/15 security and
+passed 141 with two platform-inapplicable skips and no failures; 15/15 security and
 vault tests passed; and `npm audit --omit=dev` reported zero vulnerabilities.
 
 GUI shortcuts for API Keys and Antigravity hide only the package-owned PowerShell

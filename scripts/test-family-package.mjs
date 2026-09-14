@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {readFile,writeFile,mkdtemp,mkdir,readdir,stat} from 'node:fs/promises';
+import {access,readFile,writeFile,mkdtemp,mkdir,readdir,stat} from 'node:fs/promises';
 import {resolve,join,relative,dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';

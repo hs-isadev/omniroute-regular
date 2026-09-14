@@ -28,7 +28,7 @@ Date: 2026-09-13.
   false success, and unsupported discovery results without generation.
 - Focused runtime, startup, installer and provider validation suite: 37/37 passed.
 - Full gates: TypeScript/build passed; core 185/185; routing evaluations 15/15;
-  distribution 139 passed, two platform skips, zero failures; security/vault 15/15;
+  distribution 141 passed, two platform skips, zero failures; security/vault 15/15;
   production dependency audit zero vulnerabilities.
 
 Full build, security, package, installed registration and archive results are
