@@ -86,12 +86,24 @@ export async function repairBrowserConsumerRuntime({root,runtime}){
   if(repaired.length)await saveConfig(config,paths);
   return {changed:repaired.length>0,providers:repaired};
 }
-export async function repairHostRegistrations({root,home=homedir()}){
+export async function repairBrowserConsumerAutostart({root,runtime,home=homedir(),env}){
+  if(!env)return {changed:false,reason:'not-requested'};
+  const platform=process.platform,file=platform==='win32'&&env.APPDATA?join(env.APPDATA,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.vbs'):
+    platform==='linux'?join(home,'.config/autostart/omniroute-browser-consumers.desktop'):null;
+  if(!file)return {changed:false,reason:'unsupported-or-unconfigured'};
+  const before=await optional(file);if(before===null)return {changed:false,reason:'not-installed'};
+  if(!before.includes('shared-session.mjs')||!before.includes('browser-consumer-profile')||!before.includes('--port 47842'))throw new Error('Browser consumer autostart conflict; original preserved');
+  const entrypoint=join(runtime.payload,'app/packages/browser-consumer-adapter/src/shared-session.mjs');await requireRuntimeFile(entrypoint,'browser consumer startup entrypoint');
+  await installSharedBrowserConsumerAutostart({platform,home,root,node:runtime.node,entrypoint,env});
+  return {changed:(await optional(file))!==before,file};
+}
+export async function repairHostRegistrations({root,home=homedir(),env}){
   const runtime=await resolveActiveRuntime(root);
   const browserConsumers=await repairBrowserConsumerRuntime({root,runtime});
+  const browserAutostart=await repairBrowserConsumerAutostart({root,runtime,home,env});
   const antigravity=await connectAntigravity({home,root,node:runtime.node,entrypoint:runtime.entrypoint});
   const developers=await connectDeveloperHosts({home,root,node:runtime.node,entrypoint:runtime.entrypoint});
-  return {...runtime,browserConsumers,antigravity,developers};
+  return {...runtime,browserConsumers,browserAutostart,antigravity,developers};
 }
 export async function configureClaudeConsumer({root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/claude-consumer-adapter/src/adapter.mjs',import.meta.url))}) {
   for(const path of [root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute Claude consumer paths required');
@@ -282,7 +294,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
     else if(action==='keys')await openKeyForm(root);
     else if(action==='usage')await showUsage(root);
     else if(action==='setup')await setupBoth(root,{noKeys:args.includes('--no-keys'),noLaunch:args.includes('--no-launch')});
-    else if(action==='repair-hosts')await repairHostRegistrations({root});
+    else if(action==='repair-hosts')await repairHostRegistrations({root,env:process.env});
     else throw new Error('Unknown setup action');
   }catch(e){console.error(e.message);process.exitCode=1;}
 }

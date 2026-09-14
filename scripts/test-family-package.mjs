@@ -73,7 +73,10 @@ if(process.platform==='win32'){
   const cleanEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/KEY|TOKEN|SECRET|PASSWORD|NODE_OPTIONS|OMNIROUTE|OPENCODE/i.test(key)));
   Object.assign(cleanEnv,{HOME:hostHome,USERPROFILE:hostHome,APPDATA:join(hostHome,'AppData/Roaming'),OMNIROUTE_REGULAR_ROOT:install,OMNIROUTE_HOME:join(install,'data')});
   const hostConfig=join(hostHome,'.gemini/config/mcp_config.json');
-  const repair=async()=>{await (await import(pathToFileURL(join(install,(await readFile(join(install,'active-version.txt'),'utf8')).trim(),'app/distribution/dual-setup.mjs')).href)).repairHostRegistrations({root:install,home:hostHome});};
+  const startup=join(cleanEnv.APPDATA,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.vbs');await mkdir(dirname(startup),{recursive:true});
+  await writeFile(startup,`CreateObject("WScript.Shell").Run """${join(install,previousActive,'node/node.exe')}"" ""${join(install,previousActive,'app/packages/browser-consumer-adapter/runtime/shared-session.mjs')}"" --background --profile ""${join(install,'data/browser-consumer-profile')}"" --port 47842", 0, False\r\n`);
+  const repair=async()=>{await (await import(pathToFileURL(join(install,(await readFile(join(install,'active-version.txt'),'utf8')).trim(),'app/distribution/dual-setup.mjs')).href)).repairHostRegistrations({root:install,home:hostHome,env:cleanEnv});};
+  const assertStartup=async expectedActive=>{const text=await readFile(startup,'utf8'),expectedNode=join(install,expectedActive,'node/node.exe'),expectedEntry=join(install,expectedActive,'app/packages/browser-consumer-adapter/runtime/shared-session.mjs');assert.match(text,new RegExp(expectedNode.replace(/[\\^$.*+?()[\]{}|]/g,'\\$&')));assert.match(text,new RegExp(expectedEntry.replace(/[\\^$.*+?()[\]{}|]/g,'\\$&')));await access(expectedNode);await access(expectedEntry);};
   const handshake=async expectedActive=>{
     const entry=JSON.parse(await readFile(hostConfig,'utf8')).mcpServers.omniroute_regular;
     assert.equal(entry.command,join(install,expectedActive,'node/node.exe'));assert.deepEqual(entry.args,[join(install,expectedActive,'app/distribution/mcp-regular.mjs')]);
@@ -84,11 +87,11 @@ if(process.platform==='win32'){
     try{const initialized=await invoke('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'antigravity-registration-smoke',version:'1'}});assert.equal(initialized.serverInfo.name,'omniroute');server.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');const tools=await invoke('tools/list',{});assert.deepEqual(tools.tools.map(tool=>tool.name).sort(),['omni_models','omni_route','omni_routes','omni_usage']);registeredHandshakes++;}
     finally{server.stdin.end();server.kill();for(const pending of requests.values())clearTimeout(pending.timer);}
   };
-  await repair();await handshake(active);
+  await repair();await assertStartup(active);await handshake(active);
   await run('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(install,'Manage.ps1'),'-Action','rollback'],{env:cleanEnv});
-  assert.equal((await readFile(join(install,'active-version.txt'),'utf8')).trim(),previousActive);await handshake(previousActive);
+  assert.equal((await readFile(join(install,'active-version.txt'),'utf8')).trim(),previousActive);await assertStartup(previousActive);await handshake(previousActive);
   await run('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(bundle,'Setup.ps1'),'-InstallRoot',install,'-InstallOnly'],{env:cleanEnv});
-  await repair();assert.equal((await readFile(join(install,'active-version.txt'),'utf8')).trim(),active);await handshake(active);
+  await repair();assert.equal((await readFile(join(install,'active-version.txt'),'utf8')).trim(),active);await assertStartup(active);await handshake(active);
 }
 
 const child=spawn(node,[join(repo,'scripts/package-protocol-fixture.mjs'),app,temp],{windowsHide:true,stdio:['pipe','pipe','pipe']});

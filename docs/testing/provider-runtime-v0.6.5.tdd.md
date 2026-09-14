@@ -13,6 +13,8 @@ Date: 2026-09-13.
 - An update preserved enabled browser-consumer adapter paths from 0.6.4, causing
   the real 0.6.5 MCP command to exit at strict policy initialization even though
   its Node executable and entrypoint existed.
+- The Windows startup VBS remained on 0.6.4 and raised error 80070002 when its
+  shared browser-consumer entrypoint was no longer present.
 - Safe-provider validation lacked stable metadata-only reason codes and model
   discovery exclusions.
 
@@ -24,7 +26,7 @@ Date: 2026-09-13.
   hosts with the current management code; verified inactive stages can be reused.
 - Validation tests distinguish disabled/unconfigured routes, safe failure classes,
   false success, and unsupported discovery results without generation.
-- Focused installer, host and provider validation suite: 26/26 passed.
+- Focused runtime, startup, installer and provider validation suite: 37/37 passed.
 - Full gates: TypeScript/build passed; core 185/185; routing evaluations 15/15;
   distribution 139 passed, two platform skips, zero failures; security/vault 15/15;
   production dependency audit zero vulnerabilities.

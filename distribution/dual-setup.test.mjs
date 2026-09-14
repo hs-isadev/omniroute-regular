@@ -70,6 +70,17 @@ test('host registration repair updates enabled browser consumers to the active r
   assert.equal(repaired.mcpCommand,node);assert.deepEqual(repaired.mcpArgs,[browser,'--provider','qwen','--endpoint',preserved.baseUrl]);assert.equal(repaired.mcpWorkingDirectory,join(browser,'..'));
   assert.equal(repaired.enabled,true);assert.equal(repaired.baseUrl,preserved.baseUrl);assert.equal(repaired.maxTaskClass,preserved.maxTaskClass);assert.deepEqual(repaired.models,preserved.models);
 });
+test('host registration repair refreshes an existing browser-consumer startup command to the active runtime',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'dual-autostart-cycle-')),root=join(home,'Install With Spaces'),active='versions/0.6.5-private.1-new',payload=join(root,active),appData=join(home,'AppData/Roaming');
+  const node=join(payload,'node',process.platform==='win32'?'node.exe':'node'),mcp=join(payload,'app/distribution/mcp-regular.mjs'),shared=join(payload,'app/packages/browser-consumer-adapter/src/shared-session.mjs');
+  for(const file of [node,mcp,shared]){await mkdir(join(file,'..'),{recursive:true});await writeFile(file,'fixture');}
+  await writeFile(join(root,'active-version.txt'),active+'\n');
+  const startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup');await mkdir(startup,{recursive:true});
+  const vbs=join(startup,'OmniRoute Browser Consumers.vbs'),old=join(root,'versions/0.6.4-private.1-old');
+  await writeFile(vbs,`CreateObject("WScript.Shell").Run """${join(old,'node/node.exe')}"" ""${join(old,'app/packages/browser-consumer-adapter/runtime/shared-session.mjs')}"" --background --profile ""${join(root,'data/browser-consumer-profile')}"" --port 47842", 0, False\r\n`);
+  await mod.repairHostRegistrations({root,home,env:{APPDATA:appData}});
+  const repaired=await readFile(vbs,'utf8');assert.match(repaired,new RegExp(node.replace(/[\\^$.*+?()[\]{}|]/g,'\\$&')));assert.match(repaired,new RegExp(shared.replace(/[\\^$.*+?()[\]{}|]/g,'\\$&')));assert.doesNotMatch(repaired,/0\.6\.4-private/);
+});
 test('OpenCode environment excludes upstream credentials and points both models at local router',()=>{
   assert.equal(typeof mod.openCodeEnvironment,'function','isolated environment missing');
   const env=mod.openCodeEnvironment({PATH:'fixture',HOME:'/user',GROQ_API_KEY:'never-forward',NODE_OPTIONS:'--require evil'},'/install','{}');
