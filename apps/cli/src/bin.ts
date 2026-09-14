@@ -189,16 +189,21 @@ async function secrets(): Promise<void> {
   }
   const vault = await SecretVault.load(paths.vault);
   try {
-    if (action === "list") { writeJson(vault.list().filter((item) => item.providerId !== "local-daemon").map((item) => ({ provider: item.providerId, fields: item.fieldNames, maskedFingerprint: `sha256:${item.fingerprint}`, createdAt: item.createdAt }))); return; }
+    if (action === "list") {
+      const config = await loadConfig(paths);
+      writeJson(config.providers.flatMap((provider) => vault.listCredentialSlots(provider.id).map((item) => ({ provider: provider.id, slot: item.slot, fields: item.fieldNames, maskedFingerprint: `sha256:${item.fingerprint}`, createdAt: item.createdAt }))));
+      return;
+    }
     const providerId = args[2];
     if (!providerId) throw new SafeError("PROVIDER_REQUIRED", `secrets ${action} requires a provider ID`, 400);
     if (action === "remove") {
-      const removed = vault.remove(providerId);
+      let removed = false;
+      for (let slot = 1; slot <= 5; slot += 1) removed = vault.removeCredentialSlot(providerId, slot) || removed;
       if (removed) await vault.save(paths.vault);
       writeJson({ provider: providerId, removed }); return;
     }
     if (action === "rotate") {
-      if (!vault.get(providerId)) throw new SafeError("PROVIDER_NOT_CONFIGURED", `No credential is configured for ${providerId}`, 404);
+      if (!vault.listCredentialSlots(providerId).length) throw new SafeError("PROVIDER_NOT_CONFIGURED", `No credential is configured for ${providerId}`, 404);
       const file = await createCredentialTemplate(paths);
       writeJson({ provider: providerId, status: "awaiting-local-edit", file, instruction: "Put the replacement credential in the local file, then run `omni secrets import`. The active credential remains unchanged unless validation succeeds." }); return;
     }
@@ -206,10 +211,10 @@ async function secrets(): Promise<void> {
       if (!has("--live")) throw new SafeError("LIVE_FLAG_REQUIRED", "Live credential tests require --live", 400);
       const budget = Number(option("--budget-usd"));
       if (!Number.isFinite(budget) || budget <= 0) throw new SafeError("BUDGET_REQUIRED", "Live credential tests require a positive --budget-usd value", 400);
-      const values = vault.get(providerId);
-      if (!values) throw new SafeError("PROVIDER_NOT_CONFIGURED", `No credential is configured for ${providerId}`, 404);
-      await verifyCredential(providerId, values);
-      writeJson({ provider: providerId, status: "healthy", live: true, maximumAuthorizedBudgetUsd: budget }); return;
+      const slots = vault.getCredentialSlots(providerId);
+      if (!slots.length) throw new SafeError("PROVIDER_NOT_CONFIGURED", `No credential is configured for ${providerId}`, 404);
+      for (const slot of slots) try { await verifyCredential(providerId, slot.values); } finally { for (const field of Object.keys(slot.values)) slot.values[field] = ""; }
+      writeJson({ provider: providerId, slots: slots.map((slot) => slot.slot), status: "healthy", live: true, maximumAuthorizedBudgetUsd: budget }); return;
     }
     throw new SafeError("COMMAND_UNKNOWN", `Unknown secrets action: ${action}`, 400);
   } finally { vault.dispose(); }
@@ -290,7 +295,7 @@ async function doctor(): Promise<void> {
   } catch (error) { findings.push({ check: "model registry", status: "error", detail: safeError(error).message }); }
   try {
     const vault = await SecretVault.load(paths.vault);
-    try { findings.push({ check: "encrypted vault", status: "ok", detail: vault.list().filter((item) => item.providerId !== "local-daemon").map((item) => ({ provider: item.providerId, fingerprint: item.fingerprint })) }); }
+    try { const config = await loadConfig(paths); findings.push({ check: "encrypted vault", status: "ok", detail: config.providers.map((provider) => ({ provider: provider.id, slots: vault.listCredentialSlots(provider.id).length })).filter((item) => item.slots > 0) }); }
     finally { vault.dispose(); }
   } catch (error) { findings.push({ check: "encrypted vault", status: "error", detail: safeError(error).message }); }
   const manager = new IntegrationManager({ nodePath: process.execPath, cliPath: cliEntry(), runtimePaths: paths });

@@ -46,18 +46,19 @@ export async function createDaemonRuntime(options: {
   const config = await loadConfig(paths);
   const token = await ensureLocalDaemonToken(paths, options.protector);
   const vault = await SecretVault.load(paths.vault, options.protector);
-  const credentials: Record<string, Record<string, string>> = {};
+  const credentials: Record<string, Record<string, string>[]> = {};
   try {
     for (const provider of config.providers) {
-      const record = vault.get(provider.id);
-      if (record) credentials[provider.id] = record;
+      const records = vault.getCredentialSlots(provider.id).map((item) => item.values);
+      if (records.length) credentials[provider.id] = records;
     }
     for (const wellKnown of ["openai", "anthropic", "openrouter", "custom-openai", "azure-openai"]) {
-      const record = vault.get(wellKnown);
-      if (record) credentials[wellKnown] = record;
+      const records = vault.getCredentialSlots(wellKnown).map((item) => item.values);
+      if (records.length) credentials[wellKnown] = records;
     }
   } finally { vault.dispose(); }
   const providers = createProviders(config, { credentials, fetchImpl: options.fetchImpl, skipDnsValidationForTests: options.skipDnsValidationForTests });
+  for (const slots of Object.values(credentials)) for (const values of slots) for (const field of Object.keys(values)) values[field] = "";
   const registry = new RegistryManager(config, providers);
   const audit = new AuditStore(paths.routes);
   const logger = new JsonlLogger(paths.log);

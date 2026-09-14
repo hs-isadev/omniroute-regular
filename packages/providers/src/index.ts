@@ -903,7 +903,7 @@ export class LocalProvider extends OpenAICompatibleProvider {
 }
 
 export interface ProviderFactoryOptions {
-  credentials: Record<string, Record<string, string>>;
+  credentials: Record<string, Record<string, string> | ReadonlyArray<Readonly<Record<string, string>>>>;
   fetchImpl?: FetchLike | undefined;
   skipDnsValidationForTests?: boolean | undefined;
   mcpToolCaller?: McpToolCaller | undefined;
@@ -944,12 +944,108 @@ export function createConfiguredProvider(settings: ProviderSettings, credential:
   return new OpenAICompatibleProvider({ ...common, apiKey, compatibility });
 }
 
+export class CredentialPoolProvider implements ProviderAdapter {
+  readonly id: string;
+  readonly supportsStreaming: boolean;
+  readonly credentialSlotCount: number;
+  readonly #providers: ProviderAdapter[];
+  readonly #cooldownUntil: number[];
+  #cursor = 0;
+  #lastError: unknown = null;
+
+  constructor(providers: ProviderAdapter[]) {
+    if (!providers.length || providers.some((provider) => provider.id !== providers[0]!.id)) throw new SafeError("PROVIDER_CREDENTIAL_POOL_INVALID", "Credential pool requires adapters for one provider", 400);
+    this.#providers = providers;
+    this.#cooldownUntil = providers.map(() => 0);
+    this.id = providers[0]!.id;
+    this.supportsStreaming = providers.every((provider) => provider.supportsStreaming);
+    this.credentialSlotCount = providers.length;
+  }
+
+  listModels(signal?: AbortSignal): Promise<ProviderModel[]> {
+    return this.#attempt((provider) => provider.listModels(signal));
+  }
+
+  async healthCheck(signal?: AbortSignal): Promise<ProviderHealth> {
+    let last: ProviderHealth | null = null;
+    for (const index of this.#availableIndexes(true)) {
+      const health = await this.#providers[index]!.healthCheck(signal);
+      if (health.status === "healthy") return health;
+      last = health;
+    }
+    return last ?? { status: "unhealthy", checkedAt: new Date().toISOString(), latencyMs: null, message: "All credential slots are cooling down" };
+  }
+
+  generate(request: GenerateRequest): Promise<GenerateResult> {
+    return this.#attempt((provider) => provider.generate(request));
+  }
+
+  async *stream(request: GenerateRequest): AsyncGenerator<ProviderStreamEvent> {
+    let lastError: unknown = null;
+    for (const index of this.#availableIndexes()) {
+      let emitted = false;
+      try {
+        for await (const event of this.#providers[index]!.stream(request)) { emitted = true; yield event; }
+        this.#cursor = (index + 1) % this.#providers.length;
+        return;
+      } catch (error) {
+        if (emitted || !this.#canTryAnother(index, error)) throw error;
+        lastError = error;
+      }
+    }
+    throw lastError ?? this.#lastError ?? new SafeError("PROVIDER_CREDENTIAL_POOL_COOLDOWN", `${this.id} credential slots are cooling down`, 503);
+  }
+
+  async cancel(responseId: string): Promise<void> {
+    await Promise.allSettled(this.#providers.map((provider) => provider.cancel(responseId)));
+  }
+
+  classifyError(error: unknown): ProviderErrorShape {
+    return this.#providers[0]!.classifyError(error);
+  }
+
+  async #attempt<T>(operation: (provider: ProviderAdapter) => Promise<T>): Promise<T> {
+    let lastError: unknown = null;
+    for (const index of this.#availableIndexes()) {
+      try {
+        const result = await operation(this.#providers[index]!);
+        this.#cursor = (index + 1) % this.#providers.length;
+        return result;
+      } catch (error) {
+        if (!this.#canTryAnother(index, error)) throw error;
+        lastError = error;
+      }
+    }
+    throw lastError ?? this.#lastError ?? new SafeError("PROVIDER_CREDENTIAL_POOL_COOLDOWN", `${this.id} credential slots are cooling down`, 503);
+  }
+
+  #canTryAnother(index: number, error: unknown): boolean {
+    const failure = this.#providers[index]!.classifyError(error);
+    if (!["authentication", "rate_limit"].includes(failure.category)) return false;
+    const fallbackMs = failure.category === "authentication" ? 5 * 60_000 : 60_000;
+    this.#cooldownUntil[index] = Date.now() + Math.max(1_000, failure.retryAfterMs ?? fallbackMs);
+    this.#lastError = error;
+    return true;
+  }
+
+  #availableIndexes(includeCooling = false): number[] {
+    const now = Date.now(), indexes: number[] = [];
+    for (let offset = 0; offset < this.#providers.length; offset += 1) {
+      const index = (this.#cursor + offset) % this.#providers.length;
+      if (includeCooling || this.#cooldownUntil[index]! <= now) indexes.push(index);
+    }
+    return indexes;
+  }
+}
+
 export function createProviders(config: OmniConfig, options: ProviderFactoryOptions): Map<string, ProviderAdapter> {
   const providers = new Map<string, ProviderAdapter>();
   for (const settings of config.providers.filter((provider) => provider.enabled)) {
-    const credential = options.credentials[settings.id] ?? {};
+    const configured = options.credentials[settings.id] ?? {};
+    const credentials = Array.isArray(configured) ? configured : [configured];
     try {
-      providers.set(settings.id, createConfiguredProvider(settings, credential, options));
+      const adapters = credentials.map((credential) => createConfiguredProvider(settings, credential, options));
+      if (adapters.length) providers.set(settings.id, adapters.length === 1 ? adapters[0]! : new CredentialPoolProvider(adapters));
     } catch (error) {
       if (!(error instanceof SafeError) || error.code !== "PROVIDER_CREDENTIAL_MISSING") throw error;
     }

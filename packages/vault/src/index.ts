@@ -95,6 +95,23 @@ export interface VaultRecordSummary {
   createdAt: string;
 }
 
+export const MAX_CREDENTIAL_SLOTS = 5;
+
+export interface VaultCredentialSlot {
+  providerId: string;
+  slot: number;
+  values: Record<string, string>;
+}
+
+export interface VaultCredentialSlotSummary extends VaultRecordSummary {
+  slot: number;
+}
+
+function credentialSlotRecordId(providerId: string, slot: number): string {
+  if (!Number.isInteger(slot) || slot < 1 || slot > MAX_CREDENTIAL_SLOTS) throw new SafeError("VAULT_SLOT_INVALID", `Credential slot must be between 1 and ${MAX_CREDENTIAL_SLOTS}`, 400);
+  return slot === 1 ? providerId : `${providerId}--slot-${slot}`;
+}
+
 function aad(metadata: EncryptedRecord["metadata"]): Buffer {
   return Buffer.from(JSON.stringify({ version: 1, ...metadata, fieldNames: [...metadata.fieldNames].sort() }), "utf8");
 }
@@ -164,6 +181,11 @@ export class SecretVault {
     return { providerId, fieldNames: metadata.fieldNames, fingerprint: record.fingerprint, createdAt: metadata.createdAt };
   }
 
+  setCredentialSlot(providerId: string, slot: number, values: Record<string, string>): VaultCredentialSlotSummary {
+    const summary = this.set(credentialSlotRecordId(providerId, slot), values);
+    return { ...summary, providerId, slot };
+  }
+
   get(providerId: string): Record<string, string> | null {
     const record = this.#data.records[providerId];
     if (!record) return null;
@@ -180,6 +202,33 @@ export class SecretVault {
     } catch {
       throw new SafeError("VAULT_AUTH_FAILED", `Vault record authentication failed for ${providerId}`);
     }
+  }
+
+  getCredentialSlot(providerId: string, slot: number): Record<string, string> | null {
+    return this.get(credentialSlotRecordId(providerId, slot));
+  }
+
+  getCredentialSlots(providerId: string): VaultCredentialSlot[] {
+    const slots: VaultCredentialSlot[] = [];
+    for (let slot = 1; slot <= MAX_CREDENTIAL_SLOTS; slot += 1) {
+      const values = this.getCredentialSlot(providerId, slot);
+      if (values) slots.push({ providerId, slot, values });
+    }
+    return slots;
+  }
+
+  listCredentialSlots(providerId: string): VaultCredentialSlotSummary[] {
+    const summaries: VaultCredentialSlotSummary[] = [];
+    for (let slot = 1; slot <= MAX_CREDENTIAL_SLOTS; slot += 1) {
+      const recordId = credentialSlotRecordId(providerId, slot);
+      const record = this.#data.records[recordId];
+      if (record) summaries.push({ providerId, slot, fieldNames: record.metadata.fieldNames, fingerprint: record.fingerprint, createdAt: record.metadata.createdAt });
+    }
+    return summaries;
+  }
+
+  removeCredentialSlot(providerId: string, slot: number): boolean {
+    return this.remove(credentialSlotRecordId(providerId, slot));
   }
 
   list(): VaultRecordSummary[] {

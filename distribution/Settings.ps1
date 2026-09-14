@@ -31,54 +31,58 @@ if($Simple) {
 }
 $form.Text = 'OmniRoute Regular - Your API keys'
 if($ExistingSetup) {$form.Text='OmniRoute - Provider keys (existing setup)'}
-$form.Size = New-Object Drawing.Size(690,640)
+$form.Size = New-Object Drawing.Size(1080,680)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
 $intro = New-Object Windows.Forms.Label
 $intro.Text = 'Configure any suitable free providers. Keys stay on this Windows account. Antigravity sign-in stays in Antigravity.'
-$intro.SetBounds(15,12,650,36)
+$intro.SetBounds(15,12,1030,36)
 $form.Controls.Add($intro)
 if($Simple) {$intro.Text='Paste your API keys below. Use Get key if you need one. Leave any others blank; saved keys are kept.'}
-$panel=New-Object Windows.Forms.Panel; $panel.SetBounds(15,52,650,330); $panel.AutoScroll=$true; $form.Controls.Add($panel)
+$panel=New-Object Windows.Forms.Panel; $panel.SetBounds(15,52,1030,370); $panel.AutoScroll=$true; $form.Controls.Add($panel)
 $rows = @(
-  @('OpenRouter','OPENROUTER_API_KEY','https://openrouter.ai/settings/keys'),
-  @('Groq','GROQ_API_KEY','https://console.groq.com/keys'),
-  @('Gemini','GEMINI_API_KEY','https://aistudio.google.com/apikey'),
-  @('Mistral','MISTRAL_API_KEY','https://console.mistral.ai/api-keys/'),
-  @('Cerebras free tier','CEREBRAS_API_KEY','https://cloud.cerebras.ai/'),
-  @('SambaNova free tier','SAMBANOVA_API_KEY','https://cloud.sambanova.ai/apis'),
-  @('Cohere','COHERE_API_KEY','https://dashboard.cohere.com/api-keys'),
-  @('Cloudflare token','CLOUDFLARE_API_TOKEN','https://dash.cloudflare.com/'),
-  @('Cloudflare account ID','CLOUDFLARE_ACCOUNT_ID','https://dash.cloudflare.com/'),
-  @('Hugging Face','HF_TOKEN','https://huggingface.co/settings/tokens'),
-  @('Kilo free gateway','KILO_API_KEY','https://app.kilo.ai/'),
-  @('Z.AI Flash only','ZAI_API_KEY','https://z.ai/manage-apikey/apikey-list'),
-  @('NVIDIA dev/test','NVIDIA_API_KEY','https://build.nvidia.com/'),
-  @('Vercel monthly credit','VERCEL_AI_GATEWAY_API_KEY','https://vercel.com/ai-gateway'),
-  @('OpenCode Zen free','OPENCODE_ZEN_API_KEY','https://opencode.ai/auth')
+  @('OpenRouter','OPENROUTER_API_KEY','https://openrouter.ai/settings/keys','openrouter'),
+  @('Groq','GROQ_API_KEY','https://console.groq.com/keys','groq'),
+  @('Gemini','GEMINI_API_KEY','https://aistudio.google.com/apikey','gemini'),
+  @('Mistral','MISTRAL_API_KEY','https://console.mistral.ai/api-keys/','mistral'),
+  @('Cerebras free tier','CEREBRAS_API_KEY','https://cloud.cerebras.ai/','cerebras'),
+  @('SambaNova free tier','SAMBANOVA_API_KEY','https://cloud.sambanova.ai/apis','sambanova'),
+  @('Cohere','COHERE_API_KEY','https://dashboard.cohere.com/api-keys','cohere'),
+  @('Cloudflare token','CLOUDFLARE_API_TOKEN','https://dash.cloudflare.com/','cloudflare'),
+  @('Cloudflare account ID','CLOUDFLARE_ACCOUNT_ID','https://dash.cloudflare.com/','cloudflare'),
+  @('Hugging Face','HF_TOKEN','https://huggingface.co/settings/tokens','huggingface'),
+  @('Kilo free gateway','KILO_API_KEY','https://app.kilo.ai/','kilo'),
+  @('Z.AI Flash only','ZAI_API_KEY','https://z.ai/manage-apikey/apikey-list','zai'),
+  @('NVIDIA dev/test','NVIDIA_API_KEY','https://build.nvidia.com/','nvidia'),
+  @('Vercel monthly credit','VERCEL_AI_GATEWAY_API_KEY','https://vercel.com/ai-gateway','vercel'),
+  @('OpenCode Zen free','OPENCODE_ZEN_API_KEY','https://opencode.ai/auth','opencode-zen')
 )
 $boxes = @{}
 if($Simple) {$rows=@($rows | Where-Object {$_[1] -notin @('HF_TOKEN','VERCEL_AI_GATEWAY_API_KEY')})}
+for($slot=1;$slot -le 5;$slot++) {$heading=New-Object Windows.Forms.Label;$heading.Text='Slot '+$slot;$heading.SetBounds((155+($slot-1)*160),0,145,22);$panel.Controls.Add($heading)}
 for ($i=0; $i -lt $rows.Count; $i++) {
-  $label=New-Object Windows.Forms.Label; $label.Text=$rows[$i][0]; $label.SetBounds(0,(3+$i*42),150,25); $panel.Controls.Add($label)
-  $box=New-Object Windows.Forms.TextBox; $box.UseSystemPasswordChar=$true; $box.SetBounds(155,($i*42),370,26); $panel.Controls.Add($box); $boxes[$rows[$i][1]]=$box
-  if(-not $ExistingSetup -and $rows[$i][1] -in @('HF_TOKEN','VERCEL_AI_GATEWAY_API_KEY')) {$box.Enabled=$false; $label.Text+=' (disabled)'}
-  $link=New-Object Windows.Forms.LinkLabel; $link.Text='Get key'; $link.Tag=$rows[$i][2]; $link.SetBounds(540,(3+$i*42),75,25)
+  $y=25+$i*42
+  $label=New-Object Windows.Forms.Label; $label.Text=$rows[$i][0]; $label.SetBounds(0,(3+$y),150,25); $panel.Controls.Add($label)
+  for($slot=1;$slot -le 5;$slot++) {
+    $box=New-Object Windows.Forms.TextBox; $box.UseSystemPasswordChar=$true; $box.SetBounds((155+($slot-1)*160),$y,145,26); $panel.Controls.Add($box); $boxes[($rows[$i][1]+'::'+$slot)]=$box
+    if(-not $ExistingSetup -and $rows[$i][1] -in @('HF_TOKEN','VERCEL_AI_GATEWAY_API_KEY')) {$box.Enabled=$false; $label.Text=$rows[$i][0]+' (disabled)'}
+  }
+  $link=New-Object Windows.Forms.LinkLabel; $link.Text='Get key'; $link.Tag=$rows[$i][2]; $link.SetBounds(965,(3+$y),60,25)
   $link.Add_LinkClicked({param($sender,$eventArgs) Start-Process $sender.Tag}); $panel.Controls.Add($link)
 }
 $confirm=New-Object Windows.Forms.CheckBox
 $confirm.Text='I checked free-tier/evaluation terms. Paid overages, BYOK and auto top-up are off.'
-$confirm.SetBounds(15,393,650,38); $form.Controls.Add($confirm)
+$confirm.SetBounds(15,433,1030,38); $form.Controls.Add($confirm)
 $notice=New-Object Windows.Forms.Label
 $notice.Text='Scroll for all 12 providers. NVIDIA/Kilo: no confidential data; evaluation use only. Vercel/HF: monthly credits. Zen: temporary free. Blank keeps saved keys. Reconnect MCP after saving.'
 if(-not $ExistingSetup) {$notice.Text='12 eligible free-plan/evaluation providers. HF/Vercel credit profiles disabled. No billing, paid overages, BYOK or auto top-up. Blank keeps saved keys. Reconnect MCP after saving.'}
 if($ExistingSetup) {$notice.Text+=' Saving valid keys restarts OmniRoute.'}
-$notice.SetBounds(15,433,650,50); $form.Controls.Add($notice)
+$notice.SetBounds(15,473,1030,50); $form.Controls.Add($notice)
 $candidates=New-Object Windows.Forms.CheckBox
 $candidates.Text='Also test Kimi K2.6 / Qwen3 Coder free candidates (up to one extra call per supplied key).'
-$candidates.SetBounds(15,485,650,35); $candidates.Enabled=(-not $ExistingSetup); $form.Controls.Add($candidates)
-$save=New-Object Windows.Forms.Button; $save.Text='Validate and save'; $save.SetBounds(235,535,190,35); $form.Controls.Add($save)
+$candidates.SetBounds(15,525,1030,35); $candidates.Enabled=(-not $ExistingSetup); $form.Controls.Add($candidates)
+$save=New-Object Windows.Forms.Button; $save.Text='Validate and save'; $save.SetBounds(430,575,190,35); $form.Controls.Add($save)
 if($Simple) {
   $candidates.Visible=$false
   $confirm.Text='I use free/evaluation accounts. Paid overages and auto top-up are OFF.'
@@ -89,7 +93,11 @@ $save.Add_Click({
   if(-not $confirm.Checked) { [Windows.Forms.MessageBox]::Show('Confirm free-only account settings first.'); return }
   $save.Enabled=$false; $save.Text='Checking keys...'; $form.Refresh()
   try {
-    $keys=@{}; foreach($name in $boxes.Keys) {$keys[$name]=$boxes[$name].Text}
+    $slots=@{}
+    foreach($row in $rows) {
+      $providerId=$row[3];if(-not $slots.ContainsKey($providerId)) {$slots[$providerId]=@(@{},@{},@{},@{},@{})}
+      for($slot=1;$slot -le 5;$slot++) {$slots[$providerId][$slot-1][$row[1]]=$boxes[($row[1]+'::'+$slot)].Text}
+    }
     $info=New-Object Diagnostics.ProcessStartInfo
     $info.FileName=$NodePath
     $backend=Join-Path $AppRoot 'distribution\settings.mjs'
@@ -98,26 +106,31 @@ $save.Add_Click({
     if($ExistingSetup) {$info.Arguments+=' --existing --restart'}
     $info.EnvironmentVariables['OMNIROUTE_HOME']=$RuntimeRoot
     $process=New-Object Diagnostics.Process; $process.StartInfo=$info; [void]$process.Start()
-    $process.StandardInput.Write((@{keys=$keys;freeOnlyConfirmed=$true;validateCodingCandidates=$candidates.Checked} | ConvertTo-Json -Compress)); $process.StandardInput.Close()
+    $process.StandardInput.Write((@{slots=$slots;freeOnlyConfirmed=$true;validateCodingCandidates=$candidates.Checked} | ConvertTo-Json -Depth 6 -Compress)); $process.StandardInput.Close()
     $errorTask=$process.StandardError.ReadToEndAsync()
     $outputTask=$process.StandardOutput.ReadToEndAsync()
     while(-not $process.HasExited) { [Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 100 }
     $result=$outputTask.Result | ConvertFrom-Json
     if($process.ExitCode -ne 0 -or -not $result.ready) { [Windows.Forms.MessageBox]::Show($result.error,'Setup needs attention'); return }
-    foreach($box in $boxes.Values) {$box.Clear()}; $keys.Clear()
+    foreach($box in $boxes.Values) {$box.Clear()}; $slots.Clear()
     $message='Saved. Open the OmniRoute Regular desktop shortcut.'
-    if($Simple) {$message='Your working keys have been saved encrypted on this PC. Restart your host or reconnect its OmniRoute MCP server to refresh providers.'}
+    if($Simple) {$message='Validation finished. Restart your host or reconnect its OmniRoute MCP server to refresh providers.'}
     if($RequireReady -and -not $Simple) {$message='Saved. Next, return to the setup terminal to choose your project folder.'}
     if($ExistingSetup) {$message='Saved for your existing OmniRoute setup. Modes, port and existing keys were preserved.'}
     if($result.restartNeeded) {$message+=' Restart OmniRoute with omni service stop, then omni service start.'}
-    if($result.failed.Count -gt 0) {$message+=' Some supplied keys failed validation: '+($result.failed -join ', ')+'. Existing keys were kept. Reopen Settings to retry.'}
+    $acceptedSlots=@($result.slotResults | Where-Object {$_.status -eq 'ACCEPTED'} | ForEach-Object {$_.providerId+' slot '+$_.slot})
+    $failedSlots=@($result.slotResults | Where-Object {$_.status -eq 'FAILED'} | ForEach-Object {$_.providerId+' slot '+$_.slot+' ('+$_.reasonCode+')'})
+    $storedProviders=@($result.stored | ForEach-Object {$_.providerId+' ('+@($_.slots).Count+' stored)'})
+    if($acceptedSlots.Count -gt 0) {$message+=[Environment]::NewLine+'Accepted and stored: '+($acceptedSlots -join ', ')+'.'}
+    if($failedSlots.Count -gt 0) {$message+=[Environment]::NewLine+'Not stored: '+($failedSlots -join ', ')+'. Existing saved slots were kept.'}
+    if($storedProviders.Count -gt 0) {$message+=[Environment]::NewLine+'Currently available: '+($storedProviders -join ', ')+'.'}
     foreach($candidate in $result.codingCandidates) {$message+=[Environment]::NewLine+$candidate.provider+'/'+$candidate.model+': '+$candidate.status}
     [Windows.Forms.MessageBox]::Show($message,'Ready'); $script:setupReady=$true; $form.Close()
   } catch { [Windows.Forms.MessageBox]::Show('Setup could not finish. Check your connection and try again. No key values were logged.','Setup error') }
   finally { $save.Enabled=$true; $save.Text='Validate and save'; if($Simple){$save.Text='Save and test'} }
 })
 if($SmokeTest) {
-  $expected=15; if($Simple){$expected=13}
+  $expected=75; if($Simple){$expected=65}
   if($boxes.Count -ne $expected -or -not $panel.AutoScroll) {throw 'Missing credential fields or scrolling'}
   if($Simple -and ($boxes.ContainsKey('HF_TOKEN') -or $boxes.ContainsKey('VERCEL_AI_GATEWAY_API_KEY') -or $save.Text -ne 'Save and test')) {throw 'Simple form has unexpected controls'}
   foreach($box in $boxes.Values) {if(-not $box.UseSystemPasswordChar) {throw 'Unmasked credential field'}}

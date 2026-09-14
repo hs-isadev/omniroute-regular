@@ -55,7 +55,7 @@ export function addDefaultFreeLadders(providers: ProviderSettings[]): void {
   add("gemini", { ...flash, modelId: "gemini-3.1-flash-lite", intelligenceTier: 2, maxOutputTokens: 8192 });
   for (const [id, tier] of [["openai/gpt-oss-120b:free", 4], ["openai/gpt-oss-20b:free", 2]] as const) add("openrouter", textModel(id, tier));
   const orders: Record<string, string[]> = {
-    groq: ["openai/gpt-oss-120b", "qwen/qwen3.6-27b", "openai/gpt-oss-20b", "groq/compound", "groq/compound-mini"],
+    groq: ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b", "groq/compound", "groq/compound-mini"],
     gemini: ["gemini-3.7-flash", "gemini-3.1-flash-lite"],
     openrouter: ["openai/gpt-oss-120b:free", "openai/gpt-oss-20b:free", "openrouter/free"],
   };

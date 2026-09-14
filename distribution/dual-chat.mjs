@@ -3,7 +3,7 @@ import {createServer} from 'node:http';
 import {join} from 'node:path';
 import {getRuntimePaths,loadConfig} from '../packages/config/dist/index.js';
 import {SecretVault} from '../packages/vault/dist/index.js';
-import {createConfiguredProvider,buildRegistry,HttpTransport} from '../packages/providers/dist/index.js';
+import {createProviders,buildRegistry,HttpTransport} from '../packages/providers/dist/index.js';
 import {classifyTask,estimateTokens} from '../packages/core/dist/index.js';
 import {FreeModelFailover} from '../packages/core/dist/free-failover.js';
 import {JsonlLogger,SafeError} from '../packages/observability/dist/index.js';
@@ -53,6 +53,20 @@ export function applyVerifiedToolCapabilities(config){
   const verified=new Set(['mistral/mistral-small-2603','mistral/ministral-8b-2512','cohere/command-r7b-12-2024','cloudflare/@cf/openai/gpt-oss-120b','cloudflare/@cf/zai-org/glm-4.7-flash','kilo/openrouter/free','opencode-zen/big-pickle']);
   for(const provider of config.providers)for(const model of provider.models)if(verified.has(provider.id+'/'+model.modelId))model.capabilities.tool_calling=true;
 }
+async function requestWithCredentialPool(provider,pool,options){
+  const now=Date.now();let lastError=null;
+  for(let offset=0;offset<pool.entries.length;offset++){
+    const index=(pool.cursor+offset)%pool.entries.length,entry=pool.entries[index];
+    if(entry.cooldownUntil>now)continue;
+    try{const response=await entry.transport.request(provider.id,entry.path,options);pool.cursor=(index+1)%pool.entries.length;return response;}
+    catch(error){
+      const failure=provider.classifyError(error);lastError=error;pool.lastError=error;
+      if(pool.entries.length===1||!['authentication','rate_limit'].includes(failure.category))throw error;
+      entry.cooldownUntil=Date.now()+Math.max(1000,failure.retryAfterMs??(failure.category==='authentication'?300000:60000));
+    }
+  }
+  throw lastError??pool.lastError??new SafeError('PROVIDER_CREDENTIAL_POOL_COOLDOWN',provider.id+' credential slots are cooling down',503);
+}
 export async function createChatBackend(root,{protector,providerOptions={},transportFactory,configOverride,registryOverride,loggerOverride}={}) {
   const paths=getRuntimePaths(root),config=configOverride??await loadConfig(paths);
   if(!config.routing.freeOnly||config.routing.defaultMode!=='regular')throw new Error('Regular free-only profile required');
@@ -61,18 +75,21 @@ export async function createChatBackend(root,{protector,providerOptions={},trans
   const vault=await SecretVault.load(paths.vault,protector),providers=new Map(),transports=new Map();
   try {
     for(const p of config.providers.filter(p=>p.enabled)) {
-      const keys=vault.get(p.id);if(!keys)continue;
+      const slots=vault.getCredentialSlots(p.id),keys=slots[0]?.values;if(!keys)continue;
       try {
-        const key=keys[p.credentialField];
-        let prefix=p.apiPrefix;
-        if(p.id==='cloudflare'){
-          if(!/^[a-f0-9]{32}$/i.test(keys.CLOUDFLARE_ACCOUNT_ID??''))throw new Error('Invalid Cloudflare account ID');
-          prefix='client/v4/accounts/'+keys.CLOUDFLARE_ACCOUNT_ID+'/ai/v1/';
-        }
-        providers.set(p.id,createConfiguredProvider(p,keys,providerOptions));
-        const transport=transportFactory?transportFactory(p,keys):new HttpTransport({baseUrl:p.baseUrl,allowLoopback:false,headers:()=>({authorization:'Bearer '+key,'content-type':'application/json'})});
-        transports.set(p.id,{transport,path:prefix+'chat/completions'});
-      }finally{for(const key of Object.keys(keys))keys[key]='';}
+        const pooled=createProviders({...config,providers:[p]},{credentials:{[p.id]:slots.map(slot=>slot.values)},...providerOptions}).get(p.id);
+        if(pooled)providers.set(p.id,pooled);
+        const entries=slots.map(({values})=>{
+          const key=values[p.credentialField];let prefix=p.apiPrefix;
+          if(p.id==='cloudflare'){
+            if(!/^[a-f0-9]{32}$/i.test(values.CLOUDFLARE_ACCOUNT_ID??''))throw new Error('Invalid Cloudflare account ID');
+            prefix='client/v4/accounts/'+values.CLOUDFLARE_ACCOUNT_ID+'/ai/v1/';
+          }
+          const transport=transportFactory?transportFactory(p,values):new HttpTransport({baseUrl:p.baseUrl,allowLoopback:false,headers:()=>({authorization:'Bearer '+key,'content-type':'application/json'})});
+          return {transport,path:prefix+'chat/completions',cooldownUntil:0};
+        });
+        transports.set(p.id,{entries,cursor:0,lastError:null});
+      }finally{for(const slot of slots)for(const field of Object.keys(slot.values))slot.values[field]='';}
     }
   }finally{vault.dispose();}
   const failover=new FreeModelFailover(config,providers),logger=loggerOverride??new JsonlLogger(join(paths.logsDir,'opencode-routes.jsonl'));
@@ -93,8 +110,8 @@ export async function createChatBackend(root,{protector,providerOptions={},trans
     if(!chosen.selection)throw new SafeError('FREE_MODELS_UNAVAILABLE','No free model supports this conversation size and tools',503);
     try {
       const result=await failover.run(chosen.selection,snapshot,required,estimateTokens(JSON.stringify(input)),signal,audit,'opencode',async selection=>{
-        const {transport,path}=transports.get(selection.providerId);
-        const response=await transport.request(selection.providerId,path,{method:'POST',body:JSON.stringify(upstreamBody(input,selection)),signal});
+        const provider=providers.get(selection.providerId),transportPool=transports.get(selection.providerId);
+        const response=await requestWithCredentialPool(provider,transportPool,{method:'POST',body:JSON.stringify(upstreamBody(input,selection)),signal});
         return normalizeCompletion(await response.json(),selection,routeId,!!input.response_format&&input.response_format.type!=='text');
       },intent.modelPreference,policy);
       await logger.write('info','opencode.route',{routeId,intent:intent.intent,provider:result.selection.providerId,model:result.selection.modelId,fallbacks:audit.fallbackAttempts,routingDiagnostics:audit.routingDiagnostics,taskClass:intent.suggestedClass,sourceClient:"opencode"});

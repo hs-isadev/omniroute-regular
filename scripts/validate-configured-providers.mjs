@@ -20,12 +20,15 @@ export async function validateConfiguredApiProviders({config,defaults,vault,fact
   const rows=[];
   for(const active of config.providers.filter(provider=>!['local','mcp-stdio'].includes(provider.type))){
     const known=defaults.providers.find(provider=>provider.id===active.id);
-    const credentialPresent=stored.has(active.id);
+    const summaries=typeof vault.listCredentialSlots==='function'?vault.listCredentialSlots(active.id):(stored.has(active.id)?[{providerId:active.id,slot:1}]:[]);
+    const credentialPresent=summaries.length>0;
     const row={
       providerId:active.id,
       modelIds:active.models.map(model=>model.modelId),
       enabled:active.enabled===true,
       credentialPresent,
+      credentialCount:summaries.length,
+      credentialSlots:summaries.map(item=>item.slot),
       freePolicyEligible:false,
       health:'unknown',
       status:'NOT_TESTED',
@@ -35,6 +38,7 @@ export async function validateConfiguredApiProviders({config,defaults,vault,fact
       maxConcurrentRequests:active.maxConcurrentRequests??config.daemon?.maxConcurrentRoutes??null,
       sourceHost:safeHost(active.baseUrl),
       tests:[],
+      slotResults:[],
     };
     rows.push(row);
     if(!active.enabled){row.reasonCode='DISABLED';continue;}
@@ -43,61 +47,68 @@ export async function validateConfiguredApiProviders({config,defaults,vault,fact
     if(creditProviders.includes(active.id)){row.reasonCode='CREDIT_PROVIDER_EXCLUDED';continue;}
     if(active.type!==known.type||active.baseUrl!==known.baseUrl||active.apiPrefix!==known.apiPrefix){row.reasonCode='TRUSTED_CONFIGURATION_MISMATCH';continue;}
     const knownModels=new Map(known.models.map(model=>[model.modelId,model]));
-    let eligible=active.models.filter(model=>{
+    const eligibleBase=active.models.filter(model=>{
       const trusted=knownModels.get(model.modelId);
       return model.enabled&&model.allowed&&trusted?.enabled&&trusted?.allowed&&
         model.inputPerMillionUsd===0&&model.outputPerMillionUsd===0&&
         trusted.inputPerMillionUsd===0&&trusted.outputPerMillionUsd===0;
     });
-    const order=active.freeModelOrder??eligible.map(model=>model.modelId);
-    eligible.sort((left,right)=>orderIndex(order,left.modelId)-orderIndex(order,right.modelId));
-    if(!eligible.length){row.reasonCode='UNSUPPORTED_MODEL';continue;}
+    const order=active.freeModelOrder??eligibleBase.map(model=>model.modelId);
+    eligibleBase.sort((left,right)=>orderIndex(order,left.modelId)-orderIndex(order,right.modelId));
+    if(!eligibleBase.length){row.reasonCode='UNSUPPORTED_MODEL';continue;}
     row.freePolicyEligible=true;
-    const credentials=vault.get(active.id);
-    try{
-      const trusted=structuredClone(known);trusted.freeTierConfirmed=true;
-      const adapter=factory(trusted,credentials);
-      if(typeof adapter.listModels==='function'){
-        const discoveryStarted=now();
-        try{
-          const discovered=await adapter.listModels(AbortSignal.timeout(timeoutMs));
-          if(discovered.length){
-            const advertised=new Set(discovered.map(model=>model.id)),supported=[];
-            for(const model of eligible){
-              if(advertised.has(model.modelId))supported.push(model);
-              else row.tests.push({modelId:model.modelId,status:'NOT_TESTED',reasonCode:'UNSUPPORTED_MODEL',httpStatus:null,latencyMs:Math.max(0,now()-discoveryStarted)});
+    for(const summary of summaries){
+      const slot=summary.slot,slotTests=[];
+      const credentials=typeof vault.getCredentialSlot==='function'?vault.getCredentialSlot(active.id,slot):vault.get(active.id);
+      let slotStatus='FAILED',slotReason='PROVIDER_ERROR';
+      try{
+        const trusted=structuredClone(known);trusted.freeTierConfirmed=true;
+        const adapter=factory(trusted,credentials);
+        let eligible=[...eligibleBase];
+        if(typeof adapter.listModels==='function'){
+          const discoveryStarted=now();
+          try{
+            const discovered=await adapter.listModels(AbortSignal.timeout(timeoutMs));
+            if(discovered.length){
+              const advertised=new Set(discovered.map(model=>model.id)),supported=[];
+              for(const model of eligible){
+                if(advertised.has(model.modelId))supported.push(model);
+                else slotTests.push({slot,modelId:model.modelId,status:'NOT_TESTED',reasonCode:'UNSUPPORTED_MODEL',httpStatus:null,latencyMs:Math.max(0,now()-discoveryStarted)});
+              }
+              eligible=supported;
+              if(!eligible.length){slotReason='UNSUPPORTED_MODEL';}
             }
-            eligible=supported;
-            if(!eligible.length){row.status='FAILED';row.health='unhealthy';row.reasonCode='UNSUPPORTED_MODEL';continue;}
+          }catch(error){
+            const failure=classifyValidationFailure(adapter,error);slotReason=failure.reasonCode;
+            slotTests.push({slot,modelId:null,status:'FAILED',...failure,latencyMs:Math.max(0,now()-discoveryStarted)});
           }
-        }catch(error){
-          const failure=classifyValidationFailure(adapter,error);
-          row.tests.push({modelId:null,status:'FAILED',...failure,latencyMs:Math.max(0,now()-discoveryStarted)});
-          row.status='FAILED';row.health='unhealthy';row.reasonCode=failure.reasonCode;
-          if(failure.reasonCode==='QUOTA_OR_RATE_LIMIT')row.quotaState='limited';
-          continue;
         }
-      }
-      for(const model of eligible.slice(0,3)){
-        const started=now();
-        try{
-          const result=await adapter.generate({modelId:model.modelId,instructions:'Reply with OK only. No tools.',prompt:SYNTHETIC_VALIDATION_PROMPT,maxOutputTokens:32,reasoningEffort:'none',jsonSchema:null,schemaName:null,safetyIdentifier:null,signal:AbortSignal.timeout(timeoutMs)});
-          const succeeded=typeof result.text==='string'&&result.text.trim().length>0;
-          row.tests.push({modelId:model.modelId,status:succeeded?'SUCCESS':'EMPTY_RESPONSE',reasonCode:succeeded?'SUCCESS':'PROVIDER_ERROR',httpStatus:null,latencyMs:Math.max(0,now()-started)});
-          if(succeeded){row.status='SUCCESS';row.reasonCode='SUCCESS';row.health='healthy';break;}
-        }catch(error){
-          const failure=classifyValidationFailure(adapter,error);
-          row.tests.push({modelId:model.modelId,status:'FAILED',...failure,latencyMs:Math.max(0,now()-started)});
-          if(failure.reasonCode==='QUOTA_OR_RATE_LIMIT')row.quotaState='limited';
-          if(['INVALID_AUTHENTICATION','CANCELLED'].includes(failure.reasonCode)||[401,402,403].includes(failure.httpStatus))break;
+        if(eligible.length&&slotTests.at(-1)?.status!=='FAILED')for(const model of eligible.slice(0,3)){
+          const started=now();
+          try{
+            const result=await adapter.generate({modelId:model.modelId,instructions:'Reply with OK only. No tools.',prompt:SYNTHETIC_VALIDATION_PROMPT,maxOutputTokens:512,reasoningEffort:'none',jsonSchema:null,schemaName:null,safetyIdentifier:null,signal:AbortSignal.timeout(timeoutMs)});
+            const succeeded=typeof result.text==='string'&&result.text.trim().length>0;
+            slotReason=succeeded?'SUCCESS':'PROVIDER_ERROR';
+            slotTests.push({slot,modelId:model.modelId,status:succeeded?'SUCCESS':'EMPTY_RESPONSE',reasonCode:slotReason,httpStatus:null,latencyMs:Math.max(0,now()-started)});
+            if(succeeded){slotStatus='SUCCESS';break;}
+          }catch(error){
+            const failure=classifyValidationFailure(adapter,error);slotReason=failure.reasonCode;
+            slotTests.push({slot,modelId:model.modelId,status:'FAILED',...failure,latencyMs:Math.max(0,now()-started)});
+            if(failure.reasonCode==='QUOTA_OR_RATE_LIMIT')row.quotaState='limited';
+            if(['INVALID_AUTHENTICATION','CANCELLED'].includes(failure.reasonCode)||[401,402,403].includes(failure.httpStatus))break;
+          }
         }
+      }catch(error){
+        slotReason='PROVIDER_ERROR';slotTests.push({slot,modelId:null,status:'FAILED',reasonCode:slotReason,httpStatus:null,latencyMs:0});
+      }finally{
+        if(credentials)for(const key of Object.keys(credentials))credentials[key]='';
       }
-      if(row.status!=='SUCCESS'){
-        row.status='FAILED';row.health='unhealthy';row.reasonCode=row.tests.at(-1)?.reasonCode??'PROVIDER_ERROR';
-      }
-    }finally{
-      if(credentials)for(const key of Object.keys(credentials))credentials[key]='';
+      row.tests.push(...slotTests);row.slotResults.push({slot,status:slotStatus,reasonCode:slotReason});
     }
+    const successes=row.slotResults.filter(item=>item.status==='SUCCESS').length;
+    if(successes===row.slotResults.length){row.status='SUCCESS';row.reasonCode='SUCCESS';row.health='healthy';}
+    else if(successes){row.status='PARTIAL_SUCCESS';row.reasonCode='SOME_CREDENTIAL_SLOTS_FAILED';row.health='healthy';}
+    else {row.status='FAILED';row.reasonCode=row.slotResults.at(-1)?.reasonCode??'PROVIDER_ERROR';row.health='unhealthy';}
   }
   return rows;
 }

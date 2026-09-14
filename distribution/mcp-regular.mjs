@@ -23,12 +23,12 @@ export async function createRegularBackend(options={}) {
   if(!router) {
     await ensureRuntimeDirectories(paths);
     const vault=await SecretVault.load(paths.vault,options.protector),credentials={};
-    try {for(const provider of config.providers.filter(p=>p.enabled)) {const value=vault.get(provider.id);if(value) credentials[provider.id]=value;}}
+    try {for(const provider of config.providers.filter(p=>p.enabled)) {const values=vault.getCredentialSlots(provider.id).map(item=>item.values);if(values.length) credentials[provider.id]=values;}}
     finally {vault.dispose();}
     // An edited profile cannot introduce a paid provider into this entrypoint.
     config.providers=config.providers.filter(p=>p.freeTierOnly);
     const providers=createProviders(config,{credentials,...options.providerOptions});
-    for(const key of Object.keys(credentials)) delete credentials[key];
+    for(const key of Object.keys(credentials)) {for(const values of credentials[key])for(const field of Object.keys(values))values[field]='';delete credentials[key];}
     registry=async()=>{
       if(cache&&Date.now()-loadedAt<config.routing.modelHealthTtlSeconds*1000) return cache;
       cache=await buildRegistry(config,providers,routeSignal??AbortSignal.timeout(60_000));loadedAt=Date.now();return cache;
