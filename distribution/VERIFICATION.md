@@ -1,4 +1,4 @@
-# OmniRoute 0.6.6-private.2 verification
+# OmniRoute 0.6.6-private.3 verification
 
 - TypeScript build/typecheck passes.
 - Core, routing, integration and security tests pass, including least-dispatched
@@ -25,6 +25,9 @@
 - The masked setup window exposes five independently validated slots per provider,
   preserves legacy credentials as slot 1, and reports accepted/failed slots plus
   current stored counts. Runtime pools rotate slots and cool down auth/quota failures.
+- The packaged OpenCode launcher disables prior-session replay by default while
+  preserving explicit launch arguments. This avoids an unstable UI replay path;
+  the isolated strict-free configuration and current worker routing are unchanged.
 - A live check on 2026-09-14 used only `Reply with OK only.` against enabled,
   configured, free-policy-approved API routes. Kilo, Mistral, Cohere, Cloudflare,
   Z.AI, OpenRouter, Gemini and Groq succeeded. OpenCode Zen's three documented free
