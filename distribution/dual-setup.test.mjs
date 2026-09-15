@@ -127,6 +127,20 @@ test('installer entrypoints include user-friendly editor workflow and no GitHub 
   assert.match(managePs,/repair-hosts/);assert.match(managePs,/\$active\+'\/app\/distribution\/dual-setup\.mjs'/);
   assert.match(manageSh,/repair-hosts/);assert.match(manageSh,/\$active\/app\/distribution\/dual-setup\.mjs/);
 });
+test('Windows one-click setup installs only a verified official Devin CLI and exposes a visible login launcher',async()=>{
+  const bootstrap=await readFile(new URL('./dual/bootstrap.ps1',import.meta.url),'utf8');
+  assert.match(bootstrap,/https:\/\/static\.devin\.ai\/cli\/devin-updater-x86_64-pc-windows\.exe/);
+  assert.match(bootstrap,/55052CE42B90E3D8A7492E18CD6B978F9A0F2BA6718B4730DD3F519B75827BEE/i);
+  assert.match(bootstrap,/Get-AuthenticodeSignature/);
+  assert.match(bootstrap,/Exafunction, Inc\./);
+  assert.doesNotMatch(bootstrap,/Invoke-Expression|\|\s*iex|curl.*\|/i);
+  const setup=await readFile(new URL('./dual/Setup.ps1',import.meta.url),'utf8');
+  assert.match(setup,/OmniRoute Devin CLI/);
+  assert.match(setup,/'devin'/);
+  const launch=await readFile(new URL('./dual/Launch.ps1',import.meta.url),'utf8');
+  assert.match(launch,/ValidateSet\([^)]*'devin'/);
+  assert.doesNotMatch(launch,/fusion|astra|sol|terra|--model/i);
+});
 test('new setup saves keys before starting Antigravity so its MCP sees the saved profile',async()=>{
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');
   const setup=source.slice(source.indexOf('export async function setupBoth'));
