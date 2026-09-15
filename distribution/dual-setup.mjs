@@ -224,6 +224,10 @@ export function openCodeEnvironment(base,root,inline) {
   Object.assign(env,{XDG_CONFIG_HOME:join(root,'opencode/config'),XDG_DATA_HOME:join(root,'opencode/share'),XDG_CACHE_HOME:join(root,'opencode/cache'),XDG_STATE_HOME:join(root,'opencode/state'),OPENCODE_CONFIG_DIR:join(root,'opencode/config'),OPENCODE_CONFIG_CONTENT:inline,OPENCODE_DISABLE_AUTOUPDATE:'true',OPENCODE_DISABLE_MODELS_FETCH:'true',OPENCODE_DISABLE_LSP_DOWNLOAD:'true',OPENCODE_DISABLE_CLAUDE_CODE:'true',OPENCODE_DISABLE_DEFAULT_PLUGINS:'true'});
   return env;
 }
+export function openCodeLaunchArgs(args=[]) {
+  if(!Array.isArray(args)||args.some(arg=>typeof arg!=='string'))throw new Error('Invalid OpenCode launch arguments.');
+  return [...args,...(args.includes('--no-replay')?[]:['--no-replay']),'--pure','--model','omniroute/regular'];
+}
 function run(command,args,options={}){return new Promise((res,rej)=>{const child=spawn(command,args,{stdio:'inherit',shell:false,windowsHide:true,...options});child.once('error',rej);child.once('exit',code=>code===0?res():rej(new Error('Setup step failed ('+code+').')));});}
 export async function launchClaudeConsumerSetup(root,{node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/claude-consumer-adapter/src/credential-server.mjs',import.meta.url))}={}) {
   await run(node,[entrypoint,'--profile',join(root,'data/claude-consumer-profile'),'--port',String(CLAUDE_CONSUMER_PORT)]);
@@ -253,7 +257,7 @@ export async function launchOpenCode(root,args=[]) {
   const backend=await createChatBackend(join(root,'data')),proxy=await startChatProxy(backend);
   const workspace=join(root,'workspace');await mkdir(workspace,{recursive:true});
   const env=openCodeEnvironment(process.env,root,JSON.stringify(openCodeConfig(proxy.baseURL,proxy.token)));
-  try {await run(join(root,active,'opencode',process.platform==='win32'?'opencode.exe':'opencode'),[...args,'--pure','--model','omniroute/regular'],{cwd:workspace,env,windowsHide:false});}
+  try {await run(join(root,active,'opencode',process.platform==='win32'?'opencode.exe':'opencode'),openCodeLaunchArgs(args),{cwd:workspace,env,windowsHide:false});}
   finally{await proxy.close();}
 }
 export async function launchAntigravity(root,{spawnImpl=spawn,startupWaitMs=2500}={}) {
