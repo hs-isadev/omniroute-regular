@@ -40,10 +40,10 @@
   dependent. Browser consumers were not used for the API validation and retain
   their existing task-class, capability, context, serialization and pacing limits.
 
-Local source gates on 2026-09-13: TypeScript typecheck/build passed; 185/185 core
-tests passed; 15/15 deterministic evaluation fixtures passed; distribution tests
-passed 141 with two platform-inapplicable skips and no failures; 15/15 security and
-vault tests passed; and `npm audit --omit=dev` reported zero vulnerabilities.
+Local source gates on 2026-09-15: TypeScript typecheck/build, the full core and
+evaluation suites, and 149/149 applicable distribution tests passed (two
+platform-inapplicable skips). Security/vault tests passed 16/16, settings-GUI
+tests passed 4/4, and `npm audit --omit=dev` reported zero vulnerabilities.
 
 GUI shortcuts for API Keys and Antigravity hide only the package-owned PowerShell
 console. Errors still produce an attention dialog. OpenCode and usage terminals,
