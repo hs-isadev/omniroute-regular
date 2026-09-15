@@ -26,7 +26,7 @@ for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']])
   for(const name of ['playwright','playwright-core'])await cp(join(repo,'node_modules',name),join(payload,'app/node_modules',name),{recursive:true,force:true});
   await cp(join(repo,'package.json'),join(payload,'app/package.json'),{force:true});
   await cp(join(repo,'package-lock.json'),join(payload,'app/package-lock.json'),{force:true});
-  for(const name of ['dual-chat.mjs','dual-setup.mjs','gui-keys.mjs','settings-gui.py','Settings.ps1','settings.mjs','key-editor.mjs'])await cp(join(repo,'distribution',name),join(payload,'app/distribution',name));
+  for(const name of ['dual-chat.mjs','dual-setup.mjs','devin.mjs','gui-keys.mjs','settings-gui.py','Settings.ps1','settings.mjs','key-editor.mjs'])await cp(join(repo,'distribution',name),join(payload,'app/distribution',name));
   await cp(join(repo,'distribution/dual'),join(payload,'app/distribution/dual'),{recursive:true});
   const windows=platform==='windows-x64';
   const wrappers=windows?['Launch.ps1','Launch.cmd','Connect.ps1','Connect.cmd']:['Launch.sh','Connect.sh'];

@@ -24,33 +24,36 @@ export function claudeHarnessEnvironment(base: NodeJS.ProcessEnv, mode: RoutingM
   return output;
 }
 
-export function openCodeHarnessEnvironment(base: NodeJS.ProcessEnv, runtimeRoot: string, openRouterApiKey: string, inlineConfig: string): NodeJS.ProcessEnv {
+export function openCodeHarnessEnvironment(base: NodeJS.ProcessEnv, runtimeRoot: string, inlineConfig: string): NodeJS.ProcessEnv {
   const output = claudeHarnessEnvironment(base, "regular", runtimeRoot);
-  output.OPENROUTER_API_KEY = openRouterApiKey;
   output.OPENCODE_CONFIG_CONTENT = inlineConfig;
   return output;
 }
 
 export function openCodeHarnessArguments(): string[] {
-  return ["--pure", "--model", "openrouter/openrouter/free"];
+  return ["--no-replay", "--pure", "--model", "omniroute/regular"];
 }
 
-export function openCodeRegularConfig(nodePath: string, cliPath: string, runtimeRoot: string, instructionsPath: string, hostModelBaseURL?: string): string {
+export function openCodeRegularConfig(nodePath: string, cliPath: string, runtimeRoot: string, instructionsPath: string, localGatewayBaseURL: string, localGatewayToken: string): string {
+  const gateway = new URL(localGatewayBaseURL);
+  if (gateway.protocol !== "http:" || gateway.hostname !== "127.0.0.1" || !localGatewayToken) throw new Error("OpenCode regular mode requires an authenticated loopback OmniRoute gateway");
   return JSON.stringify({
     $schema: "https://opencode.ai/config.json",
-    model: "openrouter/openrouter/free",
-    small_model: "openrouter/openrouter/free",
-    enabled_providers: ["openrouter"],
+    model: "omniroute/regular",
+    small_model: "omniroute/regular",
+    enabled_providers: ["omniroute"],
+    share: "disabled",
+    autoupdate: false,
     provider: {
-      openrouter: {
-        ...(hostModelBaseURL ? { options: { baseURL: hostModelBaseURL } } : {}),
-        whitelist: ["openrouter/free"],
+      omniroute: {
+        npm: "@ai-sdk/openai-compatible",
+        name: "OmniRoute — configured free providers",
+        options: { baseURL: localGatewayBaseURL, apiKey: localGatewayToken },
         models: {
-          "openrouter/free": {
-            name: "Free Router (actual model shown in replies)",
-            options: {
-              provider: { allow_fallbacks: false },
-            },
+          regular: {
+            name: "OmniRoute Auto — actual worker shown in replies",
+            limit: { context: 32_768, output: 8_192 },
+            tool_call: true,
           },
         },
       },

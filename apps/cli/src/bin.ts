@@ -23,8 +23,8 @@ import {
 } from "@omniroute/vault";
 import { DaemonClient } from "./client.js";
 import { createCliMcpBackend } from "./mcp-backend.js";
-import { WindowsServiceManager } from "./service.js";
-import { startHostModelProxy } from "./host-model-proxy.js";
+import { daemonEntry, WindowsServiceManager } from "./service.js";
+import { ensureHarnessDaemon } from "./local-daemon.js";
 
 const args = process.argv.slice(2);
 const paths = getRuntimePaths();
@@ -364,23 +364,25 @@ async function harness(): Promise<void> {
     if (mode !== "regular") throw new SafeError("HARNESS_MODE_INVALID", "OpenCode is restricted to regular mode", 400);
     if (subscription) throw new SafeError("HARNESS_SUBSCRIPTION_INVALID", "OpenCode regular mode does not accept --subscription", 400);
     const launcher = await resolveHarnessLauncher("opencode", process.env, process.cwd());
-    const vault = await SecretVault.load(paths.vault);
-    let openRouterApiKey: string;
-    try {
-      const openrouter = vault.get("openrouter");
-      if (!openrouter?.OPENROUTER_API_KEY) throw new SafeError("OPENROUTER_REQUIRED", "The OpenCode regular harness requires an imported OPENROUTER_API_KEY", 400);
-      openRouterApiKey = openrouter.OPENROUTER_API_KEY;
-    } finally { vault.dispose(); }
+    const configured = await loadConfig(paths);
+    const localGatewayToken = await ensureLocalDaemonToken(paths);
+    const localGateway = await ensureHarnessDaemon({
+      client,
+      config: configured,
+      nodePath: process.execPath,
+      daemonPath: daemonEntry(),
+      cwd: process.cwd(),
+      environment: claudeHarnessEnvironment(process.env, "regular", paths.root),
+    });
     const instructionsPath = fileURLToPath(new URL("../../../docs/integrations/opencode-regular-instructions.md", import.meta.url));
-    const hostLabels = await startHostModelProxy(openRouterApiKey);
     try {
-      const inlineConfig = openCodeRegularConfig(process.execPath, cliEntry(), paths.root, instructionsPath, hostLabels.baseURL);
-      const childEnvironment = openCodeHarnessEnvironment(process.env, paths.root, hostLabels.token, inlineConfig);
+      const inlineConfig = openCodeRegularConfig(process.execPath, cliEntry(), paths.root, instructionsPath, localGateway.baseURL, localGatewayToken);
+      const childEnvironment = openCodeHarnessEnvironment(process.env, paths.root, inlineConfig);
       const launch = harnessLaunchCommand(launcher, process.env);
       const child = spawn(launch.command, [...launch.prefix, ...openCodeHarnessArguments()], { cwd: process.cwd(), env: childEnvironment, stdio: "inherit", windowsHide: false, shell: false });
       const exitCode = await new Promise<number>((resolvePromise, reject) => { child.once("error", reject); child.once("close", (code) => resolvePromise(code ?? 1)); });
       if (exitCode !== 0) throw new SafeError("HARNESS_EXITED", `OpenCode exited with status ${exitCode}`);
-    } finally { await hostLabels.close(); }
+    } finally { await localGateway.close(); }
     return;
   }
   const childEnvironment = claudeHarnessEnvironment(process.env, mode, paths.root);

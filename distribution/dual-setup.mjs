@@ -12,6 +12,7 @@ import {openKeyForm} from './gui-keys.mjs';
 import {RULES,findAntigravity} from './antigravity.mjs';
 import {claudeHarnessEnvironment} from '../apps/cli/dist/harness-env.js';
 import {createChatBackend,startChatProxy,openCodeConfig} from './dual-chat.mjs';
+import {configureDevinCli,launchDevinCli} from './devin.mjs';
 import {PRIVATE_BROWSER_CONSUMERS,getSharedSessionDefinition} from '../packages/browser-consumer-adapter/src/runtime.mjs';
 const CLAUDE_CONSUMER_PORT=47842;
 const CLAUDE_CONSUMER_ENDPOINT=`http://127.0.0.1:${CLAUDE_CONSUMER_PORT}`;
@@ -110,6 +111,26 @@ export async function repairHostRegistrations({root,home=homedir(),env}){
   const antigravity=await connectAntigravity({home,root,node:runtime.node,entrypoint:runtime.entrypoint});
   const developers=await connectDeveloperHosts({home,root,node:runtime.node,entrypoint:runtime.entrypoint});
   return {...runtime,browserConsumers,browserAutostart,antigravity,developers};
+}
+export async function resolveDevinCli(root){
+  if(!isAbsolute(root))throw new Error('Absolute install root required');
+  const executable=process.env.OMNIROUTE_DEVIN_EXECUTABLE;
+  if(!executable)return null;
+  if(!isAbsolute(executable)||/[\r\n\0]/.test(executable))throw new Error('Invalid verified Devin executable path.');
+  await requireRuntimeFile(executable,'verified Devin executable');
+  return executable;
+}
+export async function configureDevinIntegration(root,{runtime,executable}={}){
+  const activeRuntime=runtime??await resolveActiveRuntime(root);
+  const devin=executable===undefined?await resolveDevinCli(root):executable;
+  return configureDevinCli({root,node:activeRuntime.node,entrypoint:activeRuntime.entrypoint,executable:devin});
+}
+export async function launchDevin(root,{executable}={}){
+  const runtime=await resolveActiveRuntime(root);
+  const devin=executable===undefined?await resolveDevinCli(root):executable;
+  const registration=await configureDevinIntegration(root,{runtime,executable:devin});
+  if(registration.status!=='configured')return registration;
+  return launchDevinCli({root,executable:devin});
 }
 export async function configureClaudeConsumer({root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/claude-consumer-adapter/src/adapter.mjs',import.meta.url))}) {
   for(const path of [root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute Claude consumer paths required');
@@ -294,8 +315,10 @@ export async function showUsage(root) {
 export async function setupBoth(root,{noKeys=false,noLaunch=false,home=homedir()}={}) {
   const paths=getRuntimePaths(join(root,'data'));
   if(await optional(paths.config)===null){const config=regularConfig();for(const p of config.providers){p.enabled=false;p.freeTierConfirmed=false;}await saveConfig(config,paths);}
-  await repairHostRegistrations({root,home});
+  const registrations=await repairHostRegistrations({root,home});
+  const devin=await configureDevinIntegration(root,{runtime:registrations});
   console.log('Four hosts configured: OpenCode = OmniRoute main model; Antigravity, Codex and Claude Code = OmniRoute MCP workers.');
+  console.log(devin.status==='configured'?'Devin CLI has a local regular-mode OmniRoute MCP entry.':'Devin CLI is optional and was not changed; use the OmniRoute Devin CLI shortcut after its official installation.');
   if(!noKeys)await openKeyForm(root);
   await configureClaudeConsumer({root});
   await configureZaiConsumer({root});
@@ -305,7 +328,7 @@ export async function setupBoth(root,{noKeys=false,noLaunch=false,home=homedir()
   await launchSharedBrowserConsumerSetup(root);
   console.log('Claude, Z.AI, Qwen, Kimi, DeepSeek, and Perplexity are configured in one background browser session.');
   if(!noLaunch)await launchAntigravity(root).catch(e=>console.log(e.message));
-  console.log('Setup complete. Use OpenCode or open Antigravity, Codex, or Claude Code normally. Restart open hosts after changing keys.');
+  console.log('Setup complete. Use OpenCode or open Antigravity, Codex, Claude Code, or Devin normally. Restart open hosts after changing keys.');
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   try{
@@ -313,6 +336,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
     if(!root||!isAbsolute(root))throw new Error('Use an installed launcher');
     if(action==='opencode')await launchOpenCode(root,args);
     else if(action==='antigravity')await launchAntigravity(root);
+    else if(action==='devin')await launchDevin(root);
     else if(action==='keys')await openKeyForm(root);
     else if(action==='usage')await showUsage(root);
     else if(action==='setup')await setupBoth(root,{noKeys:args.includes('--no-keys'),noLaunch:args.includes('--no-launch')});

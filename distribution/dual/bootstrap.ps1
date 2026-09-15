@@ -1,5 +1,52 @@
 param([Parameter(Mandatory=$true)][string]$InstallRoot)
 $ErrorActionPreference='Stop'
+function Refresh-OmniRoutePath {
+  $segments=@(
+    [Environment]::GetEnvironmentVariable('Path','Machine'),
+    [Environment]::GetEnvironmentVariable('Path','User'),
+    $env:Path
+  ) | Where-Object { $_ }
+  $env:Path=($segments -join ';')
+}
+function Get-VerifiedDevinCli {
+  Refresh-OmniRoutePath
+  $command=Get-Command devin -CommandType Application -ErrorAction SilentlyContinue
+  if($null -eq $command){return $null}
+  $candidate=$command.Source
+  $signature=Get-AuthenticodeSignature -LiteralPath $candidate
+  if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*O=Exafunction, Inc.*'){return $null}
+  return $candidate
+}
+function Install-VerifiedDevinCli {
+  if(Get-VerifiedDevinCli){return $true}
+  if($env:PROCESSOR_ARCHITECTURE -notmatch 'AMD64'){
+    Write-Warning 'The optional Devin CLI installer in this x64 desktop bundle is unavailable on this architecture.'
+    return $false
+  }
+  $download=Join-Path $InstallRoot 'downloads'
+  New-Item -ItemType Directory -Path $download -Force | Out-Null
+  $installer=Join-Path $download 'Devin-CLI-x86_64.exe'
+  if(-not(Test-Path -LiteralPath $installer)){
+    Invoke-WebRequest -Uri 'https://static.devin.ai/cli/devin-updater-x86_64-pc-windows.exe' -OutFile $installer
+  }
+  if((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne '55052CE42B90E3D8A7492E18CD6B978F9A0F2BA6718B4730DD3F519B75827BEE'){
+    throw 'Official Devin CLI installer checksum failed.'
+  }
+  $signature=Get-AuthenticodeSignature -LiteralPath $installer
+  if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*O=Exafunction, Inc.*'){
+    throw 'Official Devin CLI installer signature failed.'
+  }
+  $process=Start-Process -FilePath $installer -Wait -PassThru
+  if($process.ExitCode -ne 0){
+    Write-Warning 'The optional official Devin CLI installer needs attention. OmniRoute setup will continue unchanged.'
+    return $false
+  }
+  if(-not(Get-VerifiedDevinCli)){
+    Write-Warning 'The optional Devin CLI could not be verified after installation. OmniRoute did not register it.'
+    return $false
+  }
+  return $true
+}
 $app=Join-Path $env:LOCALAPPDATA 'Programs/antigravity/Antigravity.exe'
 if(-not(Test-Path -LiteralPath $app)){
   $download=Join-Path $InstallRoot 'downloads'
@@ -20,3 +67,4 @@ if(-not(Get-Command git -ErrorAction SilentlyContinue)){
     if($LASTEXITCODE -ne 0){throw 'Git installation needs OS approval. Install Git for Windows, then rerun Setup.'}
   }else{throw 'Git for Windows is required for OpenCode coding tools. Install it and rerun Setup.'}
 }
+$null=Install-VerifiedDevinCli
