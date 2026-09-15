@@ -47,7 +47,13 @@ export async function connectAntigravity({home=homedir(),root,node=process.execP
     const command=typeof previous.command==='string'?resolve(previous.command).replaceAll('\\','/') : '';
     const script=typeof previous.args?.[0]==='string'?resolve(previous.args[0]).replaceAll('\\','/') : '';
     const prefix=oldRoot+'/versions/';
-    const own=command.startsWith(prefix)&&/\/node\/node(?:\.exe)?$/.test(command)&&script.startsWith(prefix)&&/\/app\/distribution\/mcp-regular\.mjs$/.test(script)&&previous.args.length===1&&JSON.stringify(previous.env)===JSON.stringify(entry.env)&&Object.keys(previous).sort().join(',')==='args,command,env';
+    const sameEnvironment=previous.env&&typeof previous.env==='object'&&!Array.isArray(previous.env)&&Object.keys(previous.env).sort().join(',')==='OMNIROUTE_HOME,OMNIROUTE_ROUTING_MODE'&&previous.env.OMNIROUTE_HOME===entry.env.OMNIROUTE_HOME&&previous.env.OMNIROUTE_ROUTING_MODE===entry.env.OMNIROUTE_ROUTING_MODE;
+    // Antigravity's own CLI materializes `disabled: false` for enabled MCPs.
+    // Treat only that exact harmless annotation as managed, never arbitrary fields
+    // or a deliberate `disabled: true` setting.
+    const ownKeys=Object.keys(previous).sort().join(',');
+    const managedKeys=ownKeys==='args,command,env'||(ownKeys==='args,command,disabled,env'&&previous.disabled===false);
+    const own=command.startsWith(prefix)&&/\/node\/node(?:\.exe)?$/.test(command)&&script.startsWith(prefix)&&/\/app\/distribution\/mcp-regular\.mjs$/.test(script)&&previous.args.length===1&&sameEnvironment&&managedKeys;
     if(!own)throw new Error('Antigravity OmniRoute entry conflict; original preserved');
   }
   config.mcpServers={...config.mcpServers,omniroute_regular:entry};
