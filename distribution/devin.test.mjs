@@ -19,7 +19,9 @@ test('Devin setup leaves a missing CLI untouched and preserves a nonzero registr
   let calls=0;
   assert.deepEqual(await configureDevinCli({...common,executable:null,run:async()=>{calls++;}}),{status:'not-installed'});
   assert.equal(calls,0);
-  const result=await configureDevinCli({...common,executable:'C:\\Program Files\\Devin\\devin.exe',run:async()=>{calls++;throw new Error('duplicate');}});
+  assert.deepEqual(await configureDevinCli({...common,executable:'C:\\Program Files\\Devin\\devin.exe',run:async()=>{calls++;}}),{status:'unverified'});
+  assert.equal(calls,0);
+  const result=await configureDevinCli({...common,executable:'C:\\Program Files\\Devin\\devin.exe',verified:true,run:async()=>{calls++;throw new Error('duplicate');}});
   assert.deepEqual(result,{status:'needs-user-review'});
   assert.equal(calls,1);
 });

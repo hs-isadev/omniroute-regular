@@ -65,7 +65,7 @@ assert.deepEqual(packagedSetup.openCodeLaunchArgs([]),['--no-replay','--pure','-
 const packagedDevin=await moduleAt('distribution/devin.mjs');
 const fakeDevin=join(temp,'Verified Devin With Spaces','devin.exe');await mkdir(dirname(fakeDevin),{recursive:true});await writeFile(fakeDevin,'fixture');await access(fakeDevin);
 let devinInvocation;
-const devinRegistration=await packagedDevin.configureDevinCli({root:install,node,entrypoint:join(install,active,'app/distribution/mcp-regular.mjs'),executable:fakeDevin,run:async(command,args,env)=>{devinInvocation={command,args,env};}});
+const devinRegistration=await packagedDevin.configureDevinCli({root:install,node,entrypoint:join(install,active,'app/distribution/mcp-regular.mjs'),executable:fakeDevin,verified:true,run:async(command,args,env)=>{devinInvocation={command,args,env};}});
 assert.deepEqual(devinRegistration,{status:'configured'});assert.equal(devinInvocation.command,fakeDevin);assert.deepEqual(devinInvocation.args.slice(0,7),['mcp','add','-s','user','-e',`OMNIROUTE_HOME=${join(install,'data')}`,'-e']);assert.equal(devinInvocation.args[7],'OMNIROUTE_ROUTING_MODE=regular');assert.deepEqual(devinInvocation.args.slice(-3),['--',node,join(install,active,'app/distribution/mcp-regular.mjs')]);assert.equal(devinInvocation.env.OMNIROUTE_ROUTING_MODE,'regular');assert.equal(devinInvocation.env.OPENROUTER_API_KEY,undefined);assert.doesNotMatch(devinInvocation.args.join(' '),/fusion|--model|api[_-]?key/i);
 const {assertRegularProviderPolicy}=await moduleAt('distribution/regular-policy.mjs');
 const config=structuredClone(DEFAULT_CONFIG);for(const p of config.providers)p.enabled=false;

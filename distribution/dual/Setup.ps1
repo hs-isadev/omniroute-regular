@@ -8,7 +8,7 @@ function Get-VerifiedDevinCli {
   $command=Get-Command devin -CommandType Application -ErrorAction SilentlyContinue
   if($null -eq $command){return $null}
   $signature=Get-AuthenticodeSignature -LiteralPath $command.Source
-  if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*O=Exafunction, Inc.*'){return $null}
+  if($signature.Status -cne 'Valid' -or $signature.SignerCertificate.Subject -cne 'CN="Exafunction, Inc.", O="Exafunction, Inc.", L=Mountain View, S=California, C=US'){return $null}
   return $command.Source
 }
 $node=Join-Path $PSScriptRoot 'payload/node/node.exe'

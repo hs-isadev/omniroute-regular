@@ -96,7 +96,7 @@ async function setup(): Promise<void> {
   await saveConfig(config, paths);
   await ensureLocalDaemonToken(paths);
   const credentialPath = await ensureCredentialTemplate(paths);
-  writeJson({ status: "ready", runtimeRoot: paths.root, config: paths.config, credentialImport: credentialPath, defaultMode: config.routing.defaultMode, freeOnly: config.routing.freeOnly, orchestrator: `${config.routing.orchestratorProviderId}/${config.routing.orchestratorModelId}`, next: ["Add an OpenRouter key locally for the OpenCode regular harness.", "Run: omni providers list; enable chosen additional profiles only after confirming free-only account settings.", "Run: omni secrets import", "Restart an existing daemon: omni service stop, then omni service start", "For a new installation: omni service install --apply", "Run: omni integrate opencode --user --apply"] });
+  writeJson({ status: "ready", runtimeRoot: paths.root, config: paths.config, credentialImport: credentialPath, defaultMode: config.routing.defaultMode, freeOnly: config.routing.freeOnly, orchestrator: `${config.routing.orchestratorProviderId}/${config.routing.orchestratorModelId}`, next: ["OpenCode regular harnesses use the authenticated local OmniRoute gateway; no separate OpenRouter key is required.", "Run: omni providers list; enable chosen additional profiles only after confirming free-only account settings.", "Run: omni secrets import", "Restart an existing daemon: omni service stop, then omni service start", "For a new installation: omni service install --apply", "Run: omni integrate opencode --user --apply"] });
 }
 
 function timeoutSignal(ms = 15_000): AbortSignal {

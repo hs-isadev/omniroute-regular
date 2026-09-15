@@ -11,7 +11,7 @@ try {
     $env:Path=($segments -join ';')
     $devin=Get-Command devin -CommandType Application -ErrorAction Stop
     $signature=Get-AuthenticodeSignature -LiteralPath $devin.Source
-    if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*O=Exafunction, Inc.*'){throw 'The installed Devin CLI signature could not be verified.'}
+    if($signature.Status -cne 'Valid' -or $signature.SignerCertificate.Subject -cne 'CN="Exafunction, Inc.", O="Exafunction, Inc.", L=Mountain View, S=California, C=US'){throw 'The installed Devin CLI signature could not be verified.'}
     $env:OMNIROUTE_DEVIN_EXECUTABLE=$devin.Source
   }
   $node=Join-Path $PSScriptRoot ($active+'/node/node.exe')

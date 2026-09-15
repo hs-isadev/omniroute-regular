@@ -14,7 +14,7 @@ function Get-VerifiedDevinCli {
   if($null -eq $command){return $null}
   $candidate=$command.Source
   $signature=Get-AuthenticodeSignature -LiteralPath $candidate
-  if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*O=Exafunction, Inc.*'){return $null}
+  if($signature.Status -cne 'Valid' -or $signature.SignerCertificate.Subject -cne 'CN="Exafunction, Inc.", O="Exafunction, Inc.", L=Mountain View, S=California, C=US'){return $null}
   return $candidate
 }
 function Install-VerifiedDevinCli {
@@ -33,7 +33,7 @@ function Install-VerifiedDevinCli {
     throw 'Official Devin CLI installer checksum failed.'
   }
   $signature=Get-AuthenticodeSignature -LiteralPath $installer
-  if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*O=Exafunction, Inc.*'){
+  if($signature.Status -cne 'Valid' -or $signature.SignerCertificate.Subject -cne 'CN="Exafunction, Inc.", O="Exafunction, Inc.", L=Mountain View, S=California, C=US'){
     throw 'Official Devin CLI installer signature failed.'
   }
   $process=Start-Process -FilePath $installer -Wait -PassThru

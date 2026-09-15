@@ -33,11 +33,11 @@ test("OpenCode harness reuses an authenticated local daemon without spawning ano
 
 test("OpenCode harness starts and cleans up a private local daemon only when it is unreachable", async () => {
   const child = new EventEmitter() as EventEmitter & { killed?: boolean; kill: () => boolean; unref: () => void };
-  let spawnCalls = 0, healthCalls = 0, killed = false;
+  let spawnCalls = 0, available = false, killed = false;
   child.kill = () => { killed = true; child.killed = true; return true; };
   child.unref = () => {};
   const gateway = await ensureHarnessDaemon({
-    client: { request: async () => { healthCalls++; if (healthCalls === 1) throw offline(); return { ok: true }; } },
+    client: { request: async () => { if (!available) throw offline(); return { ok: true }; } },
     config: { daemon: { host: "127.0.0.1", port: 47831 } },
     nodePath: "C:\\runtime\\node.exe",
     daemonPath: "C:\\runtime\\daemon.mjs",
@@ -45,6 +45,7 @@ test("OpenCode harness starts and cleans up a private local daemon only when it 
     environment: { OMNIROUTE_HOME: "C:\\runtime" },
     spawnImpl: (command, args, options) => {
       spawnCalls++;
+      available = true;
       assert.equal(command, "C:\\runtime\\node.exe");
       assert.deepEqual(args, ["C:\\runtime\\daemon.mjs"]);
       assert.equal(options.cwd, "C:\\workspace");

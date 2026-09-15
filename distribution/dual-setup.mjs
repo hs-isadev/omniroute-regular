@@ -12,7 +12,7 @@ import {openKeyForm} from './gui-keys.mjs';
 import {RULES,findAntigravity} from './antigravity.mjs';
 import {claudeHarnessEnvironment} from '../apps/cli/dist/harness-env.js';
 import {createChatBackend,startChatProxy,openCodeConfig} from './dual-chat.mjs';
-import {configureDevinCli,launchDevinCli} from './devin.mjs';
+import {configureDevinCli,launchDevinCli,verifyDevinCli} from './devin.mjs';
 import {PRIVATE_BROWSER_CONSUMERS,getSharedSessionDefinition} from '../packages/browser-consumer-adapter/src/runtime.mjs';
 const CLAUDE_CONSUMER_PORT=47842;
 const CLAUDE_CONSUMER_ENDPOINT=`http://127.0.0.1:${CLAUDE_CONSUMER_PORT}`;
@@ -112,25 +112,29 @@ export async function repairHostRegistrations({root,home=homedir(),env}){
   const developers=await connectDeveloperHosts({home,root,node:runtime.node,entrypoint:runtime.entrypoint});
   return {...runtime,browserConsumers,browserAutostart,antigravity,developers};
 }
+async function requireVerifiedDevinCli(executable){
+  if(!isAbsolute(executable)||/[\r\n\0]/.test(executable))throw new Error('Invalid verified Devin executable path.');
+  await requireRuntimeFile(executable,'verified Devin executable');
+  if(!await verifyDevinCli(executable))throw new Error('The configured Devin executable signature could not be verified.');
+  return executable;
+}
 export async function resolveDevinCli(root){
   if(!isAbsolute(root))throw new Error('Absolute install root required');
   const executable=process.env.OMNIROUTE_DEVIN_EXECUTABLE;
   if(!executable)return null;
-  if(!isAbsolute(executable)||/[\r\n\0]/.test(executable))throw new Error('Invalid verified Devin executable path.');
-  await requireRuntimeFile(executable,'verified Devin executable');
-  return executable;
+  return requireVerifiedDevinCli(executable);
 }
 export async function configureDevinIntegration(root,{runtime,executable}={}){
   const activeRuntime=runtime??await resolveActiveRuntime(root);
-  const devin=executable===undefined?await resolveDevinCli(root):executable;
-  return configureDevinCli({root,node:activeRuntime.node,entrypoint:activeRuntime.entrypoint,executable:devin});
+  const devin=executable===undefined?await resolveDevinCli(root):executable===null?null:await requireVerifiedDevinCli(executable);
+  return configureDevinCli({root,node:activeRuntime.node,entrypoint:activeRuntime.entrypoint,executable:devin,verified:devin!==null});
 }
 export async function launchDevin(root,{executable}={}){
   const runtime=await resolveActiveRuntime(root);
-  const devin=executable===undefined?await resolveDevinCli(root):executable;
+  const devin=executable===undefined?await resolveDevinCli(root):executable===null?null:await requireVerifiedDevinCli(executable);
   const registration=await configureDevinIntegration(root,{runtime,executable:devin});
   if(registration.status!=='configured')return registration;
-  return launchDevinCli({root,executable:devin});
+  return launchDevinCli({root,executable:devin,verified:true});
 }
 export async function configureClaudeConsumer({root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/claude-consumer-adapter/src/adapter.mjs',import.meta.url))}) {
   for(const path of [root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute Claude consumer paths required');
@@ -315,7 +319,7 @@ export async function showUsage(root) {
 export async function setupBoth(root,{noKeys=false,noLaunch=false,home=homedir()}={}) {
   const paths=getRuntimePaths(join(root,'data'));
   if(await optional(paths.config)===null){const config=regularConfig();for(const p of config.providers){p.enabled=false;p.freeTierConfirmed=false;}await saveConfig(config,paths);}
-  const registrations=await repairHostRegistrations({root,home});
+  const registrations=await repairHostRegistrations({root,home,env:process.env});
   const devin=await configureDevinIntegration(root,{runtime:registrations});
   console.log('Four hosts configured: OpenCode = OmniRoute main model; Antigravity, Codex and Claude Code = OmniRoute MCP workers.');
   console.log(devin.status==='configured'?'Devin CLI has a local regular-mode OmniRoute MCP entry.':'Devin CLI is optional and was not changed; use the OmniRoute Devin CLI shortcut after its official installation.');

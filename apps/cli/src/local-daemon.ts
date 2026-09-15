@@ -87,6 +87,15 @@ export async function ensureHarnessDaemon({
     if (!isUnreachable(error)) throw error;
   }
 
+  // A scheduled local daemon can be between process start and port bind. Give it
+  // a short, bounded grace period before creating a separate private process.
+  try {
+    await waitForLocalDaemon(client, 5, sleep);
+    return { baseURL, started: false, close: async () => {} };
+  } catch (error) {
+    if (!isUnreachable(error)) throw error;
+  }
+
   const child = spawnImpl(nodePath, [daemonPath], { cwd, env: environment, shell: false, stdio: "ignore", windowsHide: true });
   child.unref?.();
   try {
