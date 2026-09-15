@@ -12,7 +12,7 @@ export async function prepareRuntimePayload(payload, repo) {
     if(!source.startsWith(root+'\\')&&!source.startsWith(root+'/')) throw Error('Unsafe adapter staging path');
     try {await rename(source,target);} catch(error) {if(error.code!=='ENOENT')throw error;}
   }
-  for(const name of ['config','contracts','core','integrations','mcp-server','observability','providers']) {
+  for(const name of ['config','contracts','core','integrations','mcp-server','observability','providers','vault']) {
     await cp(join(repo,'packages',name,'dist'),join(app,'node_modules/@omniroute',name,'dist'),{recursive:true,force:true});
   }
   let compiled=0, removed=0;

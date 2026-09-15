@@ -6,7 +6,7 @@ import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {verifyPackage} from '../distribution/install.mjs';
 
-const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-Private-0.6.5-private.1';
+const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-Private-0.6.6-private.1';
 const archive=resolve(process.argv[2]??join(repo,'release',name+'.zip'));
 const temp=await mkdtemp(join(repo,'test-artifacts/family-smoke-'));
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -43,7 +43,7 @@ async function inspect(dir) {
 }
 await inspect(family);
 const platform=process.platform==='win32'?'Windows':'Linux',bundle=join(family,platform),install=join(temp,'Install With Spaces');
-const previousBundle=join(repo,'release','OmniRoute-Private-0.6.4-private.1',platform);
+const previousBundle=join(repo,'release','OmniRoute-Private-0.6.5-private.1',platform);
 await verifyPackage(previousBundle,process.platform==='win32'?'windows-x64':'linux-x64');
 if(process.platform==='win32'){
   await run('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(previousBundle,'Setup.ps1'),'-InstallRoot',install,'-InstallOnly']);
@@ -57,6 +57,9 @@ const active=(await readFile(join(install,'active-version.txt'),'utf8')).trim();
 const app=join(install,active,'app'),node=join(install,active,'node',process.platform==='win32'?'node.exe':'node');
 const moduleAt=path=>import(pathToFileURL(join(app,path)).href);
 const {DEFAULT_CONFIG}=await moduleAt('packages/config/dist/index.js');
+const packagedVault=await moduleAt('packages/vault/dist/index.js');
+assert.equal(typeof packagedVault.SecretVault.prototype.getCredentialSlots,'function');
+assert.equal(packagedVault.MAX_CREDENTIAL_SLOTS,5);
 const {assertRegularProviderPolicy}=await moduleAt('distribution/regular-policy.mjs');
 const config=structuredClone(DEFAULT_CONFIG);for(const p of config.providers)p.enabled=false;
 const qwen=config.providers.find(p=>p.id==='qwen-consumer'),adapter=join(app,'packages/browser-consumer-adapter/runtime/adapter.mjs');
@@ -65,6 +68,8 @@ assertRegularProviderPolicy(config);
 
 let registeredHandshakes=0;
 if(process.platform==='win32'){
+  const settingsSmoke=await run('powershell.exe',['-NoLogo','-NoProfile','-STA','-NonInteractive','-ExecutionPolicy','Bypass','-File',join(app,'distribution/Settings.ps1'),'-InstallRoot',install,'-AppRoot',app,'-NodePath',node,'-RuntimeRoot',join(install,'data'),'-Simple','-SmokeTest']);
+  assert.match(settingsSmoke,/65 masked/);
   const hostHome=join(temp,'Antigravity Home With Spaces');await mkdir(hostHome,{recursive:true});
   const runtimePaths=(await moduleAt('packages/config/dist/index.js')).getRuntimePaths(join(install,'data'));
   const runtimeConfig=(await moduleAt('distribution/settings.mjs')).regularConfig();for(const provider of runtimeConfig.providers)provider.enabled=false;

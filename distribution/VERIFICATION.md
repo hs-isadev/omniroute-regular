@@ -1,4 +1,4 @@
-# OmniRoute 0.6.5-private.1 verification
+# OmniRoute 0.6.6-private.1 verification
 
 - TypeScript build/typecheck passes.
 - Core, routing, integration and security tests pass, including least-dispatched
@@ -13,7 +13,7 @@
 - The family archive is inspected against its manifest and checksums. It contains
   generated runtime code and required launch assets, no repository checkout,
   development tests/plans, source maps, user credentials or browser sessions.
-- Windows extracted-package tests install 0.6.4 then 0.6.5 into a path containing
+- Windows extracted-package tests install 0.6.5 then 0.6.6 into a path containing
   spaces, verify the bundled Node executable and MCP entrypoint, repair the exact
   Antigravity registration, complete initialize/tools-list, roll back and repeat
   the registered-command handshake, then roll forward and repeat it again.
@@ -21,12 +21,15 @@
   host registration without changing their enablement, endpoint, models or limits.
 - Existing package-owned browser-consumer autostart files are also rewritten to
   the active verified Node/shared-session paths; unrecognized content fails closed.
-- A separate live check on 2026-09-13 used only `Reply with OK only.` against
-  enabled, configured, free-policy-approved API routes. Kilo Auto Free succeeded.
-  Z.AI GLM 4.7 Flash returned HTTP 429 before GLM 4.5 Flash succeeded. OpenCode
-  Zen's three configured free IDs returned HTTP 400. Mistral and every other
-  disabled or unconfigured API provider were not tested. Only status/reason codes,
-  HTTP status, model/provider IDs, source hosts and timing metadata were recorded.
+- The masked setup window exposes five independently validated slots per provider,
+  preserves legacy credentials as slot 1, and reports accepted/failed slots plus
+  current stored counts. Runtime pools rotate slots and cool down auth/quota failures.
+- A live check on 2026-09-14 used only `Reply with OK only.` against enabled,
+  configured, free-policy-approved API routes. Kilo, Mistral, Cohere, Cloudflare,
+  Z.AI, OpenRouter, Gemini and Groq succeeded. OpenCode Zen's three documented free
+  chat IDs returned HTTP 400. Cerebras and SambaNova were unconfigured; NVIDIA and
+  credit/paid profiles were deliberately not tested. Only safe status metadata was
+  recorded.
 - Linux payload integrity is checked. Native Linux desktop/keyring/onboarding and
   live Antigravity account interactions are not claimed as verified on Windows.
 - Browser account sessions, provider availability and host model choice are user-

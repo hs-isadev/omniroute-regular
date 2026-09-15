@@ -1,4 +1,4 @@
-# OmniRoute Private 0.6.5 — verified providers and host runtime
+# OmniRoute Private 0.6.6 — multi-key providers and verified host runtime
 
 This update verifies the installed MCP runtime before host registration, repairs
 registrations after update or rollback, isolates provider health deadlines, and
