@@ -1,4 +1,4 @@
-# OmniRoute 0.6.6-private.3 verification
+# OmniRoute 0.6.6-private.4 verification
 
 - TypeScript build/typecheck passes.
 - Core, routing, integration and security tests pass, including least-dispatched
