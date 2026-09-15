@@ -1,13 +1,13 @@
 # OmniRoute Private 0.6.6 — multi-key providers and verified host runtime
 
-`OmniRoute Private 0.6.6-private.1` is the local replacement candidate for the
+`OmniRoute Private 0.6.6-private.2` is the local replacement candidate for the
 published 0.6.4-private.1 package. It verifies bundled Node/MCP runtime paths before
 host registration, repairs registrations across update and rollback, isolates
 provider health deadlines, and adds metadata-only safe provider diagnostics. It
 retains the free-only routing and guarded browser-consumer limits. Each recipient
 supplies their own keys and account sign-ins; no credentials, cookies, profiles or
-sessions are included. Local verification is complete; this task intentionally did
-not publish the candidate. See [its release notes](docs/releases/v0.6.6-private.1.md).
+sessions are included. Publication is permitted only after the documented local
+verification gates pass. See [its release notes](docs/releases/v0.6.6-private.2.md).
 
 ## Current release setup
 

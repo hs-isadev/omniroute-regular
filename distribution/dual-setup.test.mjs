@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,readFile,writeFile} from 'node:fs/promises';
+import {EventEmitter} from 'node:events';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {getRuntimePaths,loadConfig,saveConfig} from '../packages/config/dist/index.js';
@@ -54,6 +55,11 @@ test('host registration repair follows active-version through update and rollbac
     await mod.repairHostRegistrations({root,home});
     const entry=JSON.parse(await readFile(configPath,'utf8')).mcpServers.omniroute_regular;
     assert.equal(entry.command,expected.node);assert.deepEqual(entry.args,[expected.entrypoint]);
+    const openCode=JSON.parse(await readFile(join(home,'.config/opencode/opencode.json'),'utf8')).mcp.omniroute;
+    assert.deepEqual(openCode.command,[expected.node,expected.entrypoint,'mcp']);
+    assert.equal(openCode.enabled,true);assert.equal(openCode.environment.OMNIROUTE_MANAGED,'1');
+    assert.equal(openCode.environment.OMNIROUTE_HOME,join(root,'data'));
+    assert.equal(openCode.environment.OMNIROUTE_ROUTING_MODE,'regular');
   }
 });
 test('host registration repair updates enabled browser consumers to the active runtime without changing policy fields',async()=>{
@@ -86,16 +92,18 @@ test('OpenCode environment excludes upstream credentials and points both models 
   const env=mod.openCodeEnvironment({PATH:'fixture',HOME:'/user',GROQ_API_KEY:'never-forward',NODE_OPTIONS:'--require evil'},'/install','{}');
   assert.equal(env.GROQ_API_KEY,undefined);assert.equal(env.NODE_OPTIONS,undefined);assert.equal(env.OPENCODE_CONFIG_CONTENT,'{}');assert.match(env.XDG_CONFIG_HOME,/opencode/);assert.equal(env.OPENCODE_DISABLE_MODELS_FETCH,'true');
 });
-test('one setup connects Codex and Claude Code to the isolated regular MCP without replacing user settings',async()=>{
-  assert.equal(typeof mod.connectDeveloperHosts,'function','Codex/Claude connector missing');
+test('one setup connects OpenCode, Codex, and Claude Code to the isolated regular MCP without replacing user settings',async()=>{
+  assert.equal(typeof mod.connectDeveloperHosts,'function','developer-host connector missing');
   const home=await mkdtemp(join(tmpdir(),'dual-dev-hosts-')),root=join(home,'install');await mkdir(root,{recursive:true});
-  await mkdir(join(home,'.codex'),{recursive:true});await mkdir(join(home,'.claude'),{recursive:true});
+  await mkdir(join(home,'.codex'),{recursive:true});await mkdir(join(home,'.claude'),{recursive:true});await mkdir(join(home,'.config/opencode'),{recursive:true});
   await writeFile(join(home,'.codex/config.toml'),'model = "user-choice"\n');
   await writeFile(join(home,'.claude.json'),JSON.stringify({theme:'dark'}));
+  await writeFile(join(home,'.config/opencode/opencode.json'),JSON.stringify({theme:'dark',mcp:{existing:{type:'remote',url:'https://example.invalid'}}}));
   const result=await mod.connectDeveloperHosts({home,root,node:process.execPath,entrypoint:join(home,'mcp-regular.mjs')});
-  assert.deepEqual(result.connected.sort(),['claude-code','codex']);
+  assert.deepEqual(result.connected.sort(),['claude-code','codex','opencode']);
   const codex=await readFile(join(home,'.codex/config.toml'),'utf8');assert.match(codex,/user-choice/);assert.match(codex,/OMNIROUTE_HOME/);
   const claude=JSON.parse(await readFile(join(home,'.claude.json'),'utf8'));assert.equal(claude.theme,'dark');assert.equal(claude.mcpServers.omniroute.env.OMNIROUTE_ROUTING_MODE,'regular');
+  const openCode=JSON.parse(await readFile(join(home,'.config/opencode/opencode.json'),'utf8'));assert.equal(openCode.theme,'dark');assert.equal(openCode.mcp.existing.url,'https://example.invalid');assert.deepEqual(openCode.mcp.omniroute.command,[process.execPath,join(home,'mcp-regular.mjs'),'mcp']);
   await mod.connectDeveloperHosts({home,root,node:process.execPath,entrypoint:join(home,'mcp-regular.mjs')});
 });
 test('installer entrypoints include user-friendly editor workflow and no GitHub publication',async()=>{
@@ -113,6 +121,15 @@ test('new setup saves keys before starting Antigravity so its MCP sees the saved
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');
   const setup=source.slice(source.indexOf('export async function setupBoth'));
   assert.ok(setup.indexOf('await openKeyForm(root)')<setup.indexOf('await launchAntigravity(root)'));
+});
+
+test('Antigravity launch reports an immediate desktop-process exit instead of claiming it opened',async()=>{
+  assert.equal(typeof mod.launchAntigravity,'function','Antigravity launcher missing');
+  const home=await mkdtemp(join(tmpdir(),'dual-antigravity-launch-')),root=join(home,'install'),app=join(home,'Antigravity.exe');
+  await mkdir(root,{recursive:true});await writeFile(app,'fixture');await writeFile(join(root,'antigravity-path.txt'),app+'\n');
+  const child=new EventEmitter();child.unref=()=>{};
+  const launch=mod.launchAntigravity(root,{spawnImpl:()=>{queueMicrotask(()=>child.emit('exit',0x80000003));return child;},startupWaitMs:0});
+  await assert.rejects(launch,/Antigravity.*exited.*0x80000003/i);
 });
 
 test('release setup enables the packaged Claude consumer without storing a credential',async()=>{

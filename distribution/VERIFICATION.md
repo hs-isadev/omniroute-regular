@@ -1,4 +1,4 @@
-# OmniRoute 0.6.6-private.1 verification
+# OmniRoute 0.6.6-private.2 verification
 
 - TypeScript build/typecheck passes.
 - Core, routing, integration and security tests pass, including least-dispatched
@@ -15,8 +15,9 @@
   development tests/plans, source maps, user credentials or browser sessions.
 - Windows extracted-package tests install 0.6.5 then 0.6.6 into a path containing
   spaces, verify the bundled Node executable and MCP entrypoint, repair the exact
-  Antigravity registration, complete initialize/tools-list, roll back and repeat
-  the registered-command handshake, then roll forward and repeat it again.
+  Antigravity and OpenCode registrations, complete initialize/tools-list using
+  each registered command, roll back and repeat both handshakes, then roll
+  forward and repeat them again.
 - Enabled browser-consumer runtime paths are repaired to the active version before
   host registration without changing their enablement, endpoint, models or limits.
 - Existing package-owned browser-consumer autostart files are also rewritten to

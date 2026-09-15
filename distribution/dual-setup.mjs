@@ -65,7 +65,7 @@ export async function connectDeveloperHosts({home=homedir(),root,node=process.ex
   for(const path of [home,root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute paths required');
   const manager=new IntegrationManager({hostPaths:defaultHostPaths(home),runtimePaths:getRuntimePaths(join(root,'data')),nodePath:node,cliPath:entrypoint});
   const connected=[];
-  for(const target of ['codex','claude-code']){const plan=await manager.plan(target,'install');if(plan.changed)await manager.apply(plan);connected.push(target);}
+  for(const target of ['opencode','codex','claude-code']){const plan=await manager.plan(target,'install');if(plan.changed)await manager.apply(plan);connected.push(target);}
   return {connected};
 }
 export async function repairBrowserConsumerRuntime({root,runtime}){
@@ -256,14 +256,26 @@ export async function launchOpenCode(root,args=[]) {
   try {await run(join(root,active,'opencode',process.platform==='win32'?'opencode.exe':'opencode'),[...args,'--pure','--model','omniroute/regular'],{cwd:workspace,env,windowsHide:false});}
   finally{await proxy.close();}
 }
-export async function launchAntigravity(root) {
+export async function launchAntigravity(root,{spawnImpl=spawn,startupWaitMs=2500}={}) {
+  if(!Number.isInteger(startupWaitMs)||startupWaitMs<0||startupWaitMs>10000)throw new Error('Invalid Antigravity startup wait.');
   const saved=await optional(join(root,'antigravity-path.txt'));
   let app=saved?.trim();if(app)await access(app);
   if(!app){const found=await findAntigravity();if(found?.kind!=='gui'&&found?.kind!=='app'&&found?.kind!=='desktop'){
     if(process.platform==='win32'){const path=join(process.env.LOCALAPPDATA??'', 'Programs/antigravity/Antigravity.exe');try{await access(path);app=path;}catch{}}
   }else app=found.executable;}
   if(!app)throw new Error('Antigravity desktop is not installed. Rerun Setup to download the official app.');
-  const child=spawn(app,[],{detached:true,stdio:'ignore',windowsHide:false});child.once('error',()=>console.error('Could not open Antigravity. Use its desktop shortcut.'));child.unref();
+  const child=spawnImpl(app,[],{detached:true,stdio:'ignore',windowsHide:false});
+  await new Promise((resolvePromise,reject)=>{
+    let settled=false;let timer;
+    const complete=callback=>{if(settled)return;settled=true;clearTimeout(timer);callback();};
+    child.once('error',()=>complete(()=>reject(new Error('Could not start Antigravity. Repair or reinstall the official desktop app.'))));
+    child.once('exit',(code,signal)=>complete(()=>{
+      const status=typeof code==='number'?`0x${(code>>>0).toString(16)}`:`signal ${signal??'unknown'}`;
+      reject(new Error(`Antigravity exited during launch (${status}). Repair or reinstall the official desktop app.`));
+    }));
+    timer=setTimeout(()=>complete(resolvePromise),startupWaitMs);
+  });
+  child.unref();return {app};
 }
 export async function showUsage(root) {
   const summary=await new AuditStore(getRuntimePaths(join(root,'data')).routes).tokenSavingsSummary();
