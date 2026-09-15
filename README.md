@@ -8,4 +8,4 @@ Extract the whole archive. Windows: run Install-Windows.cmd. Linux: run sh Insta
 
 See RELEASE-NOTES.md, ROUTING-POLICY.md and HOST-ORCHESTRATION.md for behavior and verification limits.
 
-This is a download/documentation repository, not the development source checkout. Public branches and release tags contain documentation only. Generated source archives therefore contain these documents, not the original source. Old source-bearing release downloads are withdrawn. Historical GitHub objects/caches may remain accessible until GitHub removes them. The runtime package necessarily contains executable JavaScript and required launch assets.
+The [source branch](https://github.com/hs-isadev/omniroute-regular/tree/source) contains the matching development checkout, including the regular installer, browser-consumer adapters, Antigravity integration, and tests. You can browse it on GitHub or download it as a [source ZIP](https://github.com/hs-isadev/omniroute-regular/archive/refs/heads/source.zip). The runtime package necessarily contains executable JavaScript and required launch assets.
