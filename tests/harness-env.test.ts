@@ -38,9 +38,9 @@ test("Claude launcher selection rejects a workspace-planted shim", () => {
   assert.equal(selected, installed);
 });
 
-test("OpenCode regular harness uses a clean environment and only the configured free gateway", () => {
-  const apiKey = "openrouter-test-key-never-print";
-  const inlineConfig = openCodeRegularConfig("C:\\node.exe", "C:\\omni.js", "C:\\runtime\\omniroute", "C:\\instructions.md");
+test("OpenCode regular harness uses the authenticated local OmniRoute gateway without inheriting upstream credentials", () => {
+  const localGatewayToken = "local-gateway-test-token";
+  const inlineConfig = openCodeRegularConfig("C:\\node.exe", "C:\\omni.js", "C:\\runtime\\omniroute", "C:\\instructions.md", "http://127.0.0.1:47831/v1", localGatewayToken);
   const environment = openCodeHarnessEnvironment({
     PATH: "C:\\Windows\\System32",
     USERPROFILE: "C:\\Users\\test",
@@ -50,21 +50,21 @@ test("OpenCode regular harness uses a clean environment and only the configured 
     OMNIROUTE_DAEMON_TOKEN: "daemon-secret",
     AWS_SECRET_ACCESS_KEY: "aws-secret",
     NODE_OPTIONS: "--require=malicious.js",
-  }, "C:\\runtime\\omniroute", apiKey, inlineConfig);
+  }, "C:\\runtime\\omniroute", inlineConfig);
   assert.equal(environment.OMNIROUTE_ROUTING_MODE, "regular");
   assert.equal(environment.OMNIROUTE_HOME, "C:\\runtime\\omniroute");
-  assert.equal(environment.OPENROUTER_API_KEY, apiKey);
   assert.equal(environment.OPENCODE_CONFIG_CONTENT, inlineConfig);
-  for (const key of ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OMNIROUTE_DAEMON_TOKEN", "AWS_SECRET_ACCESS_KEY", "NODE_OPTIONS"]) assert.equal(environment[key], undefined);
-  assert.doesNotMatch(inlineConfig, /openrouter-test-key-never-print/);
-  const config = JSON.parse(inlineConfig) as { model: string; small_model: string; enabled_providers: string[]; provider: { openrouter: { whitelist: string[]; models: Record<string, { options: { provider: { allow_fallbacks: boolean } } }> } }; mcp: { omniroute: { environment: Record<string, string> } } };
-  assert.equal(config.model, "openrouter/openrouter/free");
-  assert.equal(config.small_model, "openrouter/openrouter/free");
-  assert.deepEqual(config.enabled_providers, ["openrouter"]);
-  assert.deepEqual(config.provider.openrouter.whitelist, ["openrouter/free"]);
-  assert.equal(config.provider.openrouter.models["openrouter/free"]?.options.provider.allow_fallbacks, false);
+  for (const key of ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "OMNIROUTE_DAEMON_TOKEN", "AWS_SECRET_ACCESS_KEY", "NODE_OPTIONS"]) assert.equal(environment[key], undefined);
+  const config = JSON.parse(inlineConfig) as { model: string; small_model: string; enabled_providers: string[]; share: string; provider: { omniroute: { options: { baseURL: string; apiKey: string }; models: Record<string, { tool_call: boolean }> } }; mcp: { omniroute: { environment: Record<string, string> } } };
+  assert.equal(config.model, "omniroute/regular");
+  assert.equal(config.small_model, "omniroute/regular");
+  assert.deepEqual(config.enabled_providers, ["omniroute"]);
+  assert.equal(config.share, "disabled");
+  assert.equal(config.provider.omniroute.options.baseURL, "http://127.0.0.1:47831/v1");
+  assert.equal(config.provider.omniroute.options.apiKey, localGatewayToken);
+  assert.equal(config.provider.omniroute.models.regular?.tool_call, true);
   assert.equal(config.mcp.omniroute.environment.OMNIROUTE_ROUTING_MODE, "regular");
-  assert.doesNotMatch(inlineConfig, /API_KEY|AUTH_TOKEN|secret/i);
+  assert.doesNotMatch(inlineConfig, /openrouter|OPENROUTER|inherited-router-secret/i);
 });
 
 test("generic harness launcher selection rejects workspace shims", () => {
@@ -72,17 +72,18 @@ test("generic harness launcher selection rejects workspace shims", () => {
   assert.equal(selectHarnessLauncher([join(project, "opencode.cmd"), installed], project), installed);
 });
 
-test("OpenCode wrapper disables external plugins and pins the free model", () => {
-  assert.deepEqual(openCodeHarnessArguments(), ["--pure", "--model", "openrouter/openrouter/free"]);
+test("OpenCode wrapper disables replay and pins the local regular model", () => {
+  assert.deepEqual(openCodeHarnessArguments(), ["--no-replay", "--pure", "--model", "omniroute/regular"]);
 });
 
-test("model-label adapter changes only the host transport and display name", () => {
-  const config = JSON.parse(openCodeRegularConfig("node", "cli", "runtime", "instructions", "http://127.0.0.1:12345"));
-  assert.equal(config.provider.openrouter.options.baseURL, "http://127.0.0.1:12345");
-  assert.equal(config.model, "openrouter/openrouter/free");
-  assert.deepEqual(config.provider.openrouter.whitelist, ["openrouter/free"]);
-  assert.match(config.provider.openrouter.models["openrouter/free"].name, /actual model shown/);
-  assert.equal(config.provider.openrouter.models["openrouter/free"].options.provider.allow_fallbacks, false);
+test("local OmniRoute adapter pins one free-policy route without an upstream provider", () => {
+  const config = JSON.parse(openCodeRegularConfig("node", "cli", "runtime", "instructions", "http://127.0.0.1:12345/v1", "local-test-token"));
+  assert.equal(config.provider.omniroute.options.baseURL, "http://127.0.0.1:12345/v1");
+  assert.equal(config.provider.omniroute.options.apiKey, "local-test-token");
+  assert.equal(config.model, "omniroute/regular");
+  assert.match(config.provider.omniroute.models.regular.name, /actual worker shown/i);
+  assert.equal(config.provider.omniroute.models.regular.tool_call, true);
+  assert.equal(config.provider.openrouter, undefined);
 });
 
 test("global npm launcher is allowed from home without allowing home-folder shims", () => {
