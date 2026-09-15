@@ -92,6 +92,11 @@ test('OpenCode environment excludes upstream credentials and points both models 
   const env=mod.openCodeEnvironment({PATH:'fixture',HOME:'/user',GROQ_API_KEY:'never-forward',NODE_OPTIONS:'--require evil'},'/install','{}');
   assert.equal(env.GROQ_API_KEY,undefined);assert.equal(env.NODE_OPTIONS,undefined);assert.equal(env.OPENCODE_CONFIG_CONTENT,'{}');assert.match(env.XDG_CONFIG_HOME,/opencode/);assert.equal(env.OPENCODE_DISABLE_MODELS_FETCH,'true');
 });
+test('OpenCode launcher disables session replay by default while preserving explicit arguments',()=>{
+  assert.equal(typeof mod.openCodeLaunchArgs,'function','OpenCode launch argument builder missing');
+  assert.deepEqual(mod.openCodeLaunchArgs([]),['--no-replay','--pure','--model','omniroute/regular']);
+  assert.deepEqual(mod.openCodeLaunchArgs(['--continue','--no-replay']),['--continue','--no-replay','--pure','--model','omniroute/regular']);
+});
 test('one setup connects OpenCode, Codex, and Claude Code to the isolated regular MCP without replacing user settings',async()=>{
   assert.equal(typeof mod.connectDeveloperHosts,'function','developer-host connector missing');
   const home=await mkdtemp(join(tmpdir(),'dual-dev-hosts-')),root=join(home,'install');await mkdir(root,{recursive:true});
