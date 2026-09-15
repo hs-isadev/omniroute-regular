@@ -2,7 +2,7 @@
 
 This package is intended for personal and family use. It may be shared as an intact verified archive; every recipient must use their own accounts and provider keys.
 
-Run `Install-Windows.cmd` on Windows or `sh Install-Linux.sh` on Linux. Setup keeps the existing BYOK and developer-host features, then opens one dedicated Opera/Chromium profile with sign-in tabs for Claude, Z.AI, Qwen, Kimi, DeepSeek, and Perplexity. The shared window minimizes after all six sites are ready and restarts in the background at user login.
+Run `Install-Windows.cmd` on Windows or `sh Install-Linux.sh` on Linux. Setup keeps the existing BYOK and developer-host features, then opens one dedicated Opera/Chromium profile with sign-in tabs for Claude, Z.AI, Qwen, Kimi, DeepSeek, and Perplexity. The shared window stays visible after all six sites are ready and opens visibly at user login for easier diagnostics.
 
 All browser consumers share one persistent profile named `browser-consumer-profile` and the loopback-only CDP endpoint `127.0.0.1:47842`. The package supports Chrome, Edge, Opera, Opera GX, Brave, Vivaldi, and Chromium on Windows or Linux.
 

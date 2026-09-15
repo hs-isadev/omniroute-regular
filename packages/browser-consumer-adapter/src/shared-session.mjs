@@ -26,9 +26,10 @@ async function start(){
   await waitReady();const browser=await chromium.connectOverCDP(endpoint),context=browser.contexts()[0];if(!context)throw new Error('The shared browser has no usable profile.');
   const pages=[];
   for(const site of sites){const origin=new URL(site.url).origin;let page=context.pages().find(candidate=>candidate.url().startsWith(origin)&&!pages.includes(candidate));if(!page){page=await context.newPage();await page.goto(site.url,{waitUntil:'domcontentloaded',timeout:30000});}pages.push(page);}
-  if(!background)console.log('Sign in to any unfinished provider tabs. The shared Opera window will minimize when all six are ready.');
+  if(!background)console.log('Sign in to any unfinished provider tabs. The shared Opera window will stay visible for diagnostics.');
   const checks=await Promise.all(sites.map((site,index)=>waitForConsumerAuthentication(pages[index],{definition:{...site,loginPattern:site.loginPattern},timeoutMs:background?3000:600000}).then(ok=>({site,ok}))));
   const pending=checks.filter(item=>!item.ok).map(item=>item.site.displayName);if(pending.length){if(background){console.log(`Shared browser needs sign-in for: ${pending.join(', ')}.`);return;}throw new Error(`Timed out waiting for sign-in: ${pending.join(', ')}`);}
-  await minimizeBrowserWindow(context,pages[0]);console.log('All OmniRoute browser consumers are signed in and running in one background Opera session.');
+  if(background){await minimizeBrowserWindow(context,pages[0]);console.log('All OmniRoute browser consumers are signed in and running in one background Opera session.');}
+  else console.log('All OmniRoute browser consumers are signed in and running in one foreground Opera session.');
 }
 start().then(()=>process.exit(0)).catch(error=>{console.error(error instanceof Error?error.message:String(error));process.exit(1);});

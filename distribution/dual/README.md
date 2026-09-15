@@ -17,7 +17,7 @@ needed. No API keys, accounts, vaults or personal projects are included.
    **Save and test**. Configure any supported providers; blank fields keep saved keys.
 4. One dedicated Chromium-family window opens with six tabs: Claude, Z.AI, Qwen,
    Kimi, DeepSeek, and Perplexity. Sign in manually to any service you want to use.
-   The window minimizes after all six tabs are ready and starts minimized at future
+   The window stays visible after all six tabs are ready and opens visibly at future
    OS logins. Then sign in to Antigravity when its official app opens. Existing
    Codex and Claude Code installations are connected automatically; the package
    does not install or sign into those optional hosts.
@@ -44,7 +44,7 @@ require approval. Antigravity may show its own first-run onboarding.
 
 Windows launchers appear on the Desktop; Linux launchers appear in the app menu.
 Restart a host after changing keys. Developer hosts are not registered for
-autostart. One shared consumer browser starts minimized in the background at user
+autostart. One shared consumer browser starts visibly in the foreground at user
 login. It uses the persistent profile `browser-consumer-profile`, the loopback-only
 endpoint `127.0.0.1:47842`, and six provider tabs; it does not reuse the user's
 normal browser profile. Chrome, Edge, Opera, Opera GX, Brave, Vivaldi and Chromium
