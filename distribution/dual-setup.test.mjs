@@ -16,6 +16,10 @@ test('global Antigravity setup is repeatable and preserves unrelated MCP entries
   await mod.connectAntigravity(options);const before=await readFile(path,'utf8');await mod.connectAntigravity(options);
   assert.equal(await readFile(path,'utf8'),before);assert.equal(JSON.parse(before).mcpServers.existing.command,'keep');
   assert.match(await readFile(join(home,'.gemini/GEMINI.md'),'utf8'),/^Existing rules/);
+  const managed=JSON.parse(await readFile(path,'utf8'));managed.mcpServers.omniroute_regular.disabled=false;
+  await writeFile(path,JSON.stringify(managed));
+  await mod.connectAntigravity(options);
+  assert.equal(JSON.parse(await readFile(path,'utf8')).mcpServers.omniroute_regular.command,process.execPath);
   await writeFile(path,JSON.stringify({mcpServers:{omniroute_regular:{command:'user-owned'}}}));
   await assert.rejects(mod.connectAntigravity(options),/conflict/i);
 });
