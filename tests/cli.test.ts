@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { EXTRA_FREE_PROVIDERS } from "@omniroute/config";
+import { EXTRA_FREE_PROVIDERS, getRuntimePaths, saveConfig } from "@omniroute/config";
+import { freeConfigFixture } from "./helpers.js";
 
 const cli = fileURLToPath(new URL("../apps/cli/dist/bin.js", import.meta.url));
 
-async function runCli(arguments_: string[], home: string, stdinText?: string): Promise<{ code: number; stdout: string; stderr: string }> {
+async function runCli(arguments_: string[], home: string, stdinText?: string, environment: NodeJS.ProcessEnv = {}): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [cli, ...arguments_], { env: { ...process.env, OMNIROUTE_HOME: home }, windowsHide: true, stdio: [stdinText === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
+    const child = spawn(process.execPath, [cli, ...arguments_], { env: { ...process.env, ...environment, OMNIROUTE_HOME: home }, windowsHide: true, stdio: [stdinText === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
     const stdout: Buffer[] = [], stderr: Buffer[] = [];
     let inputSent = false;
     if (arguments_[0] === "hook" && stdinText !== undefined) { inputSent = true; child.stdin.end(stdinText); }
@@ -92,6 +93,25 @@ test("OpenCode harness rejects orchestrator and subscription modes before creden
     assert.notEqual(subscription.code, 0);
     assert.match(subscription.stderr, /HARNESS_SUBSCRIPTION_INVALID/);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("OpenCode regular harness starts an authenticated local OmniRoute gateway without an upstream key", { timeout: 30_000 }, async () => {
+  const root = await mkdtemp(join(tmpdir(), "omniroute-cli-opencode-local-"));
+  const launcherDirectory = join(root, "trusted-opencode-bin");
+  try {
+    await mkdir(launcherDirectory, { recursive: true });
+    const config = freeConfigFixture();
+    config.daemon.port = 49_881;
+    config.daemon.allowedOrigins = ["http://127.0.0.1:49881"];
+    await saveConfig(config, getRuntimePaths(root));
+    await writeFile(join(launcherDirectory, "opencode.cmd"), "@exit /b 0\r\n", "utf8");
+    const result = await runCli(["harness", "opencode", "--mode", "regular"], root, undefined, { PATH: `${launcherDirectory};${process.env.PATH ?? ""}`, PATHEXT: ".CMD" });
+    assert.equal(result.code, 0, result.stderr);
+    assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /OPENROUTER_REQUIRED|OPENROUTER_API_KEY/i);
+  } finally {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("integration CLI rejects unknown targets", async () => {

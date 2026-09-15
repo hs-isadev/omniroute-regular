@@ -62,6 +62,11 @@ assert.equal(typeof packagedVault.SecretVault.prototype.getCredentialSlots,'func
 assert.equal(packagedVault.MAX_CREDENTIAL_SLOTS,5);
 const packagedSetup=await moduleAt('distribution/dual-setup.mjs');
 assert.deepEqual(packagedSetup.openCodeLaunchArgs([]),['--no-replay','--pure','--model','omniroute/regular']);
+const packagedDevin=await moduleAt('distribution/devin.mjs');
+const fakeDevin=join(temp,'Verified Devin With Spaces','devin.exe');await mkdir(dirname(fakeDevin),{recursive:true});await writeFile(fakeDevin,'fixture');await access(fakeDevin);
+let devinInvocation;
+const devinRegistration=await packagedDevin.configureDevinCli({root:install,node,entrypoint:join(install,active,'app/distribution/mcp-regular.mjs'),executable:fakeDevin,run:async(command,args,env)=>{devinInvocation={command,args,env};}});
+assert.deepEqual(devinRegistration,{status:'configured'});assert.equal(devinInvocation.command,fakeDevin);assert.deepEqual(devinInvocation.args.slice(0,7),['mcp','add','-s','user','-e',`OMNIROUTE_HOME=${join(install,'data')}`,'-e']);assert.equal(devinInvocation.args[7],'OMNIROUTE_ROUTING_MODE=regular');assert.deepEqual(devinInvocation.args.slice(-3),['--',node,join(install,active,'app/distribution/mcp-regular.mjs')]);assert.equal(devinInvocation.env.OMNIROUTE_ROUTING_MODE,'regular');assert.equal(devinInvocation.env.OPENROUTER_API_KEY,undefined);assert.doesNotMatch(devinInvocation.args.join(' '),/fusion|--model|api[_-]?key/i);
 const {assertRegularProviderPolicy}=await moduleAt('distribution/regular-policy.mjs');
 const config=structuredClone(DEFAULT_CONFIG);for(const p of config.providers)p.enabled=false;
 const qwen=config.providers.find(p=>p.id==='qwen-consumer'),adapter=join(app,'packages/browser-consumer-adapter/runtime/adapter.mjs');
@@ -121,6 +126,6 @@ try {
   const rejected=await call('tools/call',{name:'omni_route',arguments:{prompt:'Bounded task',routingMode:'regular',taskPacket:{...taskPacket,independent:false}}});
   assert.equal(rejected.isError,true);
 } finally {child.stdin.end();child.kill();}
-const evidence={archive,sha256:hash(await readFile(archive)),filesScanned:scanned,windowsOrLinuxInstall:platform,bothPayloadManifests:'passed',requiredRuntime:'bundled Node and MCP entrypoint verified',updateRollback:'active version and host registration repaired',registeredAntigravityHandshakes:registeredHandshakes,registeredOpenCodeHandshakes:registeredOpenCodeHandshakes,mcpProtocol:'passed with fake provider',browserRegistration:'passed without browser requests',liveInference:false,nativeOtherPlatformSmoke:false,temp};
+const evidence={archive,sha256:hash(await readFile(archive)),filesScanned:scanned,windowsOrLinuxInstall:platform,bothPayloadManifests:'passed',requiredRuntime:'bundled Node and MCP entrypoint verified',updateRollback:'active version and host registration repaired',registeredAntigravityHandshakes:registeredHandshakes,registeredOpenCodeHandshakes:registeredOpenCodeHandshakes,packagedDevinRegistration:'fixture executable and regular-mode local MCP registration verified',mcpProtocol:'passed with fake provider',browserRegistration:'passed without browser requests',liveInference:false,nativeOtherPlatformSmoke:false,temp};
 await writeFile(join(repo,'test-artifacts/family-smoke-result.json'),JSON.stringify(evidence,null,2)+'\n');
 console.log(JSON.stringify(evidence,null,2));
