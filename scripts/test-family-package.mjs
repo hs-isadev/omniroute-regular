@@ -60,6 +60,8 @@ const {DEFAULT_CONFIG}=await moduleAt('packages/config/dist/index.js');
 const packagedVault=await moduleAt('packages/vault/dist/index.js');
 assert.equal(typeof packagedVault.SecretVault.prototype.getCredentialSlots,'function');
 assert.equal(packagedVault.MAX_CREDENTIAL_SLOTS,5);
+const packagedSetup=await moduleAt('distribution/dual-setup.mjs');
+assert.deepEqual(packagedSetup.openCodeLaunchArgs([]),['--no-replay','--pure','--model','omniroute/regular']);
 const {assertRegularProviderPolicy}=await moduleAt('distribution/regular-policy.mjs');
 const config=structuredClone(DEFAULT_CONFIG);for(const p of config.providers)p.enabled=false;
 const qwen=config.providers.find(p=>p.id==='qwen-consumer'),adapter=join(app,'packages/browser-consumer-adapter/runtime/adapter.mjs');
