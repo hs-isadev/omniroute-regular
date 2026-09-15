@@ -1,4 +1,4 @@
-# OmniRoute 0.6.6-private.4 verification
+# OmniRoute 0.6.6-private.5 verification
 
 - TypeScript build/typecheck passes.
 - Core, routing, integration and security tests pass, including least-dispatched
@@ -28,6 +28,19 @@
 - The packaged OpenCode launcher disables prior-session replay by default while
   preserving explicit launch arguments. This avoids an unstable UI replay path;
   the isolated strict-free configuration and current worker routing are unchanged.
+- `omni harness opencode --mode regular` is covered by a local-only integration
+  test using a temporary daemon and a fake OpenCode executable: it uses the
+  loopback OmniRoute gateway and does not require or inherit an OpenRouter key.
+- On Windows x64, one-click setup can install the pinned, Authenticode-verified
+  official Devin CLI updater, creates visible Desktop and Start-menu launchers,
+  and registers only a local `omniroute_regular` MCP in regular mode. The
+  package test uses a fixture executable and verifies the resolved active Node
+  and MCP paths; it does not claim an account login, Devin model availability,
+  or Fusion success.
+- Devin Fusion is paid/metered according to Devin's own product policy and is
+  deliberately not enabled. Astra, Sol, Terra and Antigravity model availability
+  remains controlled by the user's host/account entitlement; OmniRoute neither
+  imports those models nor enables paid fallbacks.
 - A live check on 2026-09-14 used only `Reply with OK only.` against enabled,
   configured, free-policy-approved API routes. Kilo, Mistral, Cohere, Cloudflare,
   Z.AI, OpenRouter, Gemini and Groq succeeded. OpenCode Zen's three documented free

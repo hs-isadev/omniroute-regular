@@ -20,13 +20,18 @@ needed. No API keys, accounts, vaults or personal projects are included.
 4. One dedicated Chromium-family window opens with six tabs: Claude, Z.AI, Qwen,
    Kimi, DeepSeek, and Perplexity. Sign in manually to any service you want to use.
    The window minimizes after all six tabs are ready and starts minimized at future
-   OS logins. Then sign in to Antigravity when its official app opens. Existing
+   OS logins. Then sign in to Antigravity when its official app opens. On Windows
+   x64, the package also verifies and opens the official Devin CLI login when it
+   is available. Existing
    Codex and Claude Code installations are connected automatically; the package
    does not install or sign into those optional hosts.
 
 No editing config files, copying commands between apps, or manual MCP setup.
 Setup installs bundled Node/OpenCode/OmniRoute, obtains official Antigravity,
-connects MCP and creates launchers. OS security/admin/keyring prompts can still
+connects MCP and creates launchers. It optionally downloads the official signed
+Devin CLI updater on Windows x64, validates its exact SHA-256 and publisher before
+running it, and configures only a local OmniRoute MCP—never a Devin API key or
+model selection. OS security/admin/keyring prompts can still
 require approval. Antigravity may show its own first-run onboarding.
 
 ## After setup
@@ -43,6 +48,11 @@ require approval. Antigravity may show its own first-run onboarding.
 - **OmniRoute Usage:** shows exact provider-reported worker tokens offloaded.
   Actual host tokens saved stays unavailable because a counterfactual host-only
   run cannot be observed.
+- **OmniRoute Devin CLI:** opens the user-controlled official Devin login after
+  the package verifies its publisher. Its local `omniroute_regular` MCP has only
+  the normal free-only router context. It does not enable paid Devin Fusion,
+  import Antigravity models, or choose Astra/Sol/Terra models; those choices are
+  controlled by the Devin/host account and may be unavailable.
 
 Windows launchers appear on the Desktop; Linux launchers appear in the app menu.
 Restart a host after changing keys. Developer hosts are not registered for
