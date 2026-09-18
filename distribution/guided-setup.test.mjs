@@ -13,7 +13,7 @@ async function fixture(platform='win32', answers=['','yes']) {
   await writeFile(join(root,'active-version.txt'),'versions/0.2.1-test\n');
   const calls=[],messages=[];
   const options={root,platform,node:'fixture-node',interactive:true,
-    ask:async()=>answers.shift()??'',tell:text=>messages.push(text),
+    ask:async()=>answers.shift()??'',tell:text=>messages.push(text),browserConsumers:false,
     run:async(command,args)=>{calls.push({command,args});return 0;}};
   return {root,calls,messages,options};
 }
@@ -82,4 +82,18 @@ test('masked key entry remains an explicit alternative on both platforms',async(
     const f=await fixture(platform);f.options.keyEntry='masked';await module.runGuidedSetup(f.options);
     assert.equal(f.calls[0].command,platform==='win32'?'powershell.exe':'sh');
   }
+});
+
+test('one-click setup opens the shared browser sign-in window, then enables only after the user confirms free-tier use',async()=>{
+  const f=await fixture('win32',['yes','','yes']);
+  f.options.browserConsumers=true;
+  const result=await module.runGuidedSetup(f.options);
+  assert.equal(result.status,'launched');
+  assert.equal(f.calls.length,5);
+  const bridge=join(f.root,'versions/0.2.1-test/app/distribution/browser-consumer-setup.mjs');
+  assert.deepEqual(f.calls[1],{command:'fixture-node',args:[bridge,'launch','--root',f.root]});
+  assert.deepEqual(f.calls[2],{command:'fixture-node',args:[bridge,'enable','--root',f.root]});
+  assert.ok(f.calls[3].args.includes('--dry-run'));
+  assert.ok(f.calls[4].args.includes('--apply'));
+  assert.ok(f.messages.some(text=>text.includes('six consumer sign-in tabs')));
 });

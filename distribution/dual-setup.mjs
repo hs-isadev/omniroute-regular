@@ -84,7 +84,7 @@ export async function installSharedBrowserConsumerAutostart({platform=process.pl
   const profile=join(root,'data',SHARED_BROWSER_SESSION.profileName);
   if(platform==='linux'){
     const file=join(home,'.config/autostart/omniroute-browser-consumers.desktop'),before=await optional(file);
-    const content=`[Desktop Entry]\nType=Application\nName=OmniRoute Browser Consumers\nExec=${desktopExec(node)} ${desktopExec(entrypoint)} --profile ${desktopExec(profile)} --port ${SHARED_BROWSER_SESSION.port}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`;
+    const content=`[Desktop Entry]\nType=Application\nName=OmniRoute Browser Consumers\nExec=${desktopExec(node)} ${desktopExec(entrypoint)} --background --launch-only --profile ${desktopExec(profile)} --port ${SHARED_BROWSER_SESSION.port}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`;
     if(before!==content)await atomic(file,content,before);
     const names=['omniroute-claude-consumer.desktop','omniroute-zai-consumer.desktop',...PRIVATE_BROWSER_CONSUMERS.map(item=>`omniroute-${item.id}-consumer.desktop`)];
     const removed=[];for(const name of names){const path=join(home,'.config/autostart',name);try{await unlink(path);removed.push(path);}catch(error){if(error.code!=='ENOENT')throw error;}}
@@ -93,7 +93,7 @@ export async function installSharedBrowserConsumerAutostart({platform=process.pl
   if(platform==='win32'){
     const appData=env.APPDATA;if(!appData||!isAbsolute(appData))throw new Error('Windows APPDATA is unavailable.');
     const file=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.vbs'),before=await optional(file);
-    const command=`"${node}" "${entrypoint}" --profile "${profile}" --port ${SHARED_BROWSER_SESSION.port}`,content=`CreateObject("WScript.Shell").Run "${command.replaceAll('"','""')}", 0, False\r\n`;
+    const command=`"${node}" "${entrypoint}" --background --launch-only --profile "${profile}" --port ${SHARED_BROWSER_SESSION.port}`,content=`CreateObject("WScript.Shell").Run "${command.replaceAll('"','""')}", 0, False\r\n`;
     if(before!==content)await atomic(file,content,before);
     const names=['OmniRoute Claude Consumer.vbs','OmniRoute Z.AI Consumer.vbs',...PRIVATE_BROWSER_CONSUMERS.map(item=>`OmniRoute ${item.displayName} Consumer Private.vbs`)];
     const removed=[];for(const name of names){const path=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup',name);try{await unlink(path);removed.push(path);}catch(error){if(error.code!=='ENOENT')throw error;}}

@@ -59,6 +59,13 @@ test('shared browser launch opens all providers in one persistent loopback sessi
   assert.equal(await runtime.findConsumerBrowser(item,{platform:'linux',env:{OMNIROUTE_QWEN_BROWSER:'/opt/qwen-browser'},exists:async path=>path==='/opt/qwen-browser'}),'/opt/qwen-browser');
 });
 
+test('shared browser launch-only mode opens the visible sign-in tabs without requiring every account',async()=>{
+  const source=await readFile(new URL('../packages/browser-consumer-adapter/src/shared-session.mjs',import.meta.url),'utf8');
+  assert.match(source,/process\.argv\.includes\('--launch-only'\)/);
+  assert.match(source,/if\(launchOnly\)[\s\S]*?return;/);
+  assert.doesNotMatch(source,/launchOnly[\s\S]{0,300}Timed out waiting for sign-in/);
+});
+
 test('auth detection uses URL and visible UI only, never browser storage',()=>{
   assert.equal(runtime.isLoginUrl(runtime.getConsumerDefinition('deepseek'),'https://chat.deepseek.com/sign_in'),true);
   assert.equal(runtime.isLoginUrl(runtime.getConsumerDefinition('deepseek'),'https://chat.deepseek.com/'),false);

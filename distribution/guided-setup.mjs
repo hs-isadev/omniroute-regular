@@ -18,7 +18,7 @@ async function question(label) {
   try {return await input.question(label);} finally {input.close();}
 }
 export async function runGuidedSetup({root,platform=process.platform,node=process.execPath,
-  interactive=!!process.stdin.isTTY,ask=question,tell=console.log,run=runStep,keyEntry='editor'}={}) {
+  interactive=!!process.stdin.isTTY,ask=question,tell=console.log,run=runStep,keyEntry='editor',browserConsumers=true}={}) {
   if(!root||!isAbsolute(root)) throw new Error('Use an absolute installation root. Run the installed Connect script.');
   if(!['win32','linux'].includes(platform)) throw new Error('Windows or Linux is required.');
   if(!interactive) throw new Error('Guided setup requires an interactive terminal. Use Setup -NoWizard / --no-wizard for install only.');
@@ -31,7 +31,15 @@ export async function runGuidedSetup({root,platform=process.platform,node=proces
     ? ['powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(root,'Settings.ps1'),'-InstallRoot',root,'-RequireReady']]
     : ['sh',[join(root,'Settings.sh')]];
   if(await run(...settings)!==0) throw new Error('Key setup cancelled or failed. No workspace was connected. Run Connect to resume.');
-  tell('Step 3/4: Choose an existing project, or press Enter to create/use a starter workspace.');
+  if(browserConsumers){
+    const browserSetup=join(root,active,'app/distribution/browser-consumer-setup.mjs');
+    tell('Step 3/5: Opening one shared browser with six consumer sign-in tabs. Sign in only to accounts you choose; no passwords or cookies are read by OmniRoute.');
+    if(await run(node,[browserSetup,'launch','--root',root])!==0) throw new Error('Browser sign-in window could not start. Install a supported Chromium-family browser, then run Connect again.');
+    if((await ask('After signing in, type yes to enable only the free-tier consumer accounts you chose (Enter = leave browser consumers disabled): ')).trim().toLowerCase()==='yes') {
+      if(await run(node,[browserSetup,'enable','--root',root])!==0) throw new Error('Browser consumer setup failed. No browser credentials were stored. Run Connect to retry.');
+    } else tell('Browser consumers remain disabled. Run Connect when you are ready to enable signed-in free-tier accounts.');
+  }
+  tell(browserConsumers?'Step 4/5: Choose an existing project, or press Enter to create/use a starter workspace.':'Step 3/4: Choose an existing project, or press Enter to create/use a starter workspace.');
   const selected=(await ask('Project folder (Enter = starter workspace): ')).trim();
   let workspace;
   if(selected) {
@@ -41,7 +49,7 @@ export async function runGuidedSetup({root,platform=process.platform,node=proces
   } else {
     workspace=join(root,'workspace');await mkdir(workspace,{recursive:true,mode:0o700});
   }
-  tell('Step 4/4: Preview workspace MCP/rules. Nothing is applied until you confirm.');
+  tell(browserConsumers?'Step 5/5: Preview workspace MCP/rules. Nothing is applied until you confirm.':'Step 4/4: Preview workspace MCP/rules. Nothing is applied until you confirm.');
   if(await run(node,[launch,'--workspace',workspace,'--dry-run'])!==0) throw new Error('Workspace preview failed. Install/sign in to official Antigravity or fix the reported conflict, then run Connect again.');
   if((await ask('Connect this workspace and open Antigravity? Type yes: ')).trim().toLowerCase()!=='yes') {
     tell('Stopped after preview. Keys were retained; no workspace integration was applied.');

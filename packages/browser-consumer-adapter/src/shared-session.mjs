@@ -5,7 +5,7 @@ import {homedir} from 'node:os';
 import {isAbsolute,join} from 'node:path';
 import {buildSharedBrowserLaunch,findConsumerBrowser,getConsumerDefinition,getSharedSessionDefinition,minimizeBrowserWindow,waitForConsumerAuthentication} from './runtime.mjs';
 
-const session=getSharedSessionDefinition(),background=process.argv.includes('--background');
+const session=getSharedSessionDefinition(),background=process.argv.includes('--background'),launchOnly=process.argv.includes('--launch-only');
 const profileIndex=process.argv.indexOf('--profile'),requestedProfile=profileIndex>=0?process.argv[profileIndex+1]:undefined;
 if(profileIndex>=0&&(!requestedProfile||!isAbsolute(requestedProfile)))throw new Error('The shared browser profile path must be absolute.');
 const profile=requestedProfile||join(homedir(),'.omniroute-browser-consumers','browser-profile');
@@ -26,6 +26,11 @@ async function start(){
   await waitReady();const browser=await chromium.connectOverCDP(endpoint),context=browser.contexts()[0];if(!context)throw new Error('The shared browser has no usable profile.');
   const pages=[];
   for(const site of sites){const origin=new URL(site.url).origin;let page=context.pages().find(candidate=>candidate.url().startsWith(origin)&&!pages.includes(candidate));if(!page){page=await context.newPage();await page.goto(site.url,{waitUntil:'domcontentloaded',timeout:30000});}pages.push(page);}
+  if(launchOnly){
+    if(background)await minimizeBrowserWindow(context,pages[0]);
+    console.log(background?'Shared browser session started in the background.':'Shared browser session opened for manual provider sign-in.');
+    return;
+  }
   if(!background)console.log('Sign in to any unfinished provider tabs. The shared Opera window will stay visible for diagnostics.');
   const checks=await Promise.all(sites.map((site,index)=>waitForConsumerAuthentication(pages[index],{definition:{...site,loginPattern:site.loginPattern},timeoutMs:background?3000:600000}).then(ok=>({site,ok}))));
   const pending=checks.filter(item=>!item.ok).map(item=>item.site.displayName);if(pending.length){if(background){console.log(`Shared browser needs sign-in for: ${pending.join(', ')}.`);return;}throw new Error(`Timed out waiting for sign-in: ${pending.join(', ')}`);}
