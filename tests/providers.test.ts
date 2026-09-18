@@ -53,6 +53,17 @@ test("model registry reflects health changes and does not enable unknown discove
   assert.equal(registry.models.find((model) => model.modelId === "gpt-5.6-sol")?.health.status, "unhealthy");
 });
 
+test("registry emits route evidence and an expiry for configured entries", async () => {
+  const config = configFixture();
+  const provider = new MockProvider("openai");
+  provider.models = [{ id: "gpt-5.6-sol", name: "Sol", createdAt: null, contextWindow: null, maxOutputTokens: null, capabilities: {}, reasoningEfforts: [] }];
+  const model = (await buildRegistry(config, new Map([[provider.id, provider]]))).models.find((entry) => entry.modelId === "gpt-5.6-sol");
+  assert.equal(model?.route.transport, "openai-compatible");
+  assert.equal(model?.route.freeStatus, "not-free");
+  assert.equal(model?.route.privacy, "provider-policy");
+  assert.ok(model?.route.evidenceExpiresAt);
+});
+
 test("Anthropic adapter uses Messages API headers and normalizes usage", async () => {
   let url = "", headers: Record<string, string> = {}, body: Record<string, unknown> = {};
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -116,6 +127,14 @@ test("Groq HTTP 413 quota errors trigger model failover but ordinary oversized r
   assert.equal(limited.category, "rate_limit");
   assert.equal(limited.retryable, false);
   assert.equal(provider.classifyError(new ProviderHttpError("groq", 413, null, "Payload too large")).category, "invalid_request");
+});
+
+test("an organization-blocked model 403 is available for model failover, not retried as credentials", () => {
+  const provider = new OpenAICompatibleProvider({ id: "groq", baseUrl: "https://example.com" });
+  const error = new ProviderHttpError("groq", 403, null, JSON.stringify({ error: { code: "model_permission_blocked_org" } }));
+  const classified = provider.classifyError(error);
+  assert.equal(classified.category, "unavailable");
+  assert.equal(classified.retryable, false);
 });
 
 test("Gemini model discovery normalizes resource prefixes without rewriting other providers", async () => {

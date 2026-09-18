@@ -1,7 +1,7 @@
 import type { OmniConfig, RuntimePaths } from "@omniroute/config";
 import { ensureRuntimeDirectories, getRuntimePaths, loadConfig } from "@omniroute/config";
 import type { RegistrySnapshot } from "@omniroute/contracts";
-import { OmniRouter } from "@omniroute/core";
+import { OmniRouter, PersistentTaskStore } from "@omniroute/core";
 import { AuditStore, JsonlLogger } from "@omniroute/observability";
 import { buildRegistry, createProviders, type FetchLike, type ProviderAdapter } from "@omniroute/providers";
 import { ensureLocalDaemonToken, SecretVault, type KeyProtector } from "@omniroute/vault";
@@ -15,6 +15,7 @@ export interface DaemonRuntime {
   audit: AuditStore;
   logger: JsonlLogger;
   router: OmniRouter;
+  tasks: PersistentTaskStore;
 }
 
 export class RegistryManager {
@@ -28,7 +29,9 @@ export class RegistryManager {
 
   async current(force = false, signal?: AbortSignal): Promise<RegistrySnapshot> {
     const ttl = this.config.routing.modelHealthTtlSeconds * 1000;
-    if (!force && this.#cached && Date.now() - this.#loadedAt < ttl) return this.#cached;
+    const now = Date.now();
+    const evidenceExpired = this.#cached?.models.some((model) => model.route.evidenceExpiresAt !== null && Date.parse(model.route.evidenceExpiresAt) <= now) ?? false;
+    if (!force && this.#cached && !evidenceExpired && now - this.#loadedAt < ttl) return this.#cached;
     this.#cached = await buildRegistry(this.config, this.providers, signal);
     this.#loadedAt = Date.now();
     return this.#cached;
@@ -61,6 +64,7 @@ export async function createDaemonRuntime(options: {
   const registry = new RegistryManager(config, providers);
   const audit = new AuditStore(paths.routes);
   const logger = new JsonlLogger(paths.log);
+  const tasks = new PersistentTaskStore(paths.stateDir);
   const router = new OmniRouter({ config, providers, registry: () => registry.current(), audit, logger });
-  return { config, paths, token, providers, registry, audit, logger, router };
+  return { config, paths, token, providers, registry, audit, logger, router, tasks };
 }

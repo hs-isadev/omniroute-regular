@@ -1,4 +1,4 @@
-import { CAPABILITIES, type Capability, type RouteRequest, type RouteResult } from "@omniroute/contracts";
+import { CAPABILITIES, type Capability, type RouteRequest, type RouteResult, type TaskEnvelope, type TaskSubmission, type TaskVerification } from "@omniroute/contracts";
 import type { McpBackend } from "@omniroute/mcp-server";
 import { SafeError } from "@omniroute/observability";
 import type { DaemonClient } from "./client.js";
@@ -30,5 +30,17 @@ export function createCliMcpBackend(client: Pick<DaemonClient, "request" | "mode
     models: () => client.models(),
     recentRoutes: (limit) => client.recentRoutes(limit),
     usageSummary: () => client.usageSummary(),
+    tasks: {
+      submit: (input: TaskSubmission) => client.request<TaskEnvelope>("/v1/tasks", { method: "POST", body: JSON.stringify(input) }),
+      status: (id: string) => client.request<TaskEnvelope>(`/v1/tasks/${encodeURIComponent(id)}`),
+      inspectPlan: (id: string) => client.request<unknown>(`/v1/tasks/${encodeURIComponent(id)}/plan`),
+      approve: (id: string, approvalId: string) => client.request<TaskEnvelope>(`/v1/tasks/${encodeURIComponent(id)}/approve`, { method: "POST", body: JSON.stringify({ approvalId }) }),
+      pause: (id: string, reason?: string) => client.request<TaskEnvelope>(`/v1/tasks/${encodeURIComponent(id)}/pause`, { method: "POST", body: JSON.stringify({ ...(reason ? { reason } : {}) }) }),
+      resume: (id: string) => client.request<TaskEnvelope>(`/v1/tasks/${encodeURIComponent(id)}/resume`, { method: "POST", body: "{}" }),
+      cancel: (id: string, reason?: string) => client.request<TaskEnvelope>(`/v1/tasks/${encodeURIComponent(id)}/cancel`, { method: "POST", body: JSON.stringify({ ...(reason ? { reason } : {}) }) }),
+      inspectDiff: (id: string) => client.request<unknown>(`/v1/tasks/${encodeURIComponent(id)}/diff`),
+      verify: (id: string, verification: Omit<TaskVerification, "at"> & { at?: string }) => client.request<TaskEnvelope>(`/v1/tasks/${encodeURIComponent(id)}/verify`, { method: "POST", body: JSON.stringify(verification) }),
+      report: (id: string) => client.request<TaskEnvelope>(`/v1/tasks/${encodeURIComponent(id)}/report`),
+    },
   };
 }

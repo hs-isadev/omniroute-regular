@@ -19,6 +19,7 @@ export interface SelectionPolicy {
   minimumOutputTokens?: number;
   reserveTokens?: number;
   pin?: { providerId: string; modelId?: string };
+  privacyMode?: boolean;
 }
 
 export type ModelPreference = "quality" | "lightweight";
@@ -29,6 +30,8 @@ export class FreeModelFailover {
   private readonly modelSelections = new Map<string, number>();
   private readonly active = new Map<string, number>();
   private readonly limitedUntil = new Map<string, number>();
+  /** Avoid repeatedly dispatching a model explicitly denied by the organization. */
+  private readonly permissionBlocked = new Set<string>();
   constructor(private readonly config: OmniConfig, private readonly providers: Map<string, ProviderAdapter>, private readonly now: () => number = Date.now) {}
 
   enabled(selection: ModelSelection, snapshot: RegistrySnapshot): boolean {
@@ -38,7 +41,7 @@ export class FreeModelFailover {
 
   private free(model: ModelEntry): boolean {
     const settings = this.config.providers.find((item) => item.id === model.providerId);
-    return !!settings?.enabled && settings.freeTierOnly && model.pricing.inputPerMillionUsd === 0 && model.pricing.outputPerMillionUsd === 0;
+    return !!settings?.enabled && settings.freeTierOnly && model.route.freeStatus === "confirmed" && model.pricing.inputPerMillionUsd === 0 && model.pricing.outputPerMillionUsd === 0;
   }
 
   private key(selection: Pick<ModelSelection, "providerId" | "modelId">): string { return `${selection.providerId}\0${selection.modelId}`; }
@@ -61,11 +64,14 @@ export class FreeModelFailover {
       if (!model.allowed) reasons.push("MODEL_DENIED");
       if (model.health.status !== "healthy") reasons.push("HEALTH_" + model.health.status.toUpperCase());
       if (model.rateLimitState === "limited") reasons.push("QUOTA_LIMITED");
+      if (this.permissionBlocked.has(this.key(model))) reasons.push("MODEL_PERMISSION_BLOCKED");
       if (this.cooling(model)) reasons.push("COOLDOWN");
+      if (model.route.evidenceExpiresAt !== null && Date.parse(model.route.evidenceExpiresAt) <= this.now()) reasons.push("DISCOVERY_STALE");
+      if (policy.privacyMode && !["local", "provider-policy"].includes(model.route.privacy)) reasons.push("PRIVACY_UNVERIFIED");
       const maximum = settings?.maxTaskClass ?? (model.providerId.endsWith("-consumer") ? "small" : undefined);
       if (maximum && (!policy.taskClass || classes.indexOf(policy.taskClass) > classes.indexOf(maximum))) reasons.push("TASK_CLASS_LIMIT");
       if (policy.minimumTier && (model.intelligenceTier ?? 0) < policy.minimumTier) reasons.push("QUALITY_FLOOR");
-      const concurrentLimit = settings?.maxConcurrentRequests ?? (model.providerId.endsWith("-consumer") ? 1 : this.config.daemon.maxConcurrentRoutes);
+      const concurrentLimit = model.route.maxConcurrentRequests;
       if ((this.active.get(model.providerId) ?? 0) >= concurrentLimit) reasons.push("CONCURRENCY_LIMIT");
       for (const capability of required) if (!supports(model, capability)) reasons.push("CAPABILITY_" + capability.toUpperCase());
       if (policy.minimumOutputTokens && policy.minimumOutputTokens > Math.min(model.maxOutputTokens ?? 0, this.config.routing.maxOutputTokensPerRequest)) reasons.push("OUTPUT_LIMIT");
@@ -163,6 +169,10 @@ export class FreeModelFailover {
         if (!["rate_limit", "transient", "timeout", "unavailable"].includes(failure.category)) throw error;
         lastError = error;
         failures += 1;
+        if (failure.category === "unavailable" && failure.providerStatus === 403) {
+          this.permissionBlocked.add(this.key(selection));
+          audit.policyDecisions.push(`${label}: ${selection.providerId}/${selection.modelId} permission-blocked; quarantined until daemon restart`);
+        }
         if (["rate_limit", "transient", "timeout", "unavailable"].includes(failure.category)) {
           const delay = failure.retryAfterMs ?? this.config.routing.freeModelCooldownMs;
           this.limitedUntil.set(this.key(selection), this.now() + Math.max(1000, Math.min(86_400_000, Number.isFinite(delay) ? delay : this.config.routing.freeModelCooldownMs)));

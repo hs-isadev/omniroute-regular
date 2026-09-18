@@ -20,6 +20,7 @@ export interface RuntimePaths {
   routes: string;
   backupsDir: string;
   stateDir: string;
+  tasksDir: string;
   daemonState: string;
   integrationsDir: string;
 }
@@ -30,6 +31,9 @@ export interface ProviderSettings {
   enabled: boolean;
   freeTierOnly: boolean;
   freeTierConfirmed?: boolean;
+  transport?: "openai-compatible" | "anthropic" | "google" | "local" | "cli" | "mcp" | "acp" | "browser";
+  privacy?: "local" | "provider-policy" | "evaluation-logging-possible" | "unknown";
+  termsUrl?: string;
   freeModelOrder?: string[];
   credentialField: string | null;
   baseUrl: string;
@@ -198,18 +202,18 @@ export const DEFAULT_CONFIG: OmniConfig = {
   reliability: { retryLimit: 2, retryBaseDelayMs: 500, retryMaxDelayMs: 10_000 },
   providers: [
     ...extraProviderSettings(),
-    { id: "claude-consumer", type: "mcp-stdio", enabled: false, freeTierOnly: true, credentialField: null, baseUrl: "http://127.0.0.1:9222", apiPrefix: "", mcpCommand: "node", mcpArgs: [], maxTaskClass: "small", discoveryTtlSeconds: 60, models: [{ modelId: "claude-web-consumer", enabled: true, allowed: true, capabilities: { text: true, coding: true, structured_output: false, web: false, tool_calling: false }, contextWindow: 32_768, maxOutputTokens: 4_096, reasoningEfforts: ["none", "high"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 3 }] },
-    { id: "zai-consumer", type: "mcp-stdio", enabled: false, freeTierOnly: true, credentialField: null, baseUrl: "http://127.0.0.1:9222", apiPrefix: "", mcpCommand: "node", mcpArgs: [], maxTaskClass: "small", discoveryTtlSeconds: 60, models: [{ modelId: "glm-web-consumer", enabled: true, allowed: true, capabilities: { text: true, coding: true, structured_output: false, web: false, tool_calling: false }, contextWindow: 32_768, maxOutputTokens: 4_096, reasoningEfforts: ["none", "high"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 3 }] },
+    { id: "claude-consumer", type: "mcp-stdio", enabled: false, freeTierOnly: true, freeTierConfirmed: false, transport: "browser", privacy: "evaluation-logging-possible", credentialField: null, baseUrl: "http://127.0.0.1:9222", apiPrefix: "", mcpCommand: "node", mcpArgs: [], maxTaskClass: "small", discoveryTtlSeconds: 60, models: [{ modelId: "claude-web-consumer", enabled: true, allowed: true, capabilities: { text: true, coding: true, structured_output: false, web: false, tool_calling: false }, contextWindow: 32_768, maxOutputTokens: 4_096, reasoningEfforts: ["none", "high"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 3 }] },
+    { id: "zai-consumer", type: "mcp-stdio", enabled: false, freeTierOnly: true, freeTierConfirmed: false, transport: "browser", privacy: "evaluation-logging-possible", credentialField: null, baseUrl: "http://127.0.0.1:9222", apiPrefix: "", mcpCommand: "node", mcpArgs: [], maxTaskClass: "small", discoveryTtlSeconds: 60, models: [{ modelId: "glm-web-consumer", enabled: true, allowed: true, capabilities: { text: true, coding: true, structured_output: false, web: false, tool_calling: false }, contextWindow: 32_768, maxOutputTokens: 4_096, reasoningEfforts: ["none", "high"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 3 }] },
     ...[
       ["qwen-consumer", "qwen-web-consumer"], ["kimi-consumer", "kimi-web-consumer"], ["deepseek-consumer", "deepseek-web-consumer"], ["perplexity-consumer", "perplexity-web-consumer"],
-    ].map(([id, modelId]) => ({ id: id!, type: "mcp-stdio" as const, enabled: false, freeTierOnly: true, credentialField: null, baseUrl: "http://127.0.0.1:9222", apiPrefix: "", mcpCommand: "node", mcpArgs: [], maxTaskClass: "small" as const, discoveryTtlSeconds: 60, models: [{ modelId: modelId!, enabled: true, allowed: true, capabilities: { text: true, coding: true, structured_output: false, web: false, tool_calling: false }, contextWindow: 32_768, maxOutputTokens: 4_096, reasoningEfforts: ["none" as const, "high" as const], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 3 as const, latencyTier: 3 as const }] })),
+    ].map(([id, modelId]) => ({ id: id!, type: "mcp-stdio" as const, enabled: false, freeTierOnly: true, freeTierConfirmed: false, transport: "browser" as const, privacy: "evaluation-logging-possible" as const, credentialField: null, baseUrl: "http://127.0.0.1:9222", apiPrefix: "", mcpCommand: "node", mcpArgs: [], maxTaskClass: "small" as const, discoveryTtlSeconds: 60, models: [{ modelId: modelId!, enabled: true, allowed: true, capabilities: { text: true, coding: true, structured_output: false, web: false, tool_calling: false }, contextWindow: 32_768, maxOutputTokens: 4_096, reasoningEfforts: ["none" as const, "high" as const], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 3 as const, latencyTier: 3 as const }] })),
     { id: "openai", type: "openai", enabled: false, freeTierOnly: false, credentialField: "OPENAI_API_KEY", baseUrl: "https://api.openai.com", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: openAiModels },
     { id: "anthropic", type: "anthropic", enabled: false, freeTierOnly: false, credentialField: "ANTHROPIC_API_KEY", baseUrl: "https://api.anthropic.com", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: [] },
-    { id: "openrouter", type: "openai-compatible", enabled: true, freeTierOnly: true, credentialField: "OPENROUTER_API_KEY", baseUrl: "https://openrouter.ai/api/", apiPrefix: "v1/", discoveryTtlSeconds: 300, models: [{ modelId: "openrouter/free", enabled: true, allowed: true, capabilities: { text: true, vision: true, tool_calling: true, long_context: true, coding: true, structured_output: true }, contextWindow: 131_072, maxOutputTokens: 8_192, reasoningEfforts: ["none", "low", "medium"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 3 }] },
-    { id: "gemini", type: "openai-compatible", enabled: true, freeTierOnly: true, credentialField: "GEMINI_API_KEY", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/", apiPrefix: "", discoveryTtlSeconds: 3600, models: [{ modelId: "gemini-3.7-flash", enabled: true, allowed: true, capabilities: { text: true, vision: true, tool_calling: true, long_context: true, coding: true, structured_output: true }, contextWindow: 1_048_576, maxOutputTokens: 65_536, reasoningEfforts: ["none", "low", "medium", "high"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 2 }] },
-    { id: "groq", type: "openai-compatible", enabled: true, freeTierOnly: true, credentialField: "GROQ_API_KEY", baseUrl: "https://api.groq.com/openai/", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: [{ modelId: "groq/compound", enabled: true, allowed: true, capabilities: { text: true, tool_calling: true, long_context: true, coding: true, web: true, structured_output: false }, contextWindow: 131_072, maxOutputTokens: 8_192, reasoningEfforts: ["none", "low"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 1 }, { modelId: "openai/gpt-oss-120b", enabled: true, allowed: true, capabilities: { text: true, tool_calling: true, long_context: true, coding: true, structured_output: false }, contextWindow: 131_072, maxOutputTokens: 65_536, reasoningEfforts: ["none", "low", "medium", "high"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 1 }, { modelId: "qwen/qwen3.6-27b", enabled: true, allowed: true, capabilities: { text: true, tool_calling: true, long_context: true, coding: true, structured_output: false }, contextWindow: 131_072, maxOutputTokens: 32_768, reasoningEfforts: ["none", "low", "medium"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 3, latencyTier: 1 }] },
+    { id: "openrouter", type: "openai-compatible", enabled: true, freeTierOnly: true, freeTierConfirmed: true, privacy: "provider-policy", termsUrl: "https://openrouter.ai/terms", credentialField: "OPENROUTER_API_KEY", baseUrl: "https://openrouter.ai/api/", apiPrefix: "v1/", discoveryTtlSeconds: 300, models: [{ modelId: "openrouter/free", enabled: true, allowed: true, capabilities: { text: true, vision: true, tool_calling: true, long_context: true, coding: true, structured_output: true }, contextWindow: 131_072, maxOutputTokens: 8_192, reasoningEfforts: ["none", "low", "medium"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 3 }] },
+    { id: "gemini", type: "openai-compatible", enabled: true, freeTierOnly: true, freeTierConfirmed: true, privacy: "provider-policy", termsUrl: "https://policies.google.com/terms", credentialField: "GEMINI_API_KEY", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/", apiPrefix: "", discoveryTtlSeconds: 3600, models: [{ modelId: "gemini-3.7-flash", enabled: true, allowed: true, capabilities: { text: true, vision: true, tool_calling: true, long_context: true, coding: true, structured_output: true }, contextWindow: 1_048_576, maxOutputTokens: 65_536, reasoningEfforts: ["none", "low", "medium", "high"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 2 }] },
+    { id: "groq", type: "openai-compatible", enabled: true, freeTierOnly: true, freeTierConfirmed: true, privacy: "provider-policy", termsUrl: "https://groq.com/terms-of-use/", credentialField: "GROQ_API_KEY", baseUrl: "https://api.groq.com/openai/", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: [{ modelId: "groq/compound", enabled: true, allowed: true, capabilities: { text: true, tool_calling: true, long_context: true, coding: true, web: true, structured_output: false }, contextWindow: 131_072, maxOutputTokens: 8_192, reasoningEfforts: ["none", "low"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 1 }, { modelId: "openai/gpt-oss-120b", enabled: true, allowed: true, capabilities: { text: true, tool_calling: true, long_context: true, coding: true, structured_output: false }, contextWindow: 131_072, maxOutputTokens: 65_536, reasoningEfforts: ["none", "low", "medium", "high"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 1 }, { modelId: "qwen/qwen3.6-27b", enabled: true, allowed: true, capabilities: { text: true, tool_calling: true, long_context: true, coding: true, structured_output: false }, contextWindow: 131_072, maxOutputTokens: 32_768, reasoningEfforts: ["none", "low", "medium"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 3, latencyTier: 1 }] },
     { id: "custom-openai", type: "openai-compatible", enabled: false, freeTierOnly: false, credentialField: "CUSTOM_OPENAI_API_KEY", baseUrl: "https://example.invalid", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: [] },
-    { id: "ollama", type: "local", enabled: false, freeTierOnly: true, credentialField: null, baseUrl: "http://127.0.0.1:11434", apiPrefix: "v1/", discoveryTtlSeconds: 60, models: [] },
+    { id: "ollama", type: "local", enabled: false, freeTierOnly: true, freeTierConfirmed: true, transport: "local", privacy: "local", credentialField: null, baseUrl: "http://127.0.0.1:11434", apiPrefix: "v1/", discoveryTtlSeconds: 60, models: [] },
   ],
 };
 
@@ -231,6 +235,7 @@ export function getRuntimePaths(override?: string): RuntimePaths {
     routes: join(root, "routes", "routes.jsonl"),
     backupsDir: join(root, "backups"),
     stateDir: join(root, "state"),
+    tasksDir: join(root, "state", "tasks"),
     daemonState: join(root, "state", "daemon.json"),
     integrationsDir: join(root, "integrations"),
   };
@@ -239,7 +244,7 @@ export function getRuntimePaths(override?: string): RuntimePaths {
 export async function ensureRuntimeDirectories(paths = getRuntimePaths()): Promise<void> {
   await Promise.all([
     paths.root, paths.vaultDir, paths.importDir, paths.logsDir, paths.routesDir,
-    paths.backupsDir, paths.stateDir, paths.integrationsDir,
+    paths.backupsDir, paths.stateDir, paths.tasksDir, paths.integrationsDir,
   ].map((path) => mkdir(path, { recursive: true })));
 }
 

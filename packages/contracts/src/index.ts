@@ -52,6 +52,28 @@ export interface ModelPricing {
   updatedAt: string | null;
 }
 
+/** Evidence needed to admit a route without inferring properties from a model name. */
+export type RouteTransport = "openai-compatible" | "anthropic" | "google" | "local" | "cli" | "mcp" | "acp" | "browser";
+export type FreeStatus = "confirmed" | "user-confirmed" | "unknown" | "not-free";
+export type PrivacyClass = "local" | "provider-policy" | "evaluation-logging-possible" | "unknown";
+export interface RouteQuotaEvidence {
+  kind: "provider-reported" | "user-entered" | "unknown";
+  remaining: number | null;
+  resetAt: string | null;
+  requestsPerMinute: number | null;
+}
+export interface RouteMetadata {
+  transport: RouteTransport;
+  freeStatus: FreeStatus;
+  privacy: PrivacyClass;
+  termsUrl: string | null;
+  quota: RouteQuotaEvidence;
+  maxConcurrentRequests: number;
+  allowedTaskClasses: TaskClass[];
+  lastValidatedAt: string | null;
+  evidenceExpiresAt: string | null;
+}
+
 export interface ModelEntry {
   providerId: string;
   modelId: string;
@@ -71,6 +93,7 @@ export interface ModelEntry {
   allowed: boolean;
   discoveredAt: string;
   source: "discovered" | "documented" | "override" | "merged";
+  route: RouteMetadata;
 }
 
 export interface RegistrySnapshot {
@@ -148,6 +171,14 @@ export interface RouteRequest {
   metadata: Record<string, string>;
 }
 
+export type ContextHistoryKind = "tool" | "command" | "diff";
+export interface ContextHistoryItem {
+  kind: ContextHistoryKind;
+  name: string;
+  status: "completed" | "failed" | "cancelled" | "skipped";
+  text: string;
+}
+
 export interface WorkerTaskPacket {
   objective: string;
   excerpts: Array<{path: string; text: string}>;
@@ -159,6 +190,99 @@ export interface WorkerTaskPacket {
   responseTokens: number;
   instructionReserveTokens: number;
   synthesisReserveTokens: number;
+  /** Bounded structured evidence from prior tools; never a host transcript. */
+  contextHistory?: ContextHistoryItem[] | undefined;
+}
+
+/** Versioned, durable control-plane state. Content remains in caller-owned artifacts. */
+export const TASK_STATES = [
+  "queued", "planning", "executing", "verifying", "repair", "paused-for-approval",
+  "completed", "failed", "cancelled", "blocked",
+] as const;
+export type TaskState = (typeof TASK_STATES)[number];
+
+export const TASK_STATE_TRANSITIONS: Readonly<Record<TaskState, readonly TaskState[]>> = {
+  queued: ["planning", "paused-for-approval", "cancelled", "blocked"],
+  planning: ["executing", "paused-for-approval", "failed", "cancelled", "blocked"],
+  executing: ["verifying", "repair", "paused-for-approval", "failed", "cancelled", "blocked"],
+  verifying: ["completed", "repair", "paused-for-approval", "failed", "cancelled", "blocked"],
+  repair: ["executing", "verifying", "paused-for-approval", "failed", "cancelled", "blocked"],
+  "paused-for-approval": ["planning", "executing", "cancelled", "blocked"],
+  completed: [],
+  failed: [],
+  cancelled: [],
+  blocked: ["planning", "cancelled"],
+};
+
+export interface TaskContextReference {
+  path: string;
+  symbol?: string;
+  digest?: string;
+}
+
+export interface TaskBudget {
+  maxAttempts: number;
+  maxOutputTokens: number;
+  maxLatencyMs: number;
+  maxCostUsd: number | null;
+}
+
+export interface TaskArtifact {
+  kind: "note" | "file" | "diff" | "command-output" | "report";
+  path: string | null;
+  digest: string | null;
+  createdAt: string;
+}
+
+export interface TaskVerification {
+  check: string;
+  status: "passed" | "failed" | "skipped";
+  summary: string;
+  at: string;
+}
+
+export interface TaskEvent {
+  type: "submitted" | "state.changed";
+  at: string;
+  from: TaskState | null;
+  to: TaskState;
+  reason: string | null;
+}
+
+export interface TaskSubmission {
+  parentId?: string | null;
+  objective: string;
+  constraints: string[];
+  contextReferences: TaskContextReference[];
+  requiredCapabilities: Capability[];
+  approvedTools: string[];
+  budget: TaskBudget;
+  stopConditions: string[];
+  acceptanceCriteria: string[];
+  idempotencyKey: string | null;
+}
+
+export interface TaskEnvelope extends TaskSubmission {
+  schemaVersion: 1;
+  id: string;
+  state: TaskState;
+  attempt: number;
+  selectedRoute: ModelSelection | null;
+  events: TaskEvent[];
+  artifacts: TaskArtifact[];
+  verification: TaskVerification[];
+  redactedError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskTransitionInput {
+  at?: string;
+  reason?: string;
+  route?: ModelSelection;
+  error?: string;
+  artifacts?: TaskArtifact[];
+  verification?: TaskVerification[];
 }
 
 export interface Usage {
@@ -241,6 +365,8 @@ export type RouteEvent =
 
 export interface RouteResult {
   routeId: string;
+  /** Present when the daemon owns a durable envelope for this route. */
+  taskId?: string;
   answer: string;
   badge: string;
   attribution: AttributionRecord;

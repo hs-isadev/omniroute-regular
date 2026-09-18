@@ -62,7 +62,9 @@ async function write(response: ServerResponse, text: string, signal: AbortSignal
 }
 
 /** Session-local transport adapter. No persistence, new destination, or model selection. */
-export async function startHostModelProxy(apiKey: string, transport: typeof fetch = fetch): Promise<{ baseURL: string; token: string; close(): Promise<void> }> {
+export async function startHostModelProxy(apiKey: string, modelIdOrTransport: string | typeof fetch = "openrouter/free", maybeTransport?: typeof fetch): Promise<{ baseURL: string; token: string; close(): Promise<void> }> {
+  const modelId = typeof modelIdOrTransport === "string" ? modelIdOrTransport : "openrouter/free";
+  const transport = typeof modelIdOrTransport === "string" ? maybeTransport ?? fetch : modelIdOrTransport;
   const token = randomBytes(32).toString("hex");
   const expectedAuth = Buffer.from(`Bearer ${token}`);
   const redactor = new Redactor(); redactor.register(apiKey); redactor.register(token);
@@ -90,7 +92,7 @@ export async function startHostModelProxy(apiKey: string, transport: typeof fetc
       const raw = Buffer.concat(chunks).toString("utf8");
       let input: Json;
       try { input = JSON.parse(raw) as Json; } catch { error(400, "Invalid JSON request"); return; }
-      if (!input || typeof input !== "object" || input.model !== "openrouter/free" || input.models !== undefined) { error(400, "Only the configured free host router is allowed"); return; }
+      if (!input || typeof input !== "object" || input.model !== modelId || input.models !== undefined) { error(400, "Only the configured free host model is allowed"); return; }
       const upstream = await transport(ENDPOINT, { method: "POST", headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }, body: raw, signal: controller.signal, redirect: "error" });
       if (!upstream.ok) {
         response.writeHead(upstream.status, { "content-type": "application/json", "cache-control": "no-store", ...(upstream.headers.get("retry-after") ? { "retry-after": redactor.redactText(upstream.headers.get("retry-after")!) } : {}) });

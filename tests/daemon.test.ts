@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { getRuntimePaths } from "@omniroute/config";
-import { OmniRouter } from "@omniroute/core";
+import { OmniRouter, PersistentTaskStore } from "@omniroute/core";
 import { AuditStore, JsonlLogger, SafeError } from "@omniroute/observability";
 import { MockProvider } from "@omniroute/testing";
 import type { GenerateRequest, ProviderStreamEvent } from "@omniroute/providers";
@@ -46,7 +46,7 @@ test("daemon enforces loopback auth, Host, one-time dashboard sessions, Origin, 
   const registrySnapshot = registryFixture([modelFixture(), lunaFixture()]);
   const audit = new AuditStore(paths.routes), logger = new JsonlLogger(paths.log);
   const router = new OmniRouter({ config, providers: new Map([[provider.id, provider]]), registry: async () => registrySnapshot, audit, logger });
-  const runtime = { config, paths, token: "local-test-token", providers: new Map([[provider.id, provider]]), registry: { current: async () => registrySnapshot }, audit, logger, router } as never;
+  const runtime = { config, paths, token: "local-test-token", providers: new Map([[provider.id, provider]]), registry: { current: async () => registrySnapshot }, audit, logger, router, tasks: new PersistentTaskStore(paths.stateDir) } as never;
   const daemon = new OmniDaemonServer(runtime);
   try {
     await daemon.start();
@@ -69,10 +69,25 @@ test("daemon enforces loopback auth, Host, one-time dashboard sessions, Origin, 
 
     const route = await fetch(`${base}/v1/routes`, { method: "POST", headers: { authorization: "Bearer local-test-token", "content-type": "application/json" }, body: JSON.stringify({ prompt: "Explain it", sourceClient: "test", hostApplication: "test", hostModel: "claimed", hostModelAuthoritative: false, attachments: [], requestedCapabilities: [], maxOutputTokens: null, privacyMode: false, metadata: {} }) });
     assert.equal(route.status, 200);
-    const result = await route.json() as { answer: string; badge: string; attribution: { hostModel: string | null } };
+    const result = await route.json() as { answer: string; badge: string; attribution: { hostModel: string | null }; taskId?: string };
     assert.equal(result.answer, "daemon answer");
     assert.match(result.badge, /gpt-5\.6-sol/);
     assert.equal(result.attribution.hostModel, null);
+    assert.ok(result.taskId);
+    const automaticTask = await fetch(`${base}/v1/tasks/${result.taskId}`, { headers: { authorization: "Bearer local-test-token" } });
+    assert.equal(automaticTask.status, 200);
+    const automaticBody = await automaticTask.json() as { state: string; selectedRoute: { providerId: string; modelId: string } | null; verification: Array<{ status: string }> };
+    assert.equal(automaticBody.state, "completed");
+    assert.deepEqual(automaticBody.selectedRoute, { providerId: "openai", modelId: "gpt-5.6-luna", reasoningEffort: "low", maxOutputTokens: 1000 });
+    assert.equal(automaticBody.verification.at(-1)?.status, "passed");
+
+    const task = await fetch(`${base}/v1/tasks`, { method: "POST", headers: { authorization: "Bearer local-test-token", "content-type": "application/json" }, body: JSON.stringify({ objective: "durable daemon task", constraints: [], contextReferences: [], requiredCapabilities: ["text"], approvedTools: [], budget: { maxAttempts: 1, maxOutputTokens: 100, maxLatencyMs: 1000, maxCostUsd: 0 }, stopConditions: ["stop"], acceptanceCriteria: ["report"], idempotencyKey: "daemon-task" }) });
+    assert.equal(task.status, 201);
+    const taskBody = await task.json() as { id: string; state: string };
+    assert.equal(taskBody.state, "queued");
+    assert.equal((await fetch(`${base}/v1/tasks/${taskBody.id}/pause`, { method: "POST", headers: { authorization: "Bearer local-test-token", "content-type": "application/json" }, body: "{}" })).status, 200);
+    assert.equal((await fetch(`${base}/v1/tasks/${taskBody.id}/approve`, { method: "POST", headers: { authorization: "Bearer local-test-token", "content-type": "application/json" }, body: '{"approvalId":"explicit"}' })).status, 200);
+    assert.equal((await fetch(`${base}/v1/tasks/${taskBody.id}/plan`, { headers: { authorization: "Bearer local-test-token" } })).status, 200);
 
     provider.responses.push({ text: JSON.stringify(planFixture()) }, { text: "streamed compatibility answer" });
     const compatible = await fetch(`${base}/v1/chat/completions`, { method: "POST", headers: { authorization: "Bearer local-test-token", "content-type": "application/json" }, body: JSON.stringify({ stream: true, messages: [{ role: "user", content: "stream this" }] }) });
@@ -117,7 +132,7 @@ test("daemon enforces the configured concurrent-route limit", async () => {
   provider.responses.push({ text: JSON.stringify(planFixture()) });
   const audit = new AuditStore(paths.routes), logger = new JsonlLogger(paths.log);
   const router = new OmniRouter({ config, providers: new Map([[provider.id, provider]]), registry: async () => registryFixture([modelFixture(), lunaFixture()]), audit, logger });
-  const daemon = new OmniDaemonServer({ config, paths, token: "concurrency-token", providers: new Map([[provider.id, provider]]), registry: { current: async () => registryFixture([modelFixture(), lunaFixture()]) }, audit, logger, router } as never);
+  const daemon = new OmniDaemonServer({ config, paths, token: "concurrency-token", providers: new Map([[provider.id, provider]]), registry: { current: async () => registryFixture([modelFixture(), lunaFixture()]) }, audit, logger, router, tasks: new PersistentTaskStore(paths.stateDir) } as never);
   try {
     await daemon.start();
     const body = JSON.stringify({ prompt: "focused task", sourceClient: "test", hostApplication: "test", hostModel: null, hostModelAuthoritative: false, attachments: [], requestedCapabilities: [], maxOutputTokens: null, privacyMode: false, metadata: {} });
@@ -158,7 +173,7 @@ test("daemon aborts provider work when a client disconnects after sending the re
   const audit = new AuditStore(paths.routes), logger = new JsonlLogger(paths.log);
   const registrySnapshot = registryFixture([modelFixture(), lunaFixture()]);
   const router = new OmniRouter({ config, providers: new Map([[provider.id, provider]]), registry: async () => registrySnapshot, audit, logger });
-  const daemon = new OmniDaemonServer({ config, paths, token: "disconnect-token", providers: new Map([[provider.id, provider]]), registry: { current: async () => registrySnapshot }, audit, logger, router } as never);
+  const daemon = new OmniDaemonServer({ config, paths, token: "disconnect-token", providers: new Map([[provider.id, provider]]), registry: { current: async () => registrySnapshot }, audit, logger, router, tasks: new PersistentTaskStore(paths.stateDir) } as never);
   try {
     await daemon.start();
     const body = JSON.stringify({ prompt: "focused task", sourceClient: "test", hostApplication: "test", hostModel: null, hostModelAuthoritative: false, attachments: [], requestedCapabilities: [], maxOutputTokens: null, privacyMode: false, metadata: {} });
@@ -173,5 +188,7 @@ test("daemon aborts provider work when a client disconnects after sending the re
     ]);
     assert.equal(cancelledResponseId, "disconnected-worker");
     assert.deepEqual(provider.cancelled, ["disconnected-worker"]);
+    // The cancelled route persists its terminal evidence before the temporary runtime is removed.
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
   } finally { await daemon.stop(); await rm(root, { recursive: true, force: true }); }
 });

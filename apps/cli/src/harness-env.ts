@@ -1,4 +1,5 @@
-import type { RoutingMode } from "@omniroute/contracts";
+import type { ModelEntry, RoutingMode } from "@omniroute/contracts";
+import { SafeError } from "@omniroute/observability";
 import { access, realpath, stat } from "node:fs/promises";
 import { delimiter, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { constants } from "node:fs";
@@ -31,23 +32,51 @@ export function openCodeHarnessEnvironment(base: NodeJS.ProcessEnv, runtimeRoot:
   return output;
 }
 
-export function openCodeHarnessArguments(): string[] {
-  return ["--pure", "--model", "openrouter/openrouter/free"];
+function eligibleOpenCodeHost(model: ModelEntry, now = Date.now()): boolean {
+  return model.providerId === "openrouter"
+    && /^[A-Za-z0-9._:@/+\-]{1,200}$/.test(model.modelId)
+    && model.enabled
+    && model.allowed
+    && model.health.status === "healthy"
+    && model.rateLimitState === "ok"
+    && model.route.freeStatus === "confirmed"
+    && model.pricing.inputPerMillionUsd === 0
+    && model.pricing.outputPerMillionUsd === 0
+    && model.capabilities.text === true
+    && model.capabilities.coding === true
+    && model.contextWindow !== null
+    && model.maxOutputTokens !== null
+    && model.reasoningEfforts.length > 0
+    && (model.route.evidenceExpiresAt === null || Date.parse(model.route.evidenceExpiresAt) > now);
 }
 
-export function openCodeRegularConfig(nodePath: string, cliPath: string, runtimeRoot: string, instructionsPath: string, hostModelBaseURL?: string): string {
+/** Picks one live, confirmed free OpenRouter model. The launcher has no fallback authority. */
+export function selectOpenCodeHostModel(models: ModelEntry[], now = Date.now()): ModelEntry {
+  const candidates = models.filter((model) => eligibleOpenCodeHost(model, now));
+  if (!candidates.length) throw new SafeError("OPENCODE_HOST_MODEL_UNAVAILABLE", "No current eligible free OpenCode host model is available from the live registry", 503);
+  return candidates.sort((left, right) => (right.intelligenceTier ?? 0) - (left.intelligenceTier ?? 0)
+    || (right.contextWindow ?? 0) - (left.contextWindow ?? 0)
+    || (right.maxOutputTokens ?? 0) - (left.maxOutputTokens ?? 0)
+    || left.modelId.localeCompare(right.modelId))[0]!;
+}
+
+export function openCodeHarnessArguments(modelId = "openrouter/free"): string[] {
+  return ["--pure", "--model", `openrouter/${modelId}`];
+}
+
+export function openCodeRegularConfig(nodePath: string, cliPath: string, runtimeRoot: string, instructionsPath: string, hostModelBaseURL?: string, modelId = "openrouter/free"): string {
   return JSON.stringify({
     $schema: "https://opencode.ai/config.json",
-    model: "openrouter/openrouter/free",
-    small_model: "openrouter/openrouter/free",
+    model: `openrouter/${modelId}`,
+    small_model: `openrouter/${modelId}`,
     enabled_providers: ["openrouter"],
     provider: {
       openrouter: {
         ...(hostModelBaseURL ? { options: { baseURL: hostModelBaseURL } } : {}),
-        whitelist: ["openrouter/free"],
+        whitelist: [modelId],
         models: {
-          "openrouter/free": {
-            name: "Free Router (actual model shown in replies)",
+          [modelId]: {
+            name: "Live verified free host model (actual model shown in replies)",
             options: {
               provider: { allow_fallbacks: false },
             },

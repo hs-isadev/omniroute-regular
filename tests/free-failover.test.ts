@@ -65,6 +65,35 @@ test("429 cooldown is model-specific, persists between routes and expires using 
   assert.equal(ladder.candidates(primary, f.snapshot, ["text"], 20)[0]?.modelId, "big");
 });
 
+test("a model-specific organization 403 quarantines only that model and continues the free ladder", async () => {
+  const f = fixture(), calls: string[] = [];
+  const ladder = new FreeModelFailover(f.config, f.providers);
+  const blocked = new ProviderHttpError("groq", 403, null, JSON.stringify({ error: { code: "model_permission_blocked_org", message: "model blocked at organization level" } }));
+  const first = await ladder.run(primary, f.snapshot, ["text"], 20, AbortSignal.timeout(5000), f.audit, "worker", async (selection) => {
+    calls.push(`${selection.providerId}/${selection.modelId}`);
+    if (selection.modelId === "small") throw blocked;
+    return selection.modelId;
+  });
+  assert.equal(first.value, "big");
+  assert.deepEqual(calls, ["groq/small", "groq/big"]);
+  assert.equal(ladder.candidates(primary, f.snapshot, ["text"], 20)[0]?.modelId, "big");
+  assert.match(f.audit.policyDecisions.join(" "), /permission-blocked/);
+});
+
+test("privacy mode excludes routes without a usable privacy classification", () => {
+  const f = fixture();
+  f.models[0]!.route.privacy = "unknown";
+  const diagnostic = new FreeModelFailover(f.config, f.providers).diagnostics(primary, f.snapshot, ["text"], 20, { privacyMode: true });
+  assert.ok(diagnostic.candidates.find((candidate) => candidate.providerId === "groq" && candidate.modelId === "big")?.reasons.includes("PRIVACY_UNVERIFIED"));
+});
+
+test("expired discovery evidence is excluded before a stale model can be dispatched", () => {
+  const f = fixture();
+  f.models[0]!.route.evidenceExpiresAt = new Date(0).toISOString();
+  const diagnostic = new FreeModelFailover(f.config, f.providers).diagnostics(primary, f.snapshot, ["text"], 20);
+  assert.ok(diagnostic.candidates.find((candidate) => candidate.providerId === "groq" && candidate.modelId === "big")?.reasons.includes("DISCOVERY_STALE"));
+});
+
 test("HTTP 413 token quota tries the smaller same-provider model next", async () => {
   const f = fixture(), calls: string[] = [];
   const result = await new FreeModelFailover(f.config, f.providers).run({...primary, modelId: "big"}, f.snapshot, ["text"], 20, AbortSignal.timeout(5000), f.audit, "worker", async (selection) => {

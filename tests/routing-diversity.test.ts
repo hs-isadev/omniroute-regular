@@ -16,7 +16,13 @@ function fixture() {
   config.routing.defaultMode = "regular";
   config.routing.directProviderOrder = ["groq", "qwen-consumer", "kimi-consumer"];
   config.routing.maxParallelWorkers = 1;
-  for (const p of config.providers) { p.enabled = config.routing.directProviderOrder.includes(p.id); p.freeModelOrder = []; }
+  for (const p of config.providers) {
+    p.enabled = config.routing.directProviderOrder.includes(p.id);
+    p.freeModelOrder = [];
+    // Browser routes are deliberately unknown in production until the user confirms them.
+    // This fixture models an explicitly confirmed local browser test adapter.
+    if (p.id.endsWith("-consumer")) p.freeTierConfirmed = true;
+  }
   const providers = new Map(config.routing.directProviderOrder.map(id => [id, new MockProvider(id)]));
   const snapshot = registryFixture(config.routing.directProviderOrder.flatMap(providerId => ["a", "b"].map(modelId => modelFixture({providerId, modelId, contextWindow: 32768, maxOutputTokens: 4096, pricing: {inputPerMillionUsd: 0, outputPerMillionUsd: 0, cachedInputPerMillionUsd: 0, updatedAt: null}, capabilities: {text: true, coding: true, toolCalling: false, structuredOutput: false, web: false, imageInput: false, imageOutput: false, audioInput: false, audioOutput: false}}))));
   let now = 1000;
@@ -81,12 +87,15 @@ test("selected model succeeds without artificial fallback; failed pinned model n
 
 test("in-flight browser concurrency excludes that provider and releases capacity", async () => {
   const f = fixture(), audit = {fallbackAttempts: [], policyDecisions: []};
+  for (const model of f.snapshot.models) if (model.providerId === "qwen-consumer") model.route.maxConcurrentRequests = 1;
   let release!: () => void;
   const pending = f.ladder.run({...seed, providerId: "qwen-consumer"}, f.snapshot, ["text"], 20, AbortSignal.timeout(5000), audit, "worker", () => new Promise<void>(resolve => {release = resolve;}), "quality", {taskClass: "small"});
   const during = f.ladder.diagnostics(seed, f.snapshot, ["text"], 20, {taskClass: "small"});
   assert.ok(during.candidates.filter(c => c.providerId === "qwen-consumer").every(c => c.reasons.includes("CONCURRENCY_LIMIT")));
   release(); await pending;
-  assert.ok(f.ladder.diagnostics(seed, f.snapshot, ["text"], 20, {taskClass: "small"}).candidates.find(c => c.providerId === "qwen-consumer")?.eligible);
+  // Releasing the call must clear capacity even if another independent
+  // fail-closed gate (for example fresh provider confirmation) still applies.
+  assert.ok(f.ladder.diagnostics(seed, f.snapshot, ["text"], 20, {taskClass: "small"}).candidates.filter(c => c.providerId === "qwen-consumer").every(c => !c.reasons.includes("CONCURRENCY_LIMIT")));
 });
 
 test("rate-limited candidates fall back with reason codes, cool down, then recover", async () => {

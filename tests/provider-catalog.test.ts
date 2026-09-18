@@ -15,6 +15,8 @@ test("Claude consumer is a credential-free, small-task-only provider profile", (
   assert.equal(settings.type, "mcp-stdio");
   assert.equal(settings.credentialField, null);
   assert.equal(settings.freeTierOnly, true);
+  assert.equal(settings.transport, "browser");
+  assert.equal(settings.freeTierConfirmed, false);
   assert.equal(settings.maxTaskClass, "small");
   assert.deepEqual(settings.models.map((model) => model.modelId), ["claude-web-consumer"]);
 

@@ -6,6 +6,7 @@ import { Agent } from "undici";
 import type {
   ModelCapabilities,
   ModelEntry,
+  RouteMetadata,
   ProviderErrorShape,
   ReasoningEffort,
   RegistrySnapshot,
@@ -102,6 +103,9 @@ function classifyProviderError(providerId: string, error: unknown): ProviderErro
   if (error instanceof SafeError && error.code === "PROVIDER_STREAM_TRUNCATED") return { category: "transient", message: error.message, retryable: true, retryAfterMs: null, providerStatus: null };
   if (error instanceof ProviderHttpError) {
     const status = error.providerStatus;
+    // A gateway can deny one model at organization level while the account and
+    // other configured models remain usable. This is not a credential retry.
+    if (status === 403 && /model_permission_blocked_org|model[^\n]{0,80}blocked[^\n]{0,80}(organization|org)/i.test(error.message)) return { category: "unavailable", message: error.message, retryable: false, retryAfterMs: null, providerStatus: status };
     if (status === 401 || status === 403) return { category: "authentication", message: error.message, retryable: false, retryAfterMs: null, providerStatus: status };
     if (status === 429 || status === 402 || (status === 413 && error.rateLimitCode)) return { category: "rate_limit", message: error.message, retryable: status === 429, retryAfterMs: error.retryAfterMs, providerStatus: status };
     if (status === 404) return { category: "unavailable", message: error.message, retryable: false, retryAfterMs: null, providerStatus: status };
@@ -983,6 +987,24 @@ function applyConfiguredCapabilities(base: ModelCapabilities, settings: Provider
   return result;
 }
 
+function routeMetadata(settings: ProviderSettings, now: string): RouteMetadata {
+  const ttlMs = Math.max(1, settings.discoveryTtlSeconds) * 1_000;
+  const transport = settings.transport ?? (settings.type === "local" ? "local" : settings.type === "mcp-stdio" ? "mcp" : settings.type === "anthropic" ? "anthropic" : "openai-compatible");
+  const maximum = settings.maxTaskClass ?? (settings.id.endsWith("-consumer") ? "small" : "critical");
+  const classes = ["micro", "small", "medium", "large", "critical"] as const;
+  return {
+    transport,
+    freeStatus: settings.freeTierOnly ? (settings.freeTierConfirmed === true ? "confirmed" : "unknown") : "not-free",
+    privacy: settings.privacy ?? (transport === "local" ? "local" : settings.id.endsWith("-consumer") ? "unknown" : "provider-policy"),
+    termsUrl: settings.termsUrl ?? EXTRA_FREE_PROVIDERS.find((profile) => profile.id === settings.id)?.signup ?? null,
+    quota: { kind: "unknown", remaining: null, resetAt: null, requestsPerMinute: null },
+    maxConcurrentRequests: settings.maxConcurrentRequests ?? (settings.id.endsWith("-consumer") ? 1 : 4),
+    allowedTaskClasses: [...classes.slice(0, classes.indexOf(maximum) + 1)],
+    lastValidatedAt: now,
+    evidenceExpiresAt: new Date(Date.parse(now) + ttlMs).toISOString(),
+  };
+}
+
 export async function buildRegistry(config: OmniConfig, providers: Map<string, ProviderAdapter>, signal?: AbortSignal): Promise<RegistrySnapshot> {
   const models: ModelEntry[] = [];
   const now = new Date().toISOString();
@@ -990,6 +1012,7 @@ export async function buildRegistry(config: OmniConfig, providers: Map<string, P
     const provider = providers.get(settings.id);
     if (!provider) continue;
     const health = await provider.healthCheck(signal);
+    const route = routeMetadata(settings, now);
     let discovered: ProviderModel[] = [];
     try { discovered = health.status === "healthy" ? await provider.listModels(signal) : []; } catch { /* health already records failure */ }
     const discoveredById = new Map(discovered.map((model) => [model.id, model]));
@@ -1018,6 +1041,7 @@ export async function buildRegistry(config: OmniConfig, providers: Map<string, P
         rateLimitState: "unknown",
         discoveredAt: now,
         source: item ? "merged" : "override",
+        route,
       });
     }
     const configuredIds = new Set(settings.models.map((model) => model.modelId));
@@ -1041,6 +1065,7 @@ export async function buildRegistry(config: OmniConfig, providers: Map<string, P
         rateLimitState: "unknown",
         discoveredAt: now,
         source: "discovered",
+        route,
       });
     }
   }

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, cp, readdir, readFile, writeFile, access, chmod } from 'node:fs/promises';
+import { mkdir, mkdtemp, cp, readdir, readFile, writeFile, access, chmod, open, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import { resolve, join, relative } from 'node:path';
@@ -13,6 +13,11 @@ const root=resolve(import.meta.dirname,'..');
 const version=JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
 const cache=join(root,'.cache'); await mkdir(cache,{recursive:true});
 await mkdir(join(root,'.build'),{recursive:true});
+const lockPath=join(root,'.build',`package-regular-${target}.lock`);
+let lockHandle;
+try { lockHandle=await open(lockPath,'wx',0o600); await lockHandle.writeFile(`${process.pid}\n`); }
+catch(error) { if(error?.code==='EEXIST') throw new Error(`PACKAGE_BUILD_LOCKED: another ${target} package build is active. Wait for it to finish before retrying.`); throw error; }
+try {
 const work=await mkdtemp(join(root,'.build','regular-'));
 const release=join(root,'release',`OmniRoute-Regular-${version}-${platform}`);
 try {await access(release); throw new Error('Release folder already exists. Preserve or move it before rebuilding.');} catch(e) {if(e.code!=='ENOENT') throw e;}
@@ -103,3 +108,7 @@ await run(tar,[...(linux?['-czf']:['-a','-cf']),release+extension,'-C',join(root
 const digest=createHash('sha256').update(await readFile(release+extension)).digest('hex');
 await writeFile(release+extension+'.sha256',`${digest}  ${relative(join(root,'release'),release)}${extension}\n`);
 console.log(`Built ${release}${extension} (${files.length} checked files)`);
+} finally {
+  await lockHandle?.close().catch(()=>undefined);
+  await rm(lockPath,{force:true});
+}

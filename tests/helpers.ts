@@ -47,6 +47,19 @@ export function modelFixture(overrides: Partial<ModelEntry> = {}): ModelEntry {
     allowed: true,
     discoveredAt: new Date(0).toISOString(),
     source: "documented",
+    route: {
+      transport: "openai-compatible",
+      // Price still controls admission for paid fixtures; free tests override
+      // price while reusing this evidence-bearing route shape.
+      freeStatus: "confirmed",
+      privacy: "provider-policy",
+      termsUrl: null,
+      quota: { kind: "unknown", remaining: null, resetAt: null, requestsPerMinute: null },
+      maxConcurrentRequests: 4,
+      allowedTaskClasses: ["micro", "small", "medium", "large", "critical"],
+      lastValidatedAt: new Date(0).toISOString(),
+      evidenceExpiresAt: null,
+    },
   };
   return { ...base, ...overrides, health: { ...base.health, ...(overrides.health ?? {}) }, capabilities: { ...base.capabilities, ...(overrides.capabilities ?? {}) }, pricing: { ...base.pricing, ...(overrides.pricing ?? {}) } };
 }

@@ -4,7 +4,8 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveHarnessLauncher } from "../apps/cli/src/harness-env.js";
-import { claudeHarnessEnvironment, openCodeHarnessArguments, openCodeHarnessEnvironment, openCodeRegularConfig, selectClaudeLauncher, selectHarnessLauncher } from "../apps/cli/src/harness-env.js";
+import { claudeHarnessEnvironment, openCodeHarnessArguments, openCodeHarnessEnvironment, openCodeRegularConfig, selectClaudeLauncher, selectHarnessLauncher, selectOpenCodeHostModel } from "../apps/cli/src/harness-env.js";
+import { modelFixture } from "./helpers.js";
 
 for (const mode of ["regular", "orchestrator"] as const) {
   test(`Claude ${mode} harness inherits no unrelated credentials`, () => {
@@ -74,6 +75,18 @@ test("generic harness launcher selection rejects workspace shims", () => {
 
 test("OpenCode wrapper disables external plugins and pins the free model", () => {
   assert.deepEqual(openCodeHarnessArguments(), ["--pure", "--model", "openrouter/openrouter/free"]);
+});
+
+test("OpenCode selects an eligible current free registry model and makes its exact ID the only host route", () => {
+  const unavailable = modelFixture({ providerId: "openrouter", modelId: "expired-free", intelligenceTier: 5, route: { ...modelFixture().route, evidenceExpiresAt: new Date(0).toISOString() } });
+  const selected = modelFixture({ providerId: "openrouter", modelId: "current-free", intelligenceTier: 4, pricing: { inputPerMillionUsd: 0, outputPerMillionUsd: 0, cachedInputPerMillionUsd: 0, updatedAt: null } });
+  const paid = modelFixture({ providerId: "openrouter", modelId: "paid", intelligenceTier: 5, pricing: { inputPerMillionUsd: 1, outputPerMillionUsd: 1, cachedInputPerMillionUsd: 0, updatedAt: null } });
+  const chosen = selectOpenCodeHostModel([unavailable, paid, selected]);
+  assert.equal(chosen.modelId, "current-free");
+  const config = JSON.parse(openCodeRegularConfig("node", "cli", "runtime", "instructions", undefined, chosen.modelId));
+  assert.equal(config.model, "openrouter/current-free");
+  assert.deepEqual(config.provider.openrouter.whitelist, ["current-free"]);
+  assert.deepEqual(openCodeHarnessArguments(chosen.modelId), ["--pure", "--model", "openrouter/current-free"]);
 });
 
 test("model-label adapter changes only the host transport and display name", () => {

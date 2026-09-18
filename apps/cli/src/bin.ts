@@ -9,7 +9,7 @@ import { classifyTask } from "@omniroute/core";
 import { ROUTING_MODES, type RouteRequest, type RouteResult, type RoutingMode } from "@omniroute/contracts";
 import { CODEX_OMNIROUTE_FIRST_POLICY, IntegrationManager, type IntegrationTarget } from "@omniroute/integrations";
 import { serveOmniMcp } from "@omniroute/mcp-server";
-import { claudeHarnessEnvironment, harnessLaunchCommand, openCodeHarnessArguments, openCodeHarnessEnvironment, openCodeRegularConfig, resolveHarnessLauncher } from "./harness-env.js";
+import { claudeHarnessEnvironment, harnessLaunchCommand, openCodeHarnessArguments, openCodeHarnessEnvironment, openCodeRegularConfig, resolveHarnessLauncher, selectOpenCodeHostModel } from "./harness-env.js";
 import { globalRedactor, safeError, SafeError } from "@omniroute/observability";
 import { AnthropicProvider, createConfiguredProvider, HttpTransport, OpenAICompatibleProvider, OpenAIProvider } from "@omniroute/providers";
 import { configureProvider } from "./provider-management.js";
@@ -359,6 +359,7 @@ async function harness(): Promise<void> {
     if (mode !== "regular") throw new SafeError("HARNESS_MODE_INVALID", "OpenCode is restricted to regular mode", 400);
     if (subscription) throw new SafeError("HARNESS_SUBSCRIPTION_INVALID", "OpenCode regular mode does not accept --subscription", 400);
     const launcher = await resolveHarnessLauncher("opencode", process.env, process.cwd());
+    const hostModel = selectOpenCodeHostModel(await client.models());
     const vault = await SecretVault.load(paths.vault);
     let openRouterApiKey: string;
     try {
@@ -367,12 +368,12 @@ async function harness(): Promise<void> {
       openRouterApiKey = openrouter.OPENROUTER_API_KEY;
     } finally { vault.dispose(); }
     const instructionsPath = fileURLToPath(new URL("../../../docs/integrations/opencode-regular-instructions.md", import.meta.url));
-    const hostLabels = await startHostModelProxy(openRouterApiKey);
+    const hostLabels = await startHostModelProxy(openRouterApiKey, hostModel.modelId);
     try {
-      const inlineConfig = openCodeRegularConfig(process.execPath, cliEntry(), paths.root, instructionsPath, hostLabels.baseURL);
+      const inlineConfig = openCodeRegularConfig(process.execPath, cliEntry(), paths.root, instructionsPath, hostLabels.baseURL, hostModel.modelId);
       const childEnvironment = openCodeHarnessEnvironment(process.env, paths.root, hostLabels.token, inlineConfig);
       const launch = harnessLaunchCommand(launcher, process.env);
-      const child = spawn(launch.command, [...launch.prefix, ...openCodeHarnessArguments()], { cwd: process.cwd(), env: childEnvironment, stdio: "inherit", windowsHide: false, shell: false });
+      const child = spawn(launch.command, [...launch.prefix, ...openCodeHarnessArguments(hostModel.modelId)], { cwd: process.cwd(), env: childEnvironment, stdio: "inherit", windowsHide: false, shell: false });
       const exitCode = await new Promise<number>((resolvePromise, reject) => { child.once("error", reject); child.once("close", (code) => resolvePromise(code ?? 1)); });
       if (exitCode !== 0) throw new SafeError("HARNESS_EXITED", `OpenCode exited with status ${exitCode}`);
     } finally { await hostLabels.close(); }
@@ -412,7 +413,7 @@ async function dashboard(): Promise<void> {
 
 function help(): void {
   output.write("Provider setup: omni providers list | enable <id> --confirm-free-tier | disable <id>\nLocal setup: omni providers enable <id> --model <id> --context-tokens <N> [--coding]\n\n");
-  output.write(`OmniRoute 0.1.0\n\nCommands:\n  omni setup\n  omni ask <prompt> [--mode regular|orchestrator]\n  omni chat [--mode regular|orchestrator]\n  omni run <task-file> [--mode regular|orchestrator]\n  omni harness opencode --mode regular\n  omni harness claude --mode regular|orchestrator [--subscription]\n  omni routes [--limit N]\n  omni models [--refresh]\n  omni budget show|set\n  omni secrets template|import|list|test|remove|rotate\n  omni integrate status|doctor|<target>|remove|restore\n  omni service install|start|stop|status|uninstall\n  omni dashboard\n  omni doctor\n\nOpenCode is the regular-mode harness and is pinned to openrouter/free. Claude subscription mode remains available only for future host orchestration.\n`);
+  output.write(`OmniRoute 0.1.0\n\nCommands:\n  omni setup\n  omni ask <prompt> [--mode regular|orchestrator]\n  omni chat [--mode regular|orchestrator]\n  omni run <task-file> [--mode regular|orchestrator]\n  omni harness opencode --mode regular\n  omni harness claude --mode regular|orchestrator [--subscription]\n  omni routes [--limit N]\n  omni models [--refresh]\n  omni budget show|set\n  omni secrets template|import|list|test|remove|rotate\n  omni integrate status|doctor|<target>|remove|restore\n  omni service install|start|stop|status|uninstall\n  omni dashboard\n  omni doctor\n\nOpenCode is the regular-mode harness and selects one current eligible free OpenRouter model from the live registry. Claude subscription mode remains available only for future host orchestration.\n`);
 }
 
 async function main(): Promise<void> {

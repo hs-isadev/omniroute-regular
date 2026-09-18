@@ -37,3 +37,13 @@ test("regular-locked MCP rejects orchestrator requests and forces regular when o
   await backend.route(base);
   assert.equal(JSON.parse(bodies[0]!).routingMode, "regular");
 });
+
+test("MCP task lifecycle calls map to the local daemon task endpoints", async () => {
+  const calls: Array<{ path: string; init: RequestInit }> = [];
+  const client = { request: async <T>(path: string, init: RequestInit = {}) => { calls.push({ path, init }); return {} as T; }, models: async () => [], recentRoutes: async () => [], usageSummary: async () => ({}) };
+  const backend = createCliMcpBackend(client);
+  await backend.tasks!.submit({ objective: "task", constraints: [], contextReferences: [], requiredCapabilities: ["text"], approvedTools: [], budget: { maxAttempts: 1, maxOutputTokens: 1, maxLatencyMs: 1, maxCostUsd: 0 }, stopConditions: [], acceptanceCriteria: [], idempotencyKey: "key" });
+  await backend.tasks!.verify("task-abc", { check: "test", status: "passed", summary: "ok" });
+  assert.equal(calls[0]?.path, "/v1/tasks");
+  assert.equal(calls[1]?.path, "/v1/tasks/task-abc/verify");
+});

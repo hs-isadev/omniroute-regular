@@ -1,4 +1,14 @@
 export {prepareWorkerTask, renderWorkerTask} from "./delegation.js";
+export { compactWorkerPacket, selectMinimalContext } from "./context-planner.js";
+export { ControlledExecutor, type CommandRunner, type ExecutorDeclaration, type ExecutorRequest, type ExecutorResult } from "./executor.js";
+export { TaskLifecycle } from "./task-lifecycle.js";
+export {
+  PersistentTaskStore,
+  createTaskEnvelope,
+  isTerminalTaskState,
+  transitionTaskEnvelope,
+} from "./task-state.js";
+export type { TaskEnvelope, TaskState, TaskSubmission, TaskTransitionInput } from "@omniroute/contracts";
 import {prepareWorkerTask, renderWorkerTask} from "./delegation.js";
 import { createHash } from "node:crypto";
 import type { OmniConfig } from "@omniroute/config";
@@ -187,14 +197,15 @@ export class OmniRouter {
     // A conservative configured tier floor, not a claim of benchmark superiority.
     // Filter the immutable route snapshot so EVERY retry observes the same floor.
     const snapshot = demandingWorker ? {...taskScoped,models:taskScoped.models.filter(model=>(model.intelligenceTier??0)>=4)} : taskScoped;
-    const freePlanner = mode === "orchestrator" && this.#config.routing.freeOnly && this.#config.routing.freeModelFailoverEnabled ? this.#freeFailover.candidates({ providerId: this.#config.routing.orchestratorProviderId, modelId: this.#config.routing.orchestratorModelId, reasoningEffort: modelPreference === "lightweight" ? "none" : this.orchestratorEffort(signals), maxOutputTokens: 4000 }, snapshot, ["text", "structured_output"], 0, modelPreference, {taskClass: signals.suggestedClass})[0] : undefined;
+    const privacyMode = request.privacyMode ?? this.#config.privacy.privacyMode;
+    const freePlanner = mode === "orchestrator" && this.#config.routing.freeOnly && this.#config.routing.freeModelFailoverEnabled ? this.#freeFailover.candidates({ providerId: this.#config.routing.orchestratorProviderId, modelId: this.#config.routing.orchestratorModelId, reasoningEffort: modelPreference === "lightweight" ? "none" : this.orchestratorEffort(signals), maxOutputTokens: 4000 }, snapshot, ["text", "structured_output"], 0, modelPreference, {taskClass: signals.suggestedClass, privacyMode})[0] : undefined;
     const orchestratorModel = mode === "orchestrator" ? snapshot.models.find((model) => model.providerId === (freePlanner?.providerId ?? this.#config.routing.orchestratorProviderId) && model.modelId === (freePlanner?.modelId ?? this.#config.routing.orchestratorModelId) && model.enabled && model.allowed && model.health.status === "healthy" && model.capabilities.structuredOutput === true) ?? null : null;
     if (mode === "orchestrator" && !orchestratorModel) throw new SafeError("ORCHESTRATION_UNAVAILABLE", `Configured orchestrator ${this.#config.routing.orchestratorProviderId}/${this.#config.routing.orchestratorModelId} is not enabled, healthy, allowed, free-policy compliant, and structured-output capable`, 503);
     const orchestrator = orchestratorModel ? this.#providers.get(orchestratorModel.providerId) ?? null : null;
     if (mode === "orchestrator" && !orchestrator) throw new SafeError("ORCHESTRATION_UNAVAILABLE", "The configured orchestrator provider is unavailable", 503);
     const orchestratorEffort = mode === "orchestrator" && modelPreference !== "lightweight" ? this.orchestratorEffort(signals) : "none";
     const routingDiagnostics: RoutingDiagnostic[] = [];
-    const selectionPolicy: SelectionPolicy = { taskClass: signals.suggestedClass, ...(request.taskPacket ? {minimumOutputTokens: request.taskPacket.responseTokens, reserveTokens: request.taskPacket.instructionReserveTokens + request.taskPacket.synthesisReserveTokens} : {}), ...(demandingWorker ? {minimumTier: 4} : {}), ...(request.selectionPin ? {pin: request.selectionPin} : {}) };
+    const selectionPolicy: SelectionPolicy = { taskClass: signals.suggestedClass, privacyMode, ...(request.taskPacket ? {minimumOutputTokens: request.taskPacket.responseTokens, reserveTokens: request.taskPacket.instructionReserveTokens + request.taskPacket.synthesisReserveTokens} : {}), ...(demandingWorker ? {minimumTier: 4} : {}), ...(request.selectionPin ? {pin: request.selectionPin} : {}) };
     const initialWorker = mode === "regular" ? this.selectDirectWorker(registered, signals, request, modelPreference, selectionPolicy, routingDiagnostics) : { providerId: orchestratorModel!.providerId, modelId: orchestratorModel!.modelId, reasoningEffort: orchestratorEffort, maxOutputTokens: 1 };
     const state: ExecutionState = { routingDiagnostics, selectionPolicy, modelPreference, orchestrator: mode === "regular" ? { providerId: "omniroute", modelId: "deterministic-direct", reasoningEffort: "none" } : { providerId: orchestratorModel!.providerId, modelId: orchestratorModel!.modelId, reasoningEffort: orchestratorEffort }, usage: { ...emptyUsage(), estimatedCostUsd: 0 }, worker: initialWorker, parallelWorkers: [], reviewers: [], fallbackAttempts: [], reservedBudgetUsd: 0, policyDecisions: [
       `deterministic signals suggested ${signals.suggestedClass}`,

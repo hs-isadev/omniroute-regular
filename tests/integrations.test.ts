@@ -32,7 +32,7 @@ test("Codex integration preserves unrelated config, is idempotent, removable, an
     assert.equal(installed.mcp_servers.omniroute.default_tools_approval_mode, "prompt");
     assert.equal(installed.mcp_servers.omniroute.env.OMNIROUTE_HOME, runtime.root);
     assert.equal(installed.mcp_servers.omniroute.env.OMNIROUTE_ROUTING_MODE, "regular");
-    assert.deepEqual(Object.keys(installed.mcp_servers.omniroute.tools).sort(), ["omni_models", "omni_route", "omni_routes", "omni_usage"]);
+    assert.deepEqual(Object.keys(installed.mcp_servers.omniroute.tools).sort(), ["omni_models", "omni_route", "omni_routes", "omni_task_approve", "omni_task_cancel", "omni_task_diff", "omni_task_inspect_plan", "omni_task_pause", "omni_task_report", "omni_task_resume", "omni_task_status", "omni_task_submit", "omni_task_verify", "omni_usage"]);
     assert.equal(installed.mcp_servers.omniroute.tools.omni_route.approval_mode, "approve");
     const repeatPlan = await manager.plan("codex", "install");
     assert.equal(repeatPlan.changed, false, JSON.stringify(repeatPlan.changes.map((change) => ({ path: change.path, diff: change.redactedDiff }))));

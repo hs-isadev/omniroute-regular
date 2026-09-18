@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
-import { CAPABILITIES, type WorkerTaskPacket, type ModelEntry, type RouteResult, type TokenSavingsSummary } from "@omniroute/contracts";
+import { CAPABILITIES, type WorkerTaskPacket, type ModelEntry, type RouteResult, type TaskEnvelope, type TaskSubmission, type TaskVerification, type TokenSavingsSummary } from "@omniroute/contracts";
 
 export const MCP_INSTRUCTIONS = `OmniRoute enforces a free-only model policy and returns explicit worker attribution. routingMode=regular deterministically selects a healthy free worker without an LLM planner. routingMode=orchestrator uses the configured free planner. When Claude Code is launched in host-orchestrator mode, Claude should decompose work itself and call omni_route with routingMode=regular for bounded delegations. Preserve attribution verbatim. Never send credentials to any tool.`;
 
@@ -20,7 +20,38 @@ export interface McpBackend {
   models(): Promise<ModelEntry[]>;
   recentRoutes(limit: number): Promise<unknown[]>;
   usageSummary?(): Promise<TokenSavingsSummary>;
+  tasks?: TaskLifecycleBackend;
 }
+
+export interface TaskLifecycleBackend {
+  submit(input: TaskSubmission): Promise<TaskEnvelope>;
+  status(id: string): Promise<TaskEnvelope>;
+  inspectPlan(id: string): Promise<unknown>;
+  approve(id: string, approvalId: string): Promise<TaskEnvelope>;
+  pause(id: string, reason?: string): Promise<TaskEnvelope>;
+  resume(id: string): Promise<TaskEnvelope>;
+  cancel(id: string, reason?: string): Promise<TaskEnvelope>;
+  inspectDiff(id: string): Promise<unknown>;
+  verify(id: string, verification: Omit<TaskVerification, "at"> & { at?: string }): Promise<TaskEnvelope>;
+  report(id: string): Promise<TaskEnvelope>;
+}
+
+const taskIdSchema = z.object({ taskId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{2,127}$/) });
+const taskSubmissionSchema = z.object({
+  parentId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{2,127}$/).nullable().optional(),
+  objective: z.string().min(1).max(20_000),
+  constraints: z.array(z.string().min(1).max(10_000)).max(64),
+  contextReferences: z.array(z.object({ path: z.string().min(1).max(1_000), symbol: z.string().max(500).optional(), digest: z.string().max(200).optional() })).max(64),
+  requiredCapabilities: z.array(z.enum(CAPABILITIES)).max(7),
+  approvedTools: z.array(z.string().min(1).max(200)).max(64),
+  budget: z.object({ maxAttempts: z.number().int().min(1).max(8), maxOutputTokens: z.number().int().positive(), maxLatencyMs: z.number().int().positive(), maxCostUsd: z.number().nonnegative().nullable() }),
+  stopConditions: z.array(z.string().min(1).max(10_000)).max(64),
+  acceptanceCriteria: z.array(z.string().min(1).max(10_000)).max(64),
+  idempotencyKey: z.string().min(1).max(256).nullable(),
+});
+
+function unavailableTasks(): never { throw new Error("TASK_LIFECYCLE_UNAVAILABLE"); }
+function taskReply(value: unknown) { return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }], structuredContent: value as Record<string, unknown> }; }
 
 export function createOmniMcpServer(backend: McpBackend, options: { regularOnly?: boolean } = {}): McpServer {
   const server = new McpServer(
@@ -36,7 +67,7 @@ export function createOmniMcpServer(backend: McpBackend, options: { regularOnly?
       inputSchema: z.object({
         prompt: z.string().min(1).max(1_000_000).describe("The user's task. Never include credentials."),
         ...(options.regularOnly ? {parentTask: z.string().max(100_000).optional().describe("Bounded parent requirements for continue/teruskan. Ignored for a new task.")} : {}),
-        taskPacket: z.object({objective: z.string().min(1).max(20000), excerpts: z.array(z.object({path: z.string().max(1000), text: z.string().max(100000)})).max(32), constraints: z.array(z.string().max(10000)).max(32), acceptanceCriteria: z.array(z.string().max(10000)).max(32), requestedOutput: z.string().max(10000), independent: z.boolean(), worthwhile: z.boolean(), responseTokens: z.number().int().positive(), instructionReserveTokens: z.number().int().min(256), synthesisReserveTokens: z.number().int().min(256)}).optional().describe("Optional minimized host task packet. Unknown or insufficient validated worker limits suppress delegation; the host owns final synthesis."),
+        taskPacket: z.object({objective: z.string().min(1).max(20000), excerpts: z.array(z.object({path: z.string().max(1000), text: z.string().max(100000)})).max(32), constraints: z.array(z.string().max(10000)).max(32), acceptanceCriteria: z.array(z.string().max(10000)).max(32), requestedOutput: z.string().max(10000), independent: z.boolean(), worthwhile: z.boolean(), responseTokens: z.number().int().positive(), instructionReserveTokens: z.number().int().min(256), synthesisReserveTokens: z.number().int().min(256), contextHistory: z.array(z.object({kind: z.enum(["tool", "command", "diff"]), name: z.string().min(1).max(1000), status: z.enum(["completed", "failed", "cancelled", "skipped"]), text: z.string().max(100000)})).max(64).optional()}).optional().describe("Optional minimized host task packet. Unknown or insufficient validated worker limits suppress delegation; the host owns final synthesis."),
         selectionPin: z.object({providerId: z.string().min(1).max(100), modelId: z.string().min(1).max(256).optional()}).optional().describe("Strict regular worker pin; never bypasses eligibility or silently changes provider/model."),
         requiredCapabilities: z.array(z.enum(CAPABILITIES)).max(7).default([]),
         hostApplication: z.string().min(1).max(100).default("mcp-host"),
@@ -51,7 +82,7 @@ export function createOmniMcpServer(backend: McpBackend, options: { regularOnly?
         const result = await backend.route({...input,parentTask:typeof input.parentTask === 'string' ? input.parentTask : undefined}, context.mcpReq.signal);
         return {
           content: [{ type: "text" as const, text: `${result.answer}\n\n${result.badge}\nAttribution applies to OmniRoute-produced content; the host may relay or rephrase it.` }],
-          structuredContent: { routeId: result.routeId, answer: result.answer, badge: result.badge, attribution: result.attribution },
+          structuredContent: { routeId: result.routeId, taskId: result.taskId ?? null, answer: result.answer, badge: result.badge, attribution: result.attribution },
         };
       } catch (error) {
         return { content: [{ type: "text" as const, text: error instanceof Error ? error.message : "OmniRoute request failed" }], isError: true };
@@ -105,6 +136,24 @@ export function createOmniMcpServer(backend: McpBackend, options: { regularOnly?
       return { content: [{ type: "text" as const, text: JSON.stringify(routes, null, 2) }], structuredContent: { routes } };
     },
   );
+
+  const lifecycle = (): TaskLifecycleBackend => backend.tasks ?? unavailableTasks();
+  const taskTool = (name: string, title: string, description: string, inputSchema: z.ZodType, handler: (input: any) => Promise<unknown>, readOnlyHint = false): void => {
+    server.registerTool(name, { title, description, inputSchema, annotations: { readOnlyHint, destructiveHint: false, idempotentHint: name === "omni_task_status" || name === "omni_task_report" || name === "omni_task_inspect_plan" || name === "omni_task_diff", openWorldHint: false } }, async (input) => {
+      try { return taskReply(await handler(input)); }
+      catch (error) { return { content: [{ type: "text" as const, text: error instanceof Error ? error.message : "Task operation failed" }], isError: true }; }
+    });
+  };
+  taskTool("omni_task_submit", "Submit durable task", "Create or idempotently retrieve a bounded durable task; this does not execute it.", taskSubmissionSchema, (input) => lifecycle().submit(input as TaskSubmission));
+  taskTool("omni_task_status", "Inspect task status", "Read the current durable task envelope.", taskIdSchema, ({ taskId }) => lifecycle().status(taskId), true);
+  taskTool("omni_task_inspect_plan", "Inspect minimal task plan", "Read persisted capabilities, tool approvals, budget and stop conditions without creating a planner.", taskIdSchema, ({ taskId }) => lifecycle().inspectPlan(taskId), true);
+  taskTool("omni_task_approve", "Approve paused task", "Move a paused task back to planning using an explicit approval identifier.", taskIdSchema.extend({ approvalId: z.string().min(1).max(256) }), ({ taskId, approvalId }) => lifecycle().approve(taskId, approvalId));
+  taskTool("omni_task_pause", "Pause task", "Pause a task for explicit user direction.", taskIdSchema.extend({ reason: z.string().max(1_000).optional() }), ({ taskId, reason }) => lifecycle().pause(taskId, reason));
+  taskTool("omni_task_resume", "Resume task", "Resume a paused task into planning.", taskIdSchema, ({ taskId }) => lifecycle().resume(taskId));
+  taskTool("omni_task_cancel", "Cancel task", "Cancel nonterminal work without executing any external cleanup.", taskIdSchema.extend({ reason: z.string().max(1_000).optional() }), ({ taskId, reason }) => lifecycle().cancel(taskId, reason));
+  taskTool("omni_task_diff", "Inspect task diff artifacts", "Read registered diff artifact references only.", taskIdSchema, ({ taskId }) => lifecycle().inspectDiff(taskId), true);
+  taskTool("omni_task_verify", "Record verification", "Record a relevant verification outcome; it does not invoke a command.", taskIdSchema.extend({ check: z.string().min(1).max(1_000), status: z.enum(["passed", "failed", "skipped"]), summary: z.string().max(10_000) }), ({ taskId, check, status, summary }) => lifecycle().verify(taskId, { check, status, summary }));
+  taskTool("omni_task_report", "Retrieve redacted task report", "Read the durable redacted report for a task.", taskIdSchema, ({ taskId }) => lifecycle().report(taskId), true);
 
   return server;
 }
