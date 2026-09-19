@@ -59,6 +59,8 @@ await cp(join(repo,'distribution/dual/README.md'),join(release,'README.md'));
 await cp(join(repo,'THIRD-PARTY-NOTICES.md'),join(release,'THIRD-PARTY-NOTICES.md'));
 await cp(join(repo,'distribution/dual/Install-Windows.cmd'),join(release,'Install-Windows.cmd'));
 await cp(join(repo,'distribution/dual/Install-Linux.sh'),join(release,'Install-Linux.sh'));
+await mkdir(join(release,'skills/omniroute-first-delegation'),{recursive:true});
+await cp(join(repo,'skills/omniroute-first-delegation/SKILL.md'),join(release,'skills/omniroute-first-delegation/SKILL.md'));
 await writeFile(join(release,'PACKAGE-NOTES.txt'),'Shareable release package. No API keys, browser profiles, cookies, or account sessions are included. Setup collects BYOK credentials locally and opens dedicated browser profiles for optional Claude and Z.AI sign-in.\n');
 console.log('Staged combined package: '+release);
 console.log('Run tests and create VERIFICATION.md before sealing a download archive.');

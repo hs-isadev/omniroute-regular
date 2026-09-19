@@ -82,6 +82,8 @@ await cp(join(root,'docs/testing/guided-setup.tdd.md'),join(release,'docs/testin
 await cp(join(root,'docs/testing/key-editor.tdd.md'),join(release,'docs/testing/key-editor.tdd.md'));
 await mkdir(join(release,'plans'),{recursive:true});
 await cp(join(root,'plans/antigravity-regular.md'),join(release,'plans/antigravity-regular.md'));
+await mkdir(join(release,'skills/omniroute-first-delegation'),{recursive:true});
+await cp(join(root,'skills/omniroute-first-delegation/SKILL.md'),join(release,'skills/omniroute-first-delegation/SKILL.md'));
 const lock=JSON.parse(await readFile(join(root,'package-lock.json'),'utf8'));
 const dependencies=Object.entries(lock.packages).filter(([name,item])=>name&&(!item.dev||item.devOptional===false)).map(([name,item])=>({path:name,version:item.version??null,license:item.license??'See package LICENSE',integrity:item.integrity??null,resolved:item.resolved??null}));
 await writeFile(join(payload,'dependencies.json'),JSON.stringify({node:{version:'22.23.2',license:'node/LICENSE'},packages:dependencies},null,2)+'\n');

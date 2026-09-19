@@ -36,4 +36,6 @@ await cp(join(repo,'distribution/dual/README.md'),join(release,'README.md'));awa
 await writeFile(join(release,'PRIVATE-USE-NOTICE.txt'),'SHAREABLE FAMILY PACKAGE. No API keys, browser profiles, cookies, passwords, or account sessions are included. Each recipient signs in with their own accounts after installation. Setup opens one dedicated local browser profile with six user-controlled sign-in tabs. The adapters pace usage and stop on verification or blocking notices; they do not bypass CAPTCHA, anti-bot, rate-limit, or access controls.\n');
 await cp(join(repo,'docs/routing-policy.md'),join(release,'ROUTING-POLICY.md'));
 await cp(join(repo,'docs/host-orchestration.md'),join(release,'HOST-ORCHESTRATION.md'));
+await mkdir(join(release,'skills/omniroute-first-delegation'),{recursive:true});
+await cp(join(repo,'skills/omniroute-first-delegation/SKILL.md'),join(release,'skills/omniroute-first-delegation/SKILL.md'));
 console.log(`Staged shareable package: ${release}`);
