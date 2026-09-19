@@ -92,6 +92,7 @@ test('all browser consumers configure against one endpoint and install one Linux
   assert.equal(typeof setup.installSharedBrowserConsumerAutostart,'function');
   const home=await mkdtemp(join(tmpdir(),'private-consumers-'));
   const root=join(home,'install'),node=join(root,'node'),entrypoint=join(root,'credential-server.mjs');
+  await mkdir(root,{recursive:true});await writeFile(node,'fixture');await writeFile(entrypoint,'fixture');
   await saveConfig(regularConfig(),getRuntimePaths(join(root,'data')));
   await setup.configurePrivateBrowserConsumers({root,node,entrypoint:join(root,'adapter.mjs')});
   const configured=await loadConfig(getRuntimePaths(join(root,'data')));
@@ -116,15 +117,20 @@ test('all browser consumers configure against one endpoint and install one Linux
 test('Windows installs one hidden shared startup entry and removes exact legacy entries',async()=>{
   const home=await mkdtemp(join(tmpdir(),'private-consumers-win-')),root=join(home,'install'),appData=join(home,'AppData/Roaming');
   const startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup');await mkdir(startup,{recursive:true});
-  const legacy=['OmniRoute Claude Consumer.vbs','OmniRoute Z.AI Consumer.vbs','OmniRoute Qwen Consumer Private.vbs','OmniRoute Kimi Consumer Private.vbs','OmniRoute DeepSeek Consumer Private.vbs','OmniRoute Perplexity Consumer Private.vbs'];
+  const legacy=['OmniRoute Browser Consumers.vbs','OmniRoute Claude Consumer.vbs','OmniRoute Z.AI Consumer.vbs','OmniRoute Qwen Consumer Private.vbs','OmniRoute Kimi Consumer Private.vbs','OmniRoute DeepSeek Consumer Private.vbs','OmniRoute Perplexity Consumer Private.vbs'];
   for(const name of legacy)await writeFile(join(startup,name),'legacy');
+  await writeFile(join(startup,'OmniRoute Browser Consumers.vbs'),'CreateObject("WScript.Shell").Run "shared-session.mjs --port 47842", 0, False\r\n');
+  await mkdir(root,{recursive:true});
+  await writeFile(join(root,'node.exe'),'fixture');await writeFile(join(root,'shared-session.mjs'),'fixture');
   const result=await setup.installSharedBrowserConsumerAutostart({platform:'win32',home,root,node:join(root,'node.exe'),entrypoint:join(root,'shared-session.mjs'),env:{APPDATA:appData}});
   const text=await readFile(result.file,'utf8');
-  assert.match(text,/WScript\.Shell/);
-  assert.match(text,/, 0, False/);
+  assert.match(result.file,/OmniRoute Browser Consumers\.cmd$/);
+  assert.match(text,/start "" \/b/);
+  assert.doesNotMatch(text,/WScript\.Shell/);
   assert.match(text,/--background/);
   assert.match(text,/browser-consumer-profile/);
   assert.equal(result.removed.length,6);
+  assert.equal(result.legacyRemoved,true);
   for(const path of result.removed)await assert.rejects(access(path),{code:'ENOENT'});
 });
 

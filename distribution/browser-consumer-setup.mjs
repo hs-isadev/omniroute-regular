@@ -1,4 +1,4 @@
-import {access,mkdir,readFile,writeFile} from 'node:fs/promises';
+import {access,mkdir,readFile,unlink,writeFile} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {homedir} from 'node:os';
 import {dirname,isAbsolute,join} from 'node:path';
@@ -8,7 +8,7 @@ import {PRIVATE_BROWSER_CONSUMERS,getSharedSessionDefinition} from '../packages/
 
 const session=getSharedSessionDefinition();
 const endpoint=`http://127.0.0.1:${session.port}`;
-const localOnly=(path,label)=>{if(!isAbsolute(path)||/[\r\n\0]/.test(path))throw new Error(`Absolute ${label} path required.`);return path;};
+const localOnly=(path,label)=>{if(!isAbsolute(path)||/[\r\n\0\"]/.test(path))throw new Error(`Absolute ${label} path required.`);return path;};
 const activeVersion=async root=>{
   const active=(await readFile(join(root,'active-version.txt'),'utf8')).trim();
   if(!/^versions\/[a-zA-Z0-9.-]+$/.test(active))throw new Error('Invalid active version.');
@@ -38,18 +38,28 @@ export async function enableBrowserConsumers({root,node=process.execPath,adapter
   await saveConfig(config,paths);
   return config;
 }
-function desktopQuote(value){return `"${String(value).replaceAll('\\','\\\\').replaceAll('"','\\"')}"`;}
+function desktopQuote(value){return `"${String(value).replaceAll('"','\\"')}"`;}
 export async function installBrowserConsumerAutostart({platform=process.platform,home=homedir(),root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/shared-session.mjs',import.meta.url)),env=process.env}={}) {
   for(const [path,label] of [[home,'home'],[root,'installation root'],[node,'Node runtime'],[entrypoint,'browser session']])localOnly(path,label);
+  for(const [path,label] of [[node,'Node runtime'],[entrypoint,'browser session']])try{await access(path);}catch{throw new Error(`${label} was not found: ${path}`);}
   const profile=join(root,'data',session.profileName),args=`--background --launch-only --profile ${desktopQuote(profile)} --port ${session.port}`;
-  const file=platform==='linux'?join(home,'.config/autostart/omniroute-browser-consumers.desktop'):platform==='win32'?join(env.APPDATA??'','Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.vbs'):null;
+  const file=platform==='linux'?join(home,'.config/autostart/omniroute-browser-consumers.desktop'):platform==='win32'?join(env.APPDATA??'','Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.cmd'):null;
   if(!file||!isAbsolute(file))throw new Error('Shared browser consumer autostart supports Windows and Linux desktops.');
-  const content=platform==='linux'?`[Desktop Entry]\nType=Application\nName=OmniRoute Browser Consumers\nExec=${desktopQuote(node)} ${desktopQuote(entrypoint)} ${args}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`:`CreateObject("WScript.Shell").Run "${`"${node}" "${entrypoint}" ${args}`.replaceAll('"','""')}", 0, False\r\n`;
+  const content=platform==='linux'?`[Desktop Entry]\nType=Application\nName=OmniRoute Browser Consumers\nExec=${desktopQuote(node)} ${desktopQuote(entrypoint)} ${args}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`:`@echo off\r\nstart "" /b ${desktopQuote(node)} ${desktopQuote(entrypoint)} ${args}\r\n`;
   await mkdir(dirname(file),{recursive:true,mode:0o700});
   let before=null;try{before=await readFile(file,'utf8');}catch(error){if(error.code!=='ENOENT')throw error;}
   if(before!==null&&before!==content)throw new Error(`Existing browser autostart entry is user-managed: ${file}`);
   if(before!==content)await writeFile(file,content,{mode:0o600});
-  return {file};
+  let legacyRemoved=false;
+  if(platform==='win32'){
+    const legacy=join(dirname(file),'OmniRoute Browser Consumers.vbs');
+    try{
+      const legacyText=await readFile(legacy,'utf8');
+      if(!/CreateObject\("WScript\.Shell"\)\.Run/i.test(legacyText)||!/shared-session\.mjs/i.test(legacyText)||!/--port\s+47842/.test(legacyText))throw new Error(`Existing browser autostart entry is user-managed: ${legacy}`);
+      await unlink(legacy);legacyRemoved=true;
+    }catch(error){if(error.code!=='ENOENT')throw error;}
+  }
+  return {file,legacyRemoved};
 }
 function rootFromArgs(args){const index=args.indexOf('--root'),root=index>=0?args[index+1]:undefined;if(index<0||!root||index!==args.length-2)throw new Error('Use launch or enable with --root ABSOLUTE_INSTALL_ROOT.');return root;}
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){

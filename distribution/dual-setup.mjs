@@ -81,6 +81,8 @@ export async function configureZaiConsumer({root,node=process.execPath,entrypoin
 
 export async function installSharedBrowserConsumerAutostart({platform=process.platform,home=homedir(),root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/shared-session.mjs',import.meta.url)),env=process.env}) {
   for(const path of [home,root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute shared browser autostart paths required');
+  await access(node).catch(()=>{throw new Error(`Shared browser Node runtime was not found: ${node}`);});
+  await access(entrypoint).catch(()=>{throw new Error(`Shared browser session was not found: ${entrypoint}`);});
   const profile=join(root,'data',SHARED_BROWSER_SESSION.profileName);
   if(platform==='linux'){
     const file=join(home,'.config/autostart/omniroute-browser-consumers.desktop'),before=await optional(file);
@@ -92,12 +94,13 @@ export async function installSharedBrowserConsumerAutostart({platform=process.pl
   }
   if(platform==='win32'){
     const appData=env.APPDATA;if(!appData||!isAbsolute(appData))throw new Error('Windows APPDATA is unavailable.');
-    const file=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.vbs'),before=await optional(file);
-    const command=`"${node}" "${entrypoint}" --background --launch-only --profile "${profile}" --port ${SHARED_BROWSER_SESSION.port}`,content=`CreateObject("WScript.Shell").Run "${command.replaceAll('"','""')}", 0, False\r\n`;
+    const file=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.cmd'),before=await optional(file);
+    const quote=value=>`"${String(value).replaceAll('"','""')}"`,content=`@echo off\r\nstart "" /b ${quote(node)} ${quote(entrypoint)} --background --launch-only --profile ${quote(profile)} --port ${SHARED_BROWSER_SESSION.port}\r\n`;
     if(before!==content)await atomic(file,content,before);
+    const legacy=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.vbs');let legacyRemoved=false;
+    const legacyText=await optional(legacy);if(legacyText!==null){if(!/CreateObject\("WScript\.Shell"\)\.Run/i.test(legacyText)||!/shared-session\.mjs/i.test(legacyText)||!new RegExp(`--port\\s+${SHARED_BROWSER_SESSION.port}`).test(legacyText))throw new Error('Existing browser autostart entry is user-managed; original preserved.');await unlink(legacy);legacyRemoved=true;}
     const names=['OmniRoute Claude Consumer.vbs','OmniRoute Z.AI Consumer.vbs',...PRIVATE_BROWSER_CONSUMERS.map(item=>`OmniRoute ${item.displayName} Consumer Private.vbs`)];
     const removed=[];for(const name of names){const path=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup',name);try{await unlink(path);removed.push(path);}catch(error){if(error.code!=='ENOENT')throw error;}}
-    return {file,removed};
   }
   throw new Error('Shared browser consumer autostart supports Windows and Linux desktops.');
 }

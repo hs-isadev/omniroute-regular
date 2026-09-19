@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp} from 'node:fs/promises';
+import {access,mkdtemp,mkdir,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {getRuntimePaths,loadConfig,saveConfig} from '../packages/config/dist/index.js';
@@ -37,4 +37,20 @@ test('browser consumer bridge configures only local adapters after explicit conf
     assert.equal(item.freeTierConfirmed,true,provider);
     assert.deepEqual(item.mcpArgs,[entrypoint,...args],provider);
   }
+});
+
+test('Windows autostart uses a command launcher, removes only the owned legacy VBS, and validates paths',async()=>{
+  assert.equal(typeof bridge.installBrowserConsumerAutostart,'function','browser consumer autostart missing');
+  const home=await mkdtemp(join(tmpdir(),'omni-browser-startup-')),root=join(home,'install'),appData=join(home,'AppData/Roaming');
+  const node=join(root,'node.exe'),entrypoint=join(root,'shared-session.mjs');
+  await mkdir(root,{recursive:true});await writeFile(node,'fixture');await writeFile(entrypoint,'fixture');
+  const startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup');await mkdir(startup,{recursive:true});
+  const legacy=join(startup,'OmniRoute Browser Consumers.vbs');await writeFile(legacy,'CreateObject("WScript.Shell").Run "shared-session.mjs --port 47842", 0, False\r\n');
+  const result=await bridge.installBrowserConsumerAutostart({platform:'win32',home,root,node,entrypoint,env:{APPDATA:appData}});
+  assert.match(result.file,/OmniRoute Browser Consumers\.cmd$/);
+  const command=await (await import('node:fs/promises')).readFile(result.file,'utf8');
+  assert.match(command,/^@echo off\r?\nstart "" \/b /);
+  assert.match(command,/--background --launch-only --profile/);
+  await assert.rejects(access(legacy),{code:'ENOENT'});
+  await assert.rejects(bridge.installBrowserConsumerAutostart({platform:'win32',home,root,node:join(root,'missing.exe'),entrypoint,env:{APPDATA:appData}}),/not found|missing/i);
 });
