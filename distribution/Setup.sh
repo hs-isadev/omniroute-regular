@@ -20,6 +20,10 @@ while [ "$#" -gt 0 ]; do
 done
 printf '%s\n' 'Step 1/4: Verify and install OmniRoute Regular (existing keys are retained).'
 "$bundle/payload/node/node" "$bundle/payload/app/distribution/install.mjs" install "$bundle" "$install_root"
+IFS= read -r active < "$install_root/active-version.txt"
+case "$active" in versions/*) ;; *) printf '%s\n' 'Invalid active version after installation.' >&2; exit 1 ;; esac
+case "${active#versions/}" in ''|*[!a-zA-Z0-9.-]*) printf '%s\n' 'Invalid active version after installation.' >&2; exit 1 ;; esac
+"$install_root/$active/node/node" "$install_root/$active/app/distribution/browser-consumer-setup.mjs" enable --root "$install_root"
 printf '%s\n' 'Install/sign in to official Antigravity: https://antigravity.google/download' 'Choose a free account-available host model; OmniRoute never imports its login.'
 printf '%s\n' 'Linux key storage requires an unlocked Secret Service desktop keyring and secret-tool (libsecret-tools). Headless sessions are unsupported.'
 if [ "$wizard" = yes ]; then exec "$install_root/Connect.sh"; fi

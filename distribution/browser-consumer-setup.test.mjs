@@ -17,7 +17,7 @@ test('browser consumer bridge launches a visible shared session without waiting 
   assert.deepEqual(bridge.browserConsumerCommand('launch',{root,node,entrypoint}),[node,entrypoint,'--launch-only','--profile',join(root,'data/browser-consumer-profile'),'--port','47842']);
 });
 
-test('browser consumer bridge configures only local adapters after explicit confirmation',async()=>{
+test('browser consumer bridge configures local adapters as ordinary providers',async()=>{
   assert.equal(typeof bridge.enableBrowserConsumers,'function','browser consumer enabler missing');
   const root=await mkdtemp(join(tmpdir(),'omni-browser-bridge-'));
   await saveConfig(regularConfig(),getRuntimePaths(join(root,'data')));
@@ -50,7 +50,8 @@ test('Windows autostart uses a command launcher, removes only the owned legacy V
   assert.match(result.file,/OmniRoute Browser Consumers\.cmd$/);
   const command=await (await import('node:fs/promises')).readFile(result.file,'utf8');
   assert.match(command,/^@echo off\r?\nstart "" \/b /);
-  assert.match(command,/--background --launch-only --profile/);
+  assert.match(command,/--launch-only --profile/);
+  assert.doesNotMatch(command,/--background/);
   await assert.rejects(access(legacy),{code:'ENOENT'});
   await assert.rejects(bridge.installBrowserConsumerAutostart({platform:'win32',home,root,node:join(root,'missing.exe'),entrypoint,env:{APPDATA:appData}}),/not found|missing/i);
 });

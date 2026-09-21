@@ -35,9 +35,8 @@ export async function runGuidedSetup({root,platform=process.platform,node=proces
     const browserSetup=join(root,active,'app/distribution/browser-consumer-setup.mjs');
     tell('Step 3/5: Opening one shared browser with six consumer sign-in tabs. Sign in only to accounts you choose; no passwords or cookies are read by OmniRoute.');
     if(await run(node,[browserSetup,'launch','--root',root])!==0) throw new Error('Browser sign-in window could not start. Install a supported Chromium-family browser, then run Connect again.');
-    if((await ask('After signing in, type yes to enable only the free-tier consumer accounts you chose (Enter = leave browser consumers disabled): ')).trim().toLowerCase()==='yes') {
-      if(await run(node,[browserSetup,'enable','--root',root])!==0) throw new Error('Browser consumer setup failed. No browser credentials were stored. Run Connect to retry.');
-    } else tell('Browser consumers remain disabled. Run Connect when you are ready to enable signed-in free-tier accounts.');
+    if(await run(node,[browserSetup,'enable','--root',root])!==0) throw new Error('Browser consumer setup failed. No browser credentials were stored. Run Connect to retry.');
+    tell('Browser consumers are enabled as ordinary local OmniRoute providers, and the visible browser session is installed to open at every desktop login. Sign in only to the tabs you intend to use.');
   }
   tell(browserConsumers?'Step 4/5: Choose an existing project, or press Enter to create/use a starter workspace.':'Step 3/4: Choose an existing project, or press Enter to create/use a starter workspace.');
   const selected=(await ask('Project folder (Enter = starter workspace): ')).trim();

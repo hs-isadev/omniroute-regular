@@ -84,8 +84,8 @@ test('masked key entry remains an explicit alternative on both platforms',async(
   }
 });
 
-test('one-click setup opens the shared browser sign-in window, then enables only after the user confirms free-tier use',async()=>{
-  const f=await fixture('win32',['yes','','yes']);
+test('one-click setup opens the shared browser sign-in window and enables the provider/autostart path automatically',async()=>{
+  const f=await fixture('win32',['','yes']);
   f.options.browserConsumers=true;
   const result=await module.runGuidedSetup(f.options);
   assert.equal(result.status,'launched');

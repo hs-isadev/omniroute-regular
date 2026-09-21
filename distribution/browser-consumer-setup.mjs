@@ -42,7 +42,7 @@ function desktopQuote(value){return `"${String(value).replaceAll('"','\\"')}"`;}
 export async function installBrowserConsumerAutostart({platform=process.platform,home=homedir(),root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/shared-session.mjs',import.meta.url)),env=process.env}={}) {
   for(const [path,label] of [[home,'home'],[root,'installation root'],[node,'Node runtime'],[entrypoint,'browser session']])localOnly(path,label);
   for(const [path,label] of [[node,'Node runtime'],[entrypoint,'browser session']])try{await access(path);}catch{throw new Error(`${label} was not found: ${path}`);}
-  const profile=join(root,'data',session.profileName),args=`--background --launch-only --profile ${desktopQuote(profile)} --port ${session.port}`;
+  const profile=join(root,'data',session.profileName),args=`--launch-only --profile ${desktopQuote(profile)} --port ${session.port}`;
   const file=platform==='linux'?join(home,'.config/autostart/omniroute-browser-consumers.desktop'):platform==='win32'?join(env.APPDATA??'','Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.cmd'):null;
   if(!file||!isAbsolute(file))throw new Error('Shared browser consumer autostart supports Windows and Linux desktops.');
   const content=platform==='linux'?`[Desktop Entry]\nType=Application\nName=OmniRoute Browser Consumers\nExec=${desktopQuote(node)} ${desktopQuote(entrypoint)} ${args}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`:`@echo off\r\nstart "" /b ${desktopQuote(node)} ${desktopQuote(entrypoint)} ${args}\r\n`;

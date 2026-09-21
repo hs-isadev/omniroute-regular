@@ -5,6 +5,12 @@ $InstallRoot=[IO.Path]::GetFullPath($InstallRoot)
 Write-Host 'Step 1/4: Verify and install OmniRoute Regular (existing keys are retained).'
 & (Join-Path $PSScriptRoot 'payload/node/node.exe') (Join-Path $PSScriptRoot 'payload/app/distribution/install.mjs') install $PSScriptRoot $InstallRoot
 if($LASTEXITCODE -ne 0) {throw 'Installation failed. Existing user data was retained.'}
+$active=(Get-Content -LiteralPath (Join-Path $InstallRoot 'active-version.txt') -Raw).Trim()
+if($active -notmatch '^versions/[a-zA-Z0-9.-]+$') {throw 'Invalid active version after installation.'}
+$runtimeNode=Join-Path $InstallRoot ($active+'/node/node.exe')
+$browserSetup=Join-Path $InstallRoot ($active+'/app/distribution/browser-consumer-setup.mjs')
+& $runtimeNode $browserSetup enable --root $InstallRoot
+if($LASTEXITCODE -ne 0) {throw 'Browser consumer startup setup failed. Existing user data was retained.'}
 if(-not $NoShortcuts) {
   $shell=New-Object -ComObject WScript.Shell
   foreach($item in @(@('OmniRoute Regular','Launch.cmd'))) {

@@ -23,16 +23,20 @@ assert.equal(createHash('sha256').update(await readFile(archive)).digest('hex'),
 const extracted=join(temp,'extracted');await mkdir(extracted);
 await run(linux?'tar':'tar.exe',['-xf',archive,'-C',extracted]);
 const bundle=join(extracted,name),install=join(temp,'Install With Spaces');
+const setupEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/KEY|TOKEN|SECRET|PASSWORD|NODE_OPTIONS|OMNIROUTE|OPENCODE/i.test(key)));
+setupEnv.APPDATA=join(temp,'AppData/Roaming');setupEnv.LOCALAPPDATA=join(temp,'AppData/Local');setupEnv.HOME=join(temp,'Home');
 if(linux) {
-  await run('sh',[join(bundle,'Setup.sh'),'--install-root',install,'--no-wizard']);
-  await run('sh',[join(bundle,'Setup.sh'),'--install-root',install,'--no-wizard']);
+  await run('sh',[join(bundle,'Setup.sh'),'--install-root',install,'--no-wizard'],{env:setupEnv});
+  await run('sh',[join(bundle,'Setup.sh'),'--install-root',install,'--no-wizard'],{env:setupEnv});
   assert.equal((await stat(install)).mode&0o777,0o700);
   for(const name of ['Setup.sh','payload/Launch.sh','payload/Settings.sh','payload/Manage.sh','payload/Connect.sh']) await run('sh',['-n',join(bundle,name)]);
 } else {
   const args=['-NoProfile','-ExecutionPolicy','Bypass','-File',join(bundle,'Setup.ps1'),'-InstallRoot',install,'-NoWizard','-NoShortcuts'];
-  await run('powershell.exe',args);await run('powershell.exe',args);
-  await run('powershell.exe',['-NoProfile','-File',join(install,'Settings.ps1'),'-SmokeTest']);
+  await run('powershell.exe',args,{env:setupEnv});await run('powershell.exe',args,{env:setupEnv});
+  await run('powershell.exe',['-NoProfile','-File',join(install,'Settings.ps1'),'-SmokeTest'],{env:setupEnv});
 }
+const startup=linux?join(setupEnv.HOME,'.config/autostart/omniroute-browser-consumers.desktop'):join(setupEnv.APPDATA,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.cmd');
+const startupText=await readFile(startup,'utf8');assert.match(startupText,/shared-session\.mjs/);assert.match(startupText,/--launch-only/);assert.doesNotMatch(startupText,/--background/);
 const active=(await readFile(join(install,'active-version.txt'),'utf8')).trim();assert.match(active,/^versions\/[a-zA-Z0-9.-]+$/);
 const payload=join(install,active),node=join(payload,linux?'node/node':'node/node.exe'),app=join(payload,'app');
 await access(join(install,linux?'Connect.sh':'Connect.cmd'));
@@ -40,7 +44,7 @@ await access(join(app,'distribution/guided-setup.mjs'));
 const url=p=>pathToFileURL(join(app,p)).href;
 assert.match(await run(node,['--version']),/v22\.23\.2/);await assert.rejects(access(join(payload,'opencode')),/ENOENT/);
 const workspace=join(temp,'Project With Spaces');await mkdir(workspace);
-const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/KEY|TOKEN|SECRET|PASSWORD|NODE_OPTIONS|OMNIROUTE|OPENCODE/i.test(key)));
+const env={...setupEnv};
 env.OMNIROUTE_REGULAR_ROOT=install;env.OMNIROUTE_HOME=join(install,'data');
 const preview=await run(node,[join(app,'distribution/launch.mjs'),'--workspace',workspace,'--host',node,'--dry-run'],{env});assert.match(preview,/Preview only/);
 await assert.rejects(access(join(workspace,'.agents/mcp_config.json')),/ENOENT/);
