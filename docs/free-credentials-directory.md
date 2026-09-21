@@ -9,7 +9,7 @@ in every region, permanently free, or live-tested.
 
 | Provider ID | Get credentials locally | Import field | Free-access conditions |
 |---|---|---|---|
-| `openrouter` | [API keys](https://openrouter.ai/settings/keys) | `OPENROUTER_API_KEY` | Approved zero-price model ladder plus `openrouter/free`; quotas apply. Required by the current OpenCode regular wrapper. |
+| `openrouter` | [API keys](https://openrouter.ai/settings/keys) | `OPENROUTER_API_KEY` | Approved zero-price model ladder plus `openrouter/free`; quotas apply. Optional for the OpenCode wrapper when another eligible provider is configured; OmniRoute can fail over across providers. |
 | `groq` | [API keys](https://console.groq.com/keys) | `GROQ_API_KEY` | Use Free Plan; [model-specific limits](https://console.groq.com/docs/rate-limits). |
 | `gemini` | [AI Studio](https://aistudio.google.com/app/apikey) | `GEMINI_API_KEY` | Eligible project without paid billing; [free-tier pricing](https://ai.google.dev/gemini-api/docs/pricing). Account/region/age restrictions apply. |
 | `mistral` | [Studio keys](https://console.mistral.ai/api-keys/) | `MISTRAL_API_KEY` | Studio Free mode, not Scale; evaluation/prototyping [limits](https://help.mistral.ai/en/articles/698531-why-am-i-hitting-api-rate-limits-and-how-do-i-increase-them). Model: `mistral-small-2603`. |

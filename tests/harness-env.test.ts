@@ -40,8 +40,8 @@ test("Claude launcher selection rejects a workspace-planted shim", () => {
 });
 
 test("OpenCode regular harness uses a clean environment and only the configured free gateway", () => {
-  const apiKey = "openrouter-test-key-never-print";
-  const inlineConfig = openCodeRegularConfig("C:\\node.exe", "C:\\omni.js", "C:\\runtime\\omniroute", "C:\\instructions.md");
+  const daemonToken = "daemon-token-never-print";
+  const inlineConfig = openCodeRegularConfig("C:\\node.exe", "C:\\omni.js", "C:\\runtime\\omniroute", "C:\\instructions.md", "http://127.0.0.1:47831/v1");
   const environment = openCodeHarnessEnvironment({
     PATH: "C:\\Windows\\System32",
     USERPROFILE: "C:\\Users\\test",
@@ -51,19 +51,20 @@ test("OpenCode regular harness uses a clean environment and only the configured 
     OMNIROUTE_DAEMON_TOKEN: "daemon-secret",
     AWS_SECRET_ACCESS_KEY: "aws-secret",
     NODE_OPTIONS: "--require=malicious.js",
-  }, "C:\\runtime\\omniroute", apiKey, inlineConfig);
+  }, "C:\\runtime\\omniroute", daemonToken, inlineConfig);
   assert.equal(environment.OMNIROUTE_ROUTING_MODE, "regular");
   assert.equal(environment.OMNIROUTE_HOME, "C:\\runtime\\omniroute");
-  assert.equal(environment.OPENROUTER_API_KEY, apiKey);
+  assert.equal(environment.OPENROUTER_API_KEY, daemonToken);
   assert.equal(environment.OPENCODE_CONFIG_CONTENT, inlineConfig);
   for (const key of ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OMNIROUTE_DAEMON_TOKEN", "AWS_SECRET_ACCESS_KEY", "NODE_OPTIONS"]) assert.equal(environment[key], undefined);
-  assert.doesNotMatch(inlineConfig, /openrouter-test-key-never-print/);
+  assert.doesNotMatch(inlineConfig, /daemon-token-never-print/);
   const config = JSON.parse(inlineConfig) as { model: string; small_model: string; enabled_providers: string[]; provider: { openrouter: { whitelist: string[]; models: Record<string, { options: { provider: { allow_fallbacks: boolean } } }> } }; mcp: { omniroute: { environment: Record<string, string> } } };
   assert.equal(config.model, "openrouter/openrouter/free");
   assert.equal(config.small_model, "openrouter/openrouter/free");
   assert.deepEqual(config.enabled_providers, ["openrouter"]);
   assert.deepEqual(config.provider.openrouter.whitelist, ["openrouter/free"]);
   assert.equal(config.provider.openrouter.models["openrouter/free"]?.options.provider.allow_fallbacks, false);
+  assert.equal(config.provider.openrouter.options.baseURL, "http://127.0.0.1:47831/v1");
   assert.equal(config.mcp.omniroute.environment.OMNIROUTE_ROUTING_MODE, "regular");
   assert.doesNotMatch(inlineConfig, /API_KEY|AUTH_TOKEN|secret/i);
 });
@@ -94,7 +95,7 @@ test("model-label adapter changes only the host transport and display name", () 
   assert.equal(config.provider.openrouter.options.baseURL, "http://127.0.0.1:12345");
   assert.equal(config.model, "openrouter/openrouter/free");
   assert.deepEqual(config.provider.openrouter.whitelist, ["openrouter/free"]);
-  assert.match(config.provider.openrouter.models["openrouter/free"].name, /actual model shown/);
+  assert.match(config.provider.openrouter.models["openrouter/free"].name, /actual worker shown/);
   assert.equal(config.provider.openrouter.models["openrouter/free"].options.provider.allow_fallbacks, false);
 });
 

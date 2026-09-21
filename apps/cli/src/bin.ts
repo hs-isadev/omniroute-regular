@@ -9,7 +9,7 @@ import { classifyTask } from "@omniroute/core";
 import { ROUTING_MODES, type RouteRequest, type RouteResult, type RoutingMode } from "@omniroute/contracts";
 import { CODEX_OMNIROUTE_FIRST_POLICY, IntegrationManager, type IntegrationTarget } from "@omniroute/integrations";
 import { serveOmniMcp } from "@omniroute/mcp-server";
-import { claudeHarnessEnvironment, harnessLaunchCommand, openCodeHarnessArguments, openCodeHarnessEnvironment, openCodeRegularConfig, resolveHarnessLauncher, selectOpenCodeHostModel } from "./harness-env.js";
+import { claudeHarnessEnvironment, harnessLaunchCommand, openCodeHarnessArguments, openCodeHarnessEnvironment, openCodeRegularConfig, resolveHarnessLauncher } from "./harness-env.js";
 import { globalRedactor, safeError, SafeError } from "@omniroute/observability";
 import { AnthropicProvider, createConfiguredProvider, HttpTransport, OpenAICompatibleProvider, OpenAIProvider } from "@omniroute/providers";
 import { configureProvider } from "./provider-management.js";
@@ -24,7 +24,6 @@ import {
 import { DaemonClient } from "./client.js";
 import { createCliMcpBackend } from "./mcp-backend.js";
 import { WindowsServiceManager } from "./service.js";
-import { startHostModelProxy } from "./host-model-proxy.js";
 
 const args = process.argv.slice(2);
 const paths = getRuntimePaths();
@@ -96,7 +95,7 @@ async function setup(): Promise<void> {
   await saveConfig(config, paths);
   await ensureLocalDaemonToken(paths);
   const credentialPath = await ensureCredentialTemplate(paths);
-  writeJson({ status: "ready", runtimeRoot: paths.root, config: paths.config, credentialImport: credentialPath, defaultMode: config.routing.defaultMode, freeOnly: config.routing.freeOnly, orchestrator: `${config.routing.orchestratorProviderId}/${config.routing.orchestratorModelId}`, next: ["Add an OpenRouter key locally for the OpenCode regular harness.", "Run: omni providers list; enable chosen additional profiles only after confirming free-only account settings.", "Run: omni secrets import", "Restart an existing daemon: omni service stop, then omni service start", "For a new installation: omni service install --apply", "Run: omni integrate opencode --user --apply"] });
+  writeJson({ status: "ready", runtimeRoot: paths.root, config: paths.config, credentialImport: credentialPath, defaultMode: config.routing.defaultMode, freeOnly: config.routing.freeOnly, orchestrator: `${config.routing.orchestratorProviderId}/${config.routing.orchestratorModelId}`, next: ["Import at least one enabled free provider key locally (OpenRouter, Gemini, Groq, or another confirmed profile).", "Run: omni providers list; enable chosen additional profiles only after confirming free-only account settings.", "Run: omni secrets import", "Restart an existing daemon: omni service stop, then omni service start", "For a new installation: omni service install --apply", "Run: omni integrate opencode --user --apply"] });
 }
 
 function timeoutSignal(ms = 15_000): AbortSignal {
@@ -359,21 +358,27 @@ async function harness(): Promise<void> {
     if (mode !== "regular") throw new SafeError("HARNESS_MODE_INVALID", "OpenCode is restricted to regular mode", 400);
     if (subscription) throw new SafeError("HARNESS_SUBSCRIPTION_INVALID", "OpenCode regular mode does not accept --subscription", 400);
     const launcher = await resolveHarnessLauncher("opencode", process.env, process.cwd());
-    const hostModel = selectOpenCodeHostModel(await client.models());
-    const vault = await SecretVault.load(paths.vault);
-    let openRouterApiKey: string;
-    try {
-      const openrouter = vault.get("openrouter");
-      if (!openrouter?.OPENROUTER_API_KEY) throw new SafeError("OPENROUTER_REQUIRED", "The OpenCode regular harness requires an imported OPENROUTER_API_KEY", 400);
-      openRouterApiKey = openrouter.OPENROUTER_API_KEY;
-    } finally { vault.dispose(); }
+    // OpenCode talks to the local OmniRoute compatibility endpoint. This is
+    // intentionally not a direct OpenRouter transport: the daemon owns
+    // provider selection and free-model failover, so an OpenRouter 429 can
+    // move to Gemini/Groq/etc. instead of causing OpenCode to retry the same
+    // upstream indefinitely. `models()` also verifies that the daemon is up
+    // before the child process is launched.
+    await client.models();
+    const daemonConfig = await loadConfig(paths);
+    const daemonToken = await ensureLocalDaemonToken(paths);
+    const hostModelId = "openrouter/free";
+    const hostLabels = {
+      baseURL: `http://${daemonConfig.daemon.host}:${daemonConfig.daemon.port}/v1`,
+      token: daemonToken,
+      close: async (): Promise<void> => undefined,
+    };
     const instructionsPath = fileURLToPath(new URL("../../../docs/integrations/opencode-regular-instructions.md", import.meta.url));
-    const hostLabels = await startHostModelProxy(openRouterApiKey, hostModel.modelId);
     try {
-      const inlineConfig = openCodeRegularConfig(process.execPath, cliEntry(), paths.root, instructionsPath, hostLabels.baseURL, hostModel.modelId);
+      const inlineConfig = openCodeRegularConfig(process.execPath, cliEntry(), paths.root, instructionsPath, hostLabels.baseURL, hostModelId);
       const childEnvironment = openCodeHarnessEnvironment(process.env, paths.root, hostLabels.token, inlineConfig);
       const launch = harnessLaunchCommand(launcher, process.env);
-      const child = spawn(launch.command, [...launch.prefix, ...openCodeHarnessArguments(hostModel.modelId)], { cwd: process.cwd(), env: childEnvironment, stdio: "inherit", windowsHide: false, shell: false });
+      const child = spawn(launch.command, [...launch.prefix, ...openCodeHarnessArguments(hostModelId)], { cwd: process.cwd(), env: childEnvironment, stdio: "inherit", windowsHide: false, shell: false });
       const exitCode = await new Promise<number>((resolvePromise, reject) => { child.once("error", reject); child.once("close", (code) => resolvePromise(code ?? 1)); });
       if (exitCode !== 0) throw new SafeError("HARNESS_EXITED", `OpenCode exited with status ${exitCode}`);
     } finally { await hostLabels.close(); }
@@ -413,7 +418,7 @@ async function dashboard(): Promise<void> {
 
 function help(): void {
   output.write("Provider setup: omni providers list | enable <id> --confirm-free-tier | disable <id>\nLocal setup: omni providers enable <id> --model <id> --context-tokens <N> [--coding]\n\n");
-  output.write(`OmniRoute 0.1.0\n\nCommands:\n  omni setup\n  omni ask <prompt> [--mode regular|orchestrator]\n  omni chat [--mode regular|orchestrator]\n  omni run <task-file> [--mode regular|orchestrator]\n  omni harness opencode --mode regular\n  omni harness claude --mode regular|orchestrator [--subscription]\n  omni routes [--limit N]\n  omni models [--refresh]\n  omni budget show|set\n  omni secrets template|import|list|test|remove|rotate\n  omni integrate status|doctor|<target>|remove|restore\n  omni service install|start|stop|status|uninstall\n  omni dashboard\n  omni doctor\n\nOpenCode is the regular-mode harness and selects one current eligible free OpenRouter model from the live registry. Claude subscription mode remains available only for future host orchestration.\n`);
+  output.write(`OmniRoute 0.1.0\n\nCommands:\n  omni setup\n  omni ask <prompt> [--mode regular|orchestrator]\n  omni chat [--mode regular|orchestrator]\n  omni run <task-file> [--mode regular|orchestrator]\n  omni harness opencode --mode regular\n  omni harness claude --mode regular|orchestrator [--subscription]\n  omni routes [--limit N]\n  omni models [--refresh]\n  omni budget show|set\n  omni secrets template|import|list|test|remove|rotate\n  omni integrate status|doctor|<target>|remove|restore\n  omni service install|start|stop|status|uninstall\n  omni dashboard\n  omni doctor\n\nOpenCode is the regular-mode harness and routes through the local OmniRoute daemon, which applies the configured free-provider ladder and failover. Claude subscription mode remains available only for future host orchestration.\n`);
 }
 
 async function main(): Promise<void> {

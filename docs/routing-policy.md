@@ -119,9 +119,13 @@ Configuration switches: `routing.freeModelFailoverEnabled` (default true) and
 `routing.freeModelCooldownMs` (default 60000). This automatic policy only operates
 under `routing.freeOnly`; it never authorizes paid models or top-ups.
 
-The OpenCode regular wrapper's own model remains pinned to `openrouter/free`.
-This ladder governs its OmniRoute tool calls and standalone OmniRoute requests,
-not model calls made directly by the OpenCode host.
+The OpenCode regular wrapper keeps the `openrouter/free` compatibility alias,
+but its transport is the local OmniRoute daemon. The alias is not a direct
+OpenRouter pin: OmniRoute selects the eligible worker and applies its normal
+cooldowns and cross-provider failover, including Gemini when OpenRouter is
+limited. This ladder governs its OmniRoute tool calls and standalone
+OmniRoute requests, not model calls made directly by an unwrapped OpenCode
+host.
 
 ## Execution and retries
 

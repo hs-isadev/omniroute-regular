@@ -25,9 +25,14 @@ export function claudeHarnessEnvironment(base: NodeJS.ProcessEnv, mode: RoutingM
   return output;
 }
 
-export function openCodeHarnessEnvironment(base: NodeJS.ProcessEnv, runtimeRoot: string, openRouterApiKey: string, inlineConfig: string): NodeJS.ProcessEnv {
+/**
+ * OpenCode uses the OpenRouter-shaped provider schema for compatibility, but
+ * the managed harness points its base URL at the local OmniRoute daemon. The
+ * value is therefore the daemon bearer token, never an upstream provider key.
+ */
+export function openCodeHarnessEnvironment(base: NodeJS.ProcessEnv, runtimeRoot: string, localDaemonToken: string, inlineConfig: string): NodeJS.ProcessEnv {
   const output = claudeHarnessEnvironment(base, "regular", runtimeRoot);
-  output.OPENROUTER_API_KEY = openRouterApiKey;
+  output.OPENROUTER_API_KEY = localDaemonToken;
   output.OPENCODE_CONFIG_CONTENT = inlineConfig;
   return output;
 }
@@ -76,7 +81,7 @@ export function openCodeRegularConfig(nodePath: string, cliPath: string, runtime
         whitelist: [modelId],
         models: {
           [modelId]: {
-            name: "Live verified free host model (actual model shown in replies)",
+            name: "OmniRoute-managed free host route (actual worker shown in replies)",
             options: {
               provider: { allow_fallbacks: false },
             },
