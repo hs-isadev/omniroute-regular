@@ -89,6 +89,26 @@ test("all hosted profiles require confirmation and missing keys never create ada
   assert.throws(() => configureProvider(config, "anthropic", { enabled: true, confirmFreeTier: true }), /only enables free/);
 });
 
+test("six supplied credential slots rotate within one provider identity", async () => {
+  const config = structuredClone(DEFAULT_CONFIG);
+  configureProvider(config, "mistral", { enabled: true, confirmFreeTier: true });
+  const settings = config.providers.find((item) => item.id === "mistral")!;
+  const authorization: string[] = [];
+  const provider = createConfiguredProvider(settings, {
+    MISTRAL_API_KEY: "slot-a",
+    MISTRAL_API_KEY_1: "slot-b",
+  }, {
+    skipDnsValidationForTests: true,
+    fetchImpl: async (_url, init) => {
+      authorization.push(new Headers(init?.headers).get("authorization") ?? "");
+      return Response.json({ choices: [{ message: { content: "ok" } }] });
+    },
+  });
+  await provider.generate(request(settings.models[0]!.modelId));
+  await provider.generate(request(settings.models[0]!.modelId));
+  assert.deepEqual(authorization, ["Bearer slot-a", "Bearer slot-b"]);
+});
+
 for (const profile of EXTRA_FREE_PROVIDERS) test(`${profile.id}: authenticated discovery, generation and streaming use its own endpoint`, async () => {
   const config = structuredClone(DEFAULT_CONFIG);
   configureProvider(config, profile.id, { enabled: true, confirmFreeTier: true });

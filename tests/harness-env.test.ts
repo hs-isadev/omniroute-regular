@@ -65,6 +65,7 @@ test("OpenCode regular harness uses a clean environment and only the configured 
   assert.deepEqual(config.provider.openrouter.whitelist, ["openrouter/free"]);
   assert.equal(config.provider.openrouter.models["openrouter/free"]?.options.provider.allow_fallbacks, false);
   assert.equal(config.provider.openrouter.options.baseURL, "http://127.0.0.1:47831/v1");
+  assert.match(config.provider.openrouter.options.headers["x-omniroute-session"], /^opencode-[a-f0-9]{16}$/);
   assert.equal(config.mcp.omniroute.environment.OMNIROUTE_ROUTING_MODE, "regular");
   assert.doesNotMatch(inlineConfig, /API_KEY|AUTH_TOKEN|secret/i);
 });

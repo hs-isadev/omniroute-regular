@@ -75,6 +75,7 @@ if(linux) for(const path of [join(release,'Setup.sh'),join(payload,'Settings.sh'
 await cp(join(root,'README.md'),join(release,'README.md'));
 await mkdir(join(release,'docs'),{recursive:true});
 await cp(join(root,'docs/free-provider-expansion.md'),join(release,'docs/free-provider-expansion.md'));
+await cp(join(root,'docs/opensource-setup-additions.md'),join(release,'docs/opensource-setup-additions.md'));
 await cp(join(root,'docs/antigravity-regular.md'),join(release,'docs/antigravity-regular.md'));
 await mkdir(join(release,'docs/testing'),{recursive:true});
 await cp(join(root,'docs/testing/antigravity-regular.tdd.md'),join(release,'docs/testing/antigravity-regular.tdd.md'));

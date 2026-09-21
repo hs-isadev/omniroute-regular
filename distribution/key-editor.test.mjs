@@ -19,7 +19,8 @@ test('template marks saved providers without exporting keys and excludes credit 
   assert.match(text,/# groq: saved/);assert.match(text,/^groq: *\r?$/m);
   assert.doesNotMatch(text,/fixture-never-export|HF_TOKEN=|VERCEL_AI_GATEWAY_API_KEY=/);
   assert.match(text,/https:\/\/console.groq.com\/keys/);
-  assert.match(text,/cerebras:/);assert.match(text,/sambanova:/);
+  assert.match(text,/cerebras:/);assert.match(text,/sambanova:/);assert.match(text,/CLOUDFLARE_ACCOUNT_ID:/);
+  assert.match(text,/GROQ_API_KEY_5:/);
 });
 test('existing populated edits are preserved exactly, and parser rejects unsafe fields without echo',async()=>{
   requireEditor();const f=await fixture();const file=await editor.prepareKeyFile(f);

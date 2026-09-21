@@ -8,7 +8,7 @@ import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { atomicWriteFile, saveConfig } from "@omniroute/config";
 import { CAPABILITIES, ROUTING_MODES, type Capability, type RouteEvent, type RouteRequest, type RoutingMode, type TaskState, type TaskSubmission, type TaskVerification } from "@omniroute/contracts";
-import { TaskLifecycle } from "@omniroute/core";
+import { DurableSessionStore, compactSessionMessages, TaskLifecycle, type SessionMessage } from "@omniroute/core";
 import { globalRedactor, safeError, SafeError } from "@omniroute/observability";
 import type { DaemonRuntime } from "./runtime.js";
 
@@ -50,6 +50,7 @@ export class OmniDaemonServer {
   readonly #oneTimeSessions = new Map<string, OneTimeSession>();
   readonly #rate = new Map<string, number[]>();
   readonly #tasks: TaskLifecycle;
+  readonly #sessions: DurableSessionStore;
   #activeRoutes = 0;
   #http: Server | null = null;
   #lock: NetServer | null = null;
@@ -57,6 +58,7 @@ export class OmniDaemonServer {
   constructor(runtime: DaemonRuntime) {
     this.#runtime = runtime;
     this.#tasks = new TaskLifecycle(runtime.tasks);
+    this.#sessions = new DurableSessionStore(runtime.paths.sessionsDir, { maxTokens: runtime.config.privacy.sessionMaxTokens, recentMessages: runtime.config.privacy.sessionRecentMessages, retentionDays: runtime.config.privacy.sessionRetentionDays });
   }
 
   async start(): Promise<{ host: string; port: number }> {
@@ -121,6 +123,9 @@ export class OmniDaemonServer {
       }
       if (request.method === "GET" && url.pathname === "/v1/models") { this.json(response, 200, await this.#runtime.registry.current(url.searchParams.get("refresh") === "1")); return; }
       if (request.method === "GET" && url.pathname === "/v1/routes") { this.json(response, 200, { routes: await this.#runtime.audit.recent(Number(url.searchParams.get("limit") ?? 50)) }); return; }
+      if (request.method === "GET" && url.pathname === "/v1/sessions") { this.json(response, 200, { sessions: this.#runtime.config.privacy.sessionFilesEnabled ? await this.#sessions.list() : [] }); return; }
+      if (url.pathname.startsWith("/v1/sessions/") && request.method === "GET") { const id = this.sessionPathId(url.pathname); this.json(response, 200, { session: this.#runtime.config.privacy.sessionFilesEnabled ? await this.#sessions.load(id) : null }); return; }
+      if (url.pathname.startsWith("/v1/sessions/") && request.method === "DELETE") { const id = this.sessionPathId(url.pathname); if (this.#runtime.config.privacy.sessionFilesEnabled) await this.#sessions.reset(id); this.json(response, 200, { reset: id }); return; }
       if (request.method === "GET" && url.pathname === "/v1/usage") { this.json(response, 200, { summary: await this.#runtime.audit.tokenSavingsSummary() }); return; }
       if (request.method === "GET" && url.pathname === "/v1/config") { this.json(response, 200, this.#runtime.config); return; }
       if (url.pathname === "/v1/tasks" && request.method === "POST") { this.json(response, 201, await this.#tasks.submit(await this.body(request) as TaskSubmission)); return; }
@@ -341,7 +346,13 @@ export class OmniDaemonServer {
 
   private async handleChatCompatibility(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const input = await this.body(request) as { messages?: Array<{ role?: string; content?: string | Array<{ type?: string; text?: string }> }>; stream?: boolean; user?: string };
-    const prompt = (input.messages ?? []).map((message) => `${message.role ?? "user"}: ${typeof message.content === "string" ? message.content : (message.content ?? []).map((part) => part.text ?? "").join("\n")}`).join("\n\n");
+    const sessionId = this.requestSessionId(request);
+    const incoming = this.sessionMessages(input.messages ?? []);
+    const resolvedMessages = this.#runtime.config.privacy.sessionFilesEnabled && sessionId ? await this.resolveSessionMessages(sessionId, incoming) : incoming;
+    const sessionMessages = this.#runtime.config.privacy.sessionFilesEnabled && sessionId
+      ? compactSessionMessages(resolvedMessages, { maxTokens: this.#runtime.config.privacy.sessionMaxTokens, recentMessages: this.#runtime.config.privacy.sessionRecentMessages }).messages
+      : resolvedMessages;
+    const prompt = this.renderSessionMessages(sessionMessages);
     const route = this.routeRequest({ prompt, sourceClient: "openai-compatible", hostApplication: "compatible-api", metadata: input.user ? { user: createHash("sha256").update(input.user).digest("hex").slice(0, 16) } : {} });
     const streaming = input.stream === true;
     if (streaming) {
@@ -362,6 +373,7 @@ export class OmniDaemonServer {
           response.write(`data: ${JSON.stringify({ id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model: "omniroute", choices: [{ index: 0, delta: { content: event.text }, finish_reason: null }] })}\n\n`);
         }
       });
+      await this.persistSession(sessionId, sessionMessages, result.answer);
       begin();
       const id = `chatcmpl_${result.routeId}`;
       response.write(`data: ${JSON.stringify({ id, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model: "omniroute", choices: [{ index: 0, delta: { content: `\n\n${result.badge}` }, finish_reason: null }], omni_attribution: result.attribution })}\n\n`);
@@ -369,14 +381,78 @@ export class OmniDaemonServer {
       response.end("data: [DONE]\n\n");
     } else {
       const result = await this.runRoute(route, request, response);
+      await this.persistSession(sessionId, sessionMessages, result.answer);
       this.attributionHeaders(response, result);
       this.json(response, 200, { id: `chatcmpl_${result.routeId}`, object: "chat.completion", created: Math.floor(Date.now() / 1000), model: "omniroute", choices: [{ index: 0, message: { role: "assistant", content: `${result.answer}\n\n${result.badge}` }, finish_reason: "stop" }], usage: { prompt_tokens: result.attribution.usage.inputTokens, completion_tokens: result.attribution.usage.outputTokens, total_tokens: result.attribution.usage.inputTokens + result.attribution.usage.outputTokens }, omni_attribution: result.attribution });
     }
   }
 
+  private sessionPathId(pathname: string): string {
+    const encoded = pathname.slice("/v1/sessions/".length);
+    let id: string;
+    try { id = decodeURIComponent(encoded); } catch { throw new SafeError("SESSION_ID_INVALID", "Session identifier is invalid", 400); }
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id) || id === "." || id === "..") throw new SafeError("SESSION_ID_INVALID", "Session identifier is invalid", 400);
+    return id;
+  }
+
+  private requestSessionId(request: IncomingMessage): string | null {
+    const value = request.headers["x-omniroute-session"];
+    const id = Array.isArray(value) ? value[0] : value;
+    if (id === undefined) return null;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id) || id === "." || id === "..") throw new SafeError("SESSION_ID_INVALID", "X-OmniRoute-Session must be a safe local session identifier", 400);
+    return id;
+  }
+
+  private sessionMessages(messages: Array<{ role?: string; content?: unknown }>): SessionMessage[] {
+    return messages.flatMap((message) => {
+      const role = message.role === "system" || message.role === "assistant" || message.role === "tool" ? message.role : "user";
+      const content = typeof message.content === "string"
+        ? message.content
+        : (Array.isArray(message.content) ? message.content.map((part) => {
+          if (!part || typeof part !== "object") return "";
+          const value = part as { text?: unknown; content?: unknown };
+          return typeof value.text === "string" ? value.text : typeof value.content === "string" ? value.content : "";
+        }).join("\n") : "");
+      return content.trim() ? [{ role, content, at: new Date().toISOString() }] : [];
+    });
+  }
+
+  private async resolveSessionMessages(id: string, incoming: SessionMessage[]): Promise<SessionMessage[]> {
+    const existing = await this.#sessions.load(id);
+    if (!existing || incoming.length === 0) return existing?.messages ?? incoming;
+    if (incoming.length > 1 || incoming.some((message) => message.role !== "user")) return incoming;
+    const last = existing.messages.at(-1);
+    if (last?.role === "user" && last.content === incoming[0]!.content) return existing.messages;
+    return [...existing.messages, ...incoming];
+  }
+
+  private renderSessionMessages(messages: SessionMessage[]): string {
+    return messages.map((message) => `${message.role}: ${message.content}`).join("\n\n");
+  }
+
+  private async persistSession(id: string | null, messages: SessionMessage[], answer: string): Promise<void> {
+    if (!id || !this.#runtime.config.privacy.sessionFilesEnabled) return;
+    try {
+      await this.#sessions.save(id, [...messages, { role: "assistant", content: answer, at: new Date().toISOString() }]);
+    } catch (error) {
+      // Session files are durability aids, not part of inference correctness.
+      // A read-only disk or transient filesystem failure must not turn a
+      // successful provider response into a user-visible 500/SSE failure.
+      await this.#runtime.logger.write("warn", "session.persist_failed", { sessionId: id, error: error instanceof Error ? error.message : String(error) }).catch(() => undefined);
+    }
+  }
+
   private async handleResponsesCompatibility(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const input = await this.body(request) as { input?: string | Array<{ role?: string; content?: unknown }>; stream?: boolean };
-    const prompt = typeof input.input === "string" ? input.input : JSON.stringify(input.input ?? "");
+    const sessionId = this.requestSessionId(request);
+    const incoming = typeof input.input === "string"
+      ? this.sessionMessages([{ role: "user", content: input.input }])
+      : this.sessionMessages((Array.isArray(input.input) ? input.input : []).map((message) => ({ ...(message.role === undefined ? {} : { role: message.role }), content: Array.isArray(message.content) ? message.content : typeof message.content === "string" ? message.content : [] })));
+    const resolvedMessages = this.#runtime.config.privacy.sessionFilesEnabled && sessionId ? await this.resolveSessionMessages(sessionId, incoming) : incoming;
+    const sessionMessages = this.#runtime.config.privacy.sessionFilesEnabled && sessionId
+      ? compactSessionMessages(resolvedMessages, { maxTokens: this.#runtime.config.privacy.sessionMaxTokens, recentMessages: this.#runtime.config.privacy.sessionRecentMessages }).messages
+      : resolvedMessages;
+    const prompt = this.renderSessionMessages(sessionMessages);
     const route = this.routeRequest({ prompt, sourceClient: "responses-compatible", hostApplication: "compatible-api" });
     if (input.stream) {
       let routeId = "pending", activeWorker = "unknown", started = false;
@@ -391,12 +467,14 @@ export class OmniDaemonServer {
         if (event.type === "worker.delta" && event.subtaskId === null) { begin(); sse(response, "response.output_text.delta", { type: "response.output_text.delta", delta: event.text }); }
       });
       begin();
+      await this.persistSession(sessionId, sessionMessages, result.answer);
       const payload = this.responsesPayload(result);
       sse(response, "response.output_text.delta", { type: "response.output_text.delta", delta: `\n\n${result.badge}` });
       response.write(`event: response.completed\ndata: ${JSON.stringify({ type: "response.completed", response: payload })}\n\n`);
       response.end();
     } else {
       const result = await this.runRoute(route, request, response);
+      await this.persistSession(sessionId, sessionMessages, result.answer);
       this.attributionHeaders(response, result);
       this.json(response, 200, this.responsesPayload(result));
     }

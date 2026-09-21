@@ -7,20 +7,24 @@ import { pathToFileURL } from 'node:url';
 import { CREDIT_PROVIDERS, CODING_CANDIDATES } from './regular-policy.mjs';
 export { CODING_CANDIDATES } from './regular-policy.mjs';
 
+const keySlots = (base) => [base, `${base}_1`, `${base}_2`, `${base}_3`, `${base}_4`, `${base}_5`];
 export const fields = {
-  openrouter: ['OPENROUTER_API_KEY'], groq: ['GROQ_API_KEY'], gemini: ['GEMINI_API_KEY'],
-  mistral: ['MISTRAL_API_KEY'], cohere: ['COHERE_API_KEY'],
-  cerebras: ['CEREBRAS_API_KEY'], sambanova: ['SAMBANOVA_API_KEY'],
-  cloudflare: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'], huggingface: ['HF_TOKEN'],
-  kilo: ['KILO_API_KEY'], zai: ['ZAI_API_KEY'], nvidia: ['NVIDIA_API_KEY'],
-  vercel: ['VERCEL_AI_GATEWAY_API_KEY'], 'opencode-zen': ['OPENCODE_ZEN_API_KEY'],
+  openrouter: keySlots('OPENROUTER_API_KEY'), groq: keySlots('GROQ_API_KEY'), gemini: keySlots('GEMINI_API_KEY'),
+  mistral: keySlots('MISTRAL_API_KEY'), cohere: keySlots('COHERE_API_KEY'),
+  cerebras: keySlots('CEREBRAS_API_KEY'), sambanova: keySlots('SAMBANOVA_API_KEY'),
+  cloudflare: [...keySlots('CLOUDFLARE_API_TOKEN'), 'CLOUDFLARE_ACCOUNT_ID'], huggingface: keySlots('HF_TOKEN'),
+  kilo: keySlots('KILO_API_KEY'), zai: keySlots('ZAI_API_KEY'), nvidia: keySlots('NVIDIA_API_KEY'),
+  vercel: keySlots('VERCEL_AI_GATEWAY_API_KEY'), 'opencode-zen': keySlots('OPENCODE_ZEN_API_KEY'),
+  together: keySlots('TOGETHER_API_KEY'), fireworks: keySlots('FIREWORKS_API_KEY'), novita: keySlots('NOVITA_API_KEY'),
+  lepton: keySlots('LEPTON_API_KEY'), replicate: keySlots('REPLICATE_API_TOKEN'), perplexity: keySlots('PERPLEXITY_API_KEY'),
+  deepinfra: keySlots('DEEPINFRA_API_TOKEN'), '9router': keySlots('9ROUTER_API_KEY'),
 };
 export function regularConfig() {
   // Never send newly entered keys to an endpoint from editable runtime config.
   const existing = structuredClone(DEFAULT_CONFIG);
   existing.routing.defaultMode = 'regular'; existing.routing.freeOnly = true;
   existing.routing.orchestratorProviderId = 'openrouter'; existing.routing.orchestratorModelId = 'openrouter/free';
-  existing.routing.directProviderOrder = ['claude-consumer','zai-consumer','qwen-consumer','kimi-consumer','deepseek-consumer','perplexity-consumer','groq','cerebras','sambanova','gemini','mistral','cohere','cloudflare','huggingface','zai','kilo','nvidia','vercel','opencode-zen','openrouter'];
+  existing.routing.directProviderOrder = ['claude-consumer','zai-consumer','qwen-consumer','kimi-consumer','deepseek-consumer','perplexity-consumer','groq','cerebras','sambanova','gemini','mistral','cohere','cloudflare','huggingface','zai','kilo','nvidia','vercel','opencode-zen','together','fireworks','novita','lepton','replicate','perplexity','deepinfra','9router','openrouter'];
   existing.daemon.port = 47839; existing.daemon.allowedOrigins = ['http://127.0.0.1:47839'];
   existing.reliability.retryLimit=0;
   for (const provider of existing.providers) {
@@ -71,8 +75,18 @@ export async function configure(input, paths, { protector, factory = createConfi
       const settings = config.providers.find(provider => provider.id === id);
       const retainedEnabled = existingSetup ? settings.enabled : !!vault.get(id);
       if (!supplied) { if (!existingSetup) settings.enabled = !!vault.get(id); continue; }
-      const values = Object.fromEntries(names.map(name => [name, input.keys[name]?.trim() ?? '']));
-      if (Object.values(values).some(value => !value)) { failed.push(id); settings.enabled = retainedEnabled; continue; }
+      const previous = vault.get(id) ?? {};
+      const entered = names.map(name => [name, input.keys[name]?.trim() ?? '']);
+      const firstSupplied = entered.find(([, value]) => value)?.[1] ?? '';
+      if (id === 'cloudflare' && !input.keys.CLOUDFLARE_ACCOUNT_ID?.trim()) { failed.push(id); settings.enabled = retainedEnabled; continue; }
+      const values = Object.fromEntries(entered
+        .map(([name, value]) => [name, value || previous[name] || ''])
+        .filter(([, value]) => !!value));
+      // A slot is independent: a user may provide any subset of the six
+      // fields. The canonical field carries the first non-empty key so legacy
+      // provider construction remains compatible, while all supplied slots
+      // stay in the vault for rotating key failover.
+      if (!values[names[0]] && firstSupplied) values[names[0]] = firstSupplied;
       try {
         const trusted = structuredClone(DEFAULT_CONFIG.providers.find(provider => provider.id === id));
         trusted.freeTierConfirmed = true;

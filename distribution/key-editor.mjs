@@ -13,8 +13,8 @@ import { getRuntimePaths, EXTRA_FREE_PROVIDERS } from '../packages/config/dist/i
 const execute=promisify(execFile),MAX=65536;
 const supported=Object.fromEntries(Object.entries(fields).filter(([id])=>!CREDIT_PROVIDERS.includes(id)));
 const allowed=new Set(Object.values(supported).flat());
-const labels=Object.fromEntries(Object.entries(supported).flatMap(([id,names])=>names.map((name,index)=>[name,index===0?id:name.toLowerCase()])));
-const aliases=new Map(Object.entries(labels).map(([name,label])=>[label,name]));
+const labels=Object.fromEntries(Object.entries(supported).flatMap(([id,names])=>names.map((name,index)=>[name,name==='CLOUDFLARE_ACCOUNT_ID'?'cloudflare account id':index===0?id:`${id} key ${index+1}`])));
+const aliases=new Map(Object.entries(labels).flatMap(([name,label])=>[[label.toLowerCase(),name],[name.toLowerCase(),name]]));
 const links={groq:'https://console.groq.com/keys',gemini:'https://aistudio.google.com/apikey',openrouter:'https://openrouter.ai/settings/keys',...Object.fromEntries(EXTRA_FREE_PROVIDERS.map(p=>[p.id,p.signup]))};
 export function parseKeyFile(text) {
   if(Buffer.byteLength(text)>MAX||text.includes('\0')) throw new Error('Key file is too large or contains invalid characters.');
@@ -69,15 +69,20 @@ function template(saved,remaining={}) {
     '# Plaintext risk: disable editor autosave/session backups. Cleanup is NOT secure erasure.',
     '# Successful values are removed from this file; failed values remain for retry.',
     '# This EDITING file is temporary plaintext. Imported keys are encrypted in the vault.',
-    '# One key per provider, not per model. Leave providers you do not want blank.',
+    '# One key per slot, not per model. Up to 6 slots per provider. Leave providers you do not want blank.',
     '# LongCat excluded: current API is paid; old free models were retired.',
     '# Hugging Face and Vercel credit-based providers are disabled in Regular mode.',''];
-  for(const id of ['groq','cerebras','sambanova','gemini','cohere','cloudflare','mistral','openrouter','kilo','zai','nvidia','opencode-zen']) {
+  for(const id of ['groq','cerebras','sambanova','gemini','cohere','cloudflare','mistral','openrouter','kilo','zai','nvidia','opencode-zen','together','fireworks','novita','lepton','replicate','perplexity','deepinfra','9router']) {
     const names=supported[id];
     lines.push('# '+id+': '+(saved.has(id)?'saved (blank keeps it)':'not configured'),'# Get key: '+links[id]);
     const note=EXTRA_FREE_PROVIDERS.find(p=>p.id===id)?.note;
     if(note)lines.push('# '+note);
-    for(const name of names)lines.push(labels[name]+': '+(remaining[name]??''));
+    // Cloudflare has six token slots plus its required account identifier.
+    const limit=id==='cloudflare'?names.length:Math.min(names.length,6);
+    for(let i=0;i<limit;i++){
+      const slotName=names[i];
+      lines.push(labels[slotName]+': '+(remaining[slotName]??''));
+    }
     lines.push('');
   }
   return lines.join('\n');

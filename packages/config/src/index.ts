@@ -18,6 +18,7 @@ export interface RuntimePaths {
   log: string;
   routesDir: string;
   routes: string;
+  sessionsDir: string;
   backupsDir: string;
   stateDir: string;
   tasksDir: string;
@@ -36,6 +37,7 @@ export interface ProviderSettings {
   termsUrl?: string;
   freeModelOrder?: string[];
   credentialField: string | null;
+  credentialFields?: string[] | null;
   baseUrl: string;
   apiPrefix: string;
   mcpCommand?: string;
@@ -87,6 +89,10 @@ export interface OmniConfig {
     emergencyFallbackEnabled: boolean;
     maxSubtasks: number;
     maxParallelWorkers: number;
+    /** Small, sequentially waved specialist fan-out for low-context workers. */
+    nanoSubagentsEnabled: boolean;
+    nanoSubtaskCount: number;
+    nanoSubtaskOutputTokens: number;
     maxOutputTokensPerRequest: number;
     expectedSubtaskOutputTokens: number;
     modelHealthTtlSeconds: number;
@@ -101,6 +107,11 @@ export interface OmniConfig {
     privacyMode: boolean;
     retainContent: boolean;
     contentRetentionDays: number;
+    /** Local OpenCode-compatible conversation snapshots; independent of audit content retention. */
+    sessionFilesEnabled: boolean;
+    sessionRetentionDays: number;
+    sessionMaxTokens: number;
+    sessionRecentMessages: number;
     metadataRetentionDays: number;
     localTelemetryOnly: true;
   };
@@ -154,6 +165,8 @@ const openAiModels: ProviderSettings["models"] = [
   },
 ];
 
+const credentialSlots = (base: string): string[] => [base, ...Array.from({ length: 5 }, (_value, index) => `${base}_${index + 1}`)];
+
 export const DEFAULT_CONFIG: OmniConfig = {
   schemaVersion: 1,
   daemon: {
@@ -182,6 +195,9 @@ export const DEFAULT_CONFIG: OmniConfig = {
     emergencyFallbackEnabled: false,
     maxSubtasks: 8,
     maxParallelWorkers: 3,
+    nanoSubagentsEnabled: true,
+    nanoSubtaskCount: 6,
+    nanoSubtaskOutputTokens: 512,
     maxOutputTokensPerRequest: 32_000,
     expectedSubtaskOutputTokens: 4_000,
     modelHealthTtlSeconds: 300,
@@ -196,6 +212,10 @@ export const DEFAULT_CONFIG: OmniConfig = {
     privacyMode: false,
     retainContent: false,
     contentRetentionDays: 0,
+    sessionFilesEnabled: true,
+    sessionRetentionDays: 30,
+    sessionMaxTokens: 24_000,
+    sessionRecentMessages: 12,
     metadataRetentionDays: 90,
     localTelemetryOnly: true,
   },
@@ -209,9 +229,9 @@ export const DEFAULT_CONFIG: OmniConfig = {
     ].map(([id, modelId]) => ({ id: id!, type: "mcp-stdio" as const, enabled: false, freeTierOnly: true, freeTierConfirmed: false, transport: "browser" as const, privacy: "evaluation-logging-possible" as const, credentialField: null, baseUrl: "http://127.0.0.1:9222", apiPrefix: "", mcpCommand: "node", mcpArgs: [], maxTaskClass: "small" as const, discoveryTtlSeconds: 60, models: [{ modelId: modelId!, enabled: true, allowed: true, capabilities: { text: true, coding: true, structured_output: false, web: false, tool_calling: false }, contextWindow: 32_768, maxOutputTokens: 4_096, reasoningEfforts: ["none" as const, "high" as const], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 3 as const, latencyTier: 3 as const }] })),
     { id: "openai", type: "openai", enabled: false, freeTierOnly: false, credentialField: "OPENAI_API_KEY", baseUrl: "https://api.openai.com", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: openAiModels },
     { id: "anthropic", type: "anthropic", enabled: false, freeTierOnly: false, credentialField: "ANTHROPIC_API_KEY", baseUrl: "https://api.anthropic.com", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: [] },
-    { id: "openrouter", type: "openai-compatible", enabled: true, freeTierOnly: true, freeTierConfirmed: true, privacy: "provider-policy", termsUrl: "https://openrouter.ai/terms", credentialField: "OPENROUTER_API_KEY", baseUrl: "https://openrouter.ai/api/", apiPrefix: "v1/", discoveryTtlSeconds: 300, models: [{ modelId: "openrouter/free", enabled: true, allowed: true, capabilities: { text: true, vision: true, tool_calling: true, long_context: true, coding: true, structured_output: true }, contextWindow: 131_072, maxOutputTokens: 8_192, reasoningEfforts: ["none", "low", "medium"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 3 }] },
-    { id: "gemini", type: "openai-compatible", enabled: true, freeTierOnly: true, freeTierConfirmed: true, privacy: "provider-policy", termsUrl: "https://policies.google.com/terms", credentialField: "GEMINI_API_KEY", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/", apiPrefix: "", discoveryTtlSeconds: 3600, models: [{ modelId: "gemini-3.7-flash", enabled: true, allowed: true, capabilities: { text: true, vision: true, tool_calling: true, long_context: true, coding: true, structured_output: true }, contextWindow: 1_048_576, maxOutputTokens: 65_536, reasoningEfforts: ["none", "low", "medium", "high"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 2 }] },
-    { id: "groq", type: "openai-compatible", enabled: true, freeTierOnly: true, freeTierConfirmed: true, privacy: "provider-policy", termsUrl: "https://groq.com/terms-of-use/", credentialField: "GROQ_API_KEY", baseUrl: "https://api.groq.com/openai/", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: [{ modelId: "groq/compound", enabled: true, allowed: true, capabilities: { text: true, tool_calling: true, long_context: true, coding: true, web: true, structured_output: false }, contextWindow: 131_072, maxOutputTokens: 8_192, reasoningEfforts: ["none", "low"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 1 }, { modelId: "openai/gpt-oss-120b", enabled: true, allowed: true, capabilities: { text: true, tool_calling: true, long_context: true, coding: true, structured_output: false }, contextWindow: 131_072, maxOutputTokens: 65_536, reasoningEfforts: ["none", "low", "medium", "high"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 1 }, { modelId: "qwen/qwen3.6-27b", enabled: true, allowed: true, capabilities: { text: true, tool_calling: true, long_context: true, coding: true, structured_output: false }, contextWindow: 131_072, maxOutputTokens: 32_768, reasoningEfforts: ["none", "low", "medium"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 3, latencyTier: 1 }] },
+    { id: "openrouter", type: "openai-compatible", enabled: true, freeTierOnly: true, freeTierConfirmed: true, privacy: "provider-policy", termsUrl: "https://openrouter.ai/terms", credentialField: "OPENROUTER_API_KEY", credentialFields: credentialSlots("OPENROUTER_API_KEY"), baseUrl: "https://openrouter.ai/api/", apiPrefix: "v1/", discoveryTtlSeconds: 300, models: [{ modelId: "openrouter/free", enabled: true, allowed: true, capabilities: { text: true, vision: true, tool_calling: true, long_context: true, coding: true, structured_output: true }, contextWindow: 131_072, maxOutputTokens: 8_192, reasoningEfforts: ["none", "low", "medium"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 3 }] },
+    { id: "gemini", type: "openai-compatible", enabled: true, freeTierOnly: true, freeTierConfirmed: true, privacy: "provider-policy", termsUrl: "https://policies.google.com/terms", credentialField: "GEMINI_API_KEY", credentialFields: credentialSlots("GEMINI_API_KEY"), baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/", apiPrefix: "", discoveryTtlSeconds: 3600, models: [{ modelId: "gemini-3.7-flash", enabled: true, allowed: true, capabilities: { text: true, vision: true, tool_calling: true, long_context: true, coding: true, structured_output: true }, contextWindow: 1_048_576, maxOutputTokens: 65_536, reasoningEfforts: ["none", "low", "medium", "high"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 2 }] },
+    { id: "groq", type: "openai-compatible", enabled: true, freeTierOnly: true, freeTierConfirmed: true, privacy: "provider-policy", termsUrl: "https://groq.com/terms-of-use/", credentialField: "GROQ_API_KEY", credentialFields: credentialSlots("GROQ_API_KEY"), baseUrl: "https://api.groq.com/openai/", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: [{ modelId: "groq/compound", enabled: true, allowed: true, capabilities: { text: true, tool_calling: true, long_context: true, coding: true, web: true, structured_output: false }, contextWindow: 131_072, maxOutputTokens: 8_192, reasoningEfforts: ["none", "low"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 1 }, { modelId: "openai/gpt-oss-120b", enabled: true, allowed: true, capabilities: { text: true, tool_calling: true, long_context: true, coding: true, structured_output: false }, contextWindow: 131_072, maxOutputTokens: 65_536, reasoningEfforts: ["none", "low", "medium", "high"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 4, latencyTier: 1 }, { modelId: "qwen/qwen3.6-27b", enabled: true, allowed: true, capabilities: { text: true, tool_calling: true, long_context: true, coding: true, structured_output: false }, contextWindow: 131_072, maxOutputTokens: 32_768, reasoningEfforts: ["none", "low", "medium"], inputPerMillionUsd: 0, outputPerMillionUsd: 0, intelligenceTier: 3, latencyTier: 1 }] },
     { id: "custom-openai", type: "openai-compatible", enabled: false, freeTierOnly: false, credentialField: "CUSTOM_OPENAI_API_KEY", baseUrl: "https://example.invalid", apiPrefix: "v1/", discoveryTtlSeconds: 3600, models: [] },
     { id: "ollama", type: "local", enabled: false, freeTierOnly: true, freeTierConfirmed: true, transport: "local", privacy: "local", credentialField: null, baseUrl: "http://127.0.0.1:11434", apiPrefix: "v1/", discoveryTtlSeconds: 60, models: [] },
   ],
@@ -233,6 +253,7 @@ export function getRuntimePaths(override?: string): RuntimePaths {
     log: join(root, "logs", "omniroute.jsonl"),
     routesDir: join(root, "routes"),
     routes: join(root, "routes", "routes.jsonl"),
+    sessionsDir: join(root, "sessions"),
     backupsDir: join(root, "backups"),
     stateDir: join(root, "state"),
     tasksDir: join(root, "state", "tasks"),
@@ -243,7 +264,7 @@ export function getRuntimePaths(override?: string): RuntimePaths {
 
 export async function ensureRuntimeDirectories(paths = getRuntimePaths()): Promise<void> {
   await Promise.all([
-    paths.root, paths.vaultDir, paths.importDir, paths.logsDir, paths.routesDir,
+    paths.root, paths.vaultDir, paths.importDir, paths.logsDir, paths.routesDir, paths.sessionsDir,
     paths.backupsDir, paths.stateDir, paths.tasksDir, paths.integrationsDir,
   ].map((path) => mkdir(path, { recursive: true })));
 }
@@ -307,6 +328,13 @@ export function validateConfig(config: OmniConfig): void {
   if (!ROUTING_MODES.includes(config.routing.defaultMode)) throw new Error("default routing mode is invalid");
   if (typeof config.routing.freeModelFailoverEnabled !== "boolean") throw new Error("free model failover setting must be boolean");
   if (typeof config.routing.intentRoutingEnabled !== "boolean") throw new Error("intent routing setting must be boolean");
+  if (typeof config.routing.nanoSubagentsEnabled !== "boolean") throw new Error("nano subagent setting must be boolean");
+  if (!Number.isInteger(config.routing.nanoSubtaskCount) || config.routing.nanoSubtaskCount < 1 || config.routing.nanoSubtaskCount > 8) throw new Error("nano subtask count is invalid");
+  if (!Number.isInteger(config.routing.nanoSubtaskOutputTokens) || config.routing.nanoSubtaskOutputTokens < 128 || config.routing.nanoSubtaskOutputTokens > 4096) throw new Error("nano subtask output limit is invalid");
+  if (typeof config.privacy.sessionFilesEnabled !== "boolean") throw new Error("session file setting must be boolean");
+  for (const value of [config.privacy.sessionRetentionDays, config.privacy.sessionMaxTokens, config.privacy.sessionRecentMessages]) {
+    if (!Number.isInteger(value) || value < 1 || value > 1_000_000) throw new Error("session retention/budget setting is invalid");
+  }
   if (!Number.isInteger(config.routing.freeModelCooldownMs) || config.routing.freeModelCooldownMs < 1000 || config.routing.freeModelCooldownMs > 86_400_000) throw new Error("free model cooldown must be 1000–86400000 milliseconds");
   if (!config.routing.orchestratorProviderId || !config.routing.orchestratorModelId) throw new Error("orchestrator provider and model are required");
   if (!REASONING_EFFORTS.includes(config.routing.defaultOrchestratorEffort) || !REASONING_EFFORTS.includes(config.routing.ambiguousOrchestratorEffort)) throw new Error("orchestrator reasoning effort is invalid");

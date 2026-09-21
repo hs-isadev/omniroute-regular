@@ -4,6 +4,7 @@ import { access, realpath, stat } from "node:fs/promises";
 import { delimiter, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { constants } from "node:fs";
 import { userInfo } from "node:os";
+import { createHash } from "node:crypto";
 
 const SAFE_INHERITED_ENVIRONMENT = [
   "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP",
@@ -70,6 +71,7 @@ export function openCodeHarnessArguments(modelId = "openrouter/free"): string[] 
 }
 
 export function openCodeRegularConfig(nodePath: string, cliPath: string, runtimeRoot: string, instructionsPath: string, hostModelBaseURL?: string, modelId = "openrouter/free"): string {
+  const sessionId = `opencode-${createHash("sha256").update(runtimeRoot).digest("hex").slice(0, 16)}`;
   return JSON.stringify({
     $schema: "https://opencode.ai/config.json",
     model: `openrouter/${modelId}`,
@@ -77,7 +79,10 @@ export function openCodeRegularConfig(nodePath: string, cliPath: string, runtime
     enabled_providers: ["openrouter"],
     provider: {
       openrouter: {
-        ...(hostModelBaseURL ? { options: { baseURL: hostModelBaseURL } } : {}),
+        options: {
+          ...(hostModelBaseURL ? { baseURL: hostModelBaseURL } : {}),
+          headers: { "x-omniroute-session": sessionId },
+        },
         whitelist: [modelId],
         models: {
           [modelId]: {

@@ -102,6 +102,15 @@ test("daemon enforces loopback auth, Host, one-time dashboard sessions, Origin, 
     assert.match(streamedText, /streamed compatibility answer/);
     assert.match(compatibleBody, /gpt-5\.6-sol/);
 
+    provider.responses.push({ text: JSON.stringify(planFixture()) }, { text: "durable session answer" });
+    const durable = await fetch(`${base}/v1/chat/completions`, { method: "POST", headers: { authorization: "Bearer local-test-token", "x-omniroute-session": "opencode-main", "content-type": "application/json" }, body: JSON.stringify({ messages: [{ role: "user", content: "remember this" }] }) });
+    assert.equal(durable.status, 200);
+    const sessions = await fetch(`${base}/v1/sessions`, { headers: { authorization: "Bearer local-test-token" } });
+    assert.deepEqual((await sessions.json() as { sessions: string[] }).sessions, ["opencode-main"]);
+    const stored = await fetch(`${base}/v1/sessions/opencode-main`, { headers: { authorization: "Bearer local-test-token" } });
+    assert.match(JSON.stringify(await stored.json()), /remember this/);
+    assert.equal((await fetch(`${base}/v1/sessions/opencode-main`, { method: "DELETE", headers: { authorization: "Bearer local-test-token" } })).status, 200);
+
     assert.equal((await fetch(`${base}/`)).status, 200);
     assert.equal((await fetch(`${base}/missing-dashboard-asset.js`)).status, 404);
 

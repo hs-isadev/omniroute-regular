@@ -913,11 +913,107 @@ export interface ProviderFactoryOptions {
   mcpToolCaller?: McpToolCaller | undefined;
 }
 
+/**
+ * Uses independently supplied keys for one provider without exposing them as
+ * separate provider identities. Calls are paced round-robin and retry only on
+ * normal transient/quota failures; authentication and invalid-request errors
+ * remain visible immediately. This is key-slot failover, not quota evasion.
+ */
+class RotatingProvider implements ProviderAdapter {
+  readonly id: string;
+  readonly supportsStreaming: boolean;
+  #providers: ProviderAdapter[];
+  #cursor = 0;
+
+  constructor(id: string, providers: ProviderAdapter[]) {
+    if (providers.length === 0) throw new SafeError("PROVIDER_CONFIGURATION_INVALID", `${id} has no configured key slots`, 400);
+    this.id = id;
+    this.#providers = providers;
+    this.supportsStreaming = providers.every((provider) => provider.supportsStreaming);
+  }
+
+  private next(): ProviderAdapter {
+    const provider = this.#providers[this.#cursor % this.#providers.length]!;
+    this.#cursor = (this.#cursor + 1) % this.#providers.length;
+    return provider;
+  }
+
+  private retryable(provider: ProviderAdapter, error: unknown): boolean {
+    return ["rate_limit", "transient", "timeout", "unavailable"].includes(provider.classifyError(error).category);
+  }
+
+  async listModels(signal?: AbortSignal): Promise<ProviderModel[]> {
+    return this.#providers[(this.#cursor + this.#providers.length - 1) % this.#providers.length]!.listModels(signal);
+  }
+
+  async healthCheck(signal?: AbortSignal): Promise<ProviderHealth> {
+    let last: ProviderHealth | null = null;
+    for (let index = 0; index < this.#providers.length; index += 1) {
+      const provider = this.next();
+      const health = await provider.healthCheck(signal);
+      if (health.status === "healthy") return health;
+      last = health;
+    }
+    return last ?? { status: "unhealthy", checkedAt: new Date().toISOString(), latencyMs: 0, message: "No key slot responded" };
+  }
+
+  async generate(request: GenerateRequest): Promise<GenerateResult> {
+    let last: unknown = null;
+    for (let attempt = 0; attempt < this.#providers.length; attempt += 1) {
+      const provider = this.next();
+      try { return await provider.generate(request); }
+      catch (error) {
+        last = error;
+        if (!this.retryable(provider, error)) throw error;
+      }
+    }
+    throw last ?? new SafeError("PROVIDER_UNAVAILABLE", `${this.id} key slots are unavailable`, 503);
+  }
+
+  async *stream(request: GenerateRequest): AsyncGenerator<ProviderStreamEvent> {
+    let last: unknown = null;
+    for (let attempt = 0; attempt < this.#providers.length; attempt += 1) {
+      const provider = this.next();
+      let emitted = false;
+      try {
+        for await (const event of provider.stream(request)) {
+          if (event.type === "delta") emitted = true;
+          yield event;
+        }
+        return;
+      } catch (error) {
+        last = error;
+        // Retrying after visible text would duplicate output, so leave
+        // partial streams to the outer route failover logic.
+        if (emitted || !this.retryable(provider, error)) throw error;
+      }
+    }
+    throw last ?? new SafeError("PROVIDER_UNAVAILABLE", `${this.id} key slots are unavailable`, 503);
+  }
+
+  async cancel(responseId: string): Promise<void> {
+    await this.#providers[(this.#cursor + this.#providers.length - 1) % this.#providers.length]!.cancel(responseId);
+  }
+
+  classifyError(error: unknown): ProviderErrorShape { return this.#providers[0]!.classifyError(error); }
+}
+
 export function createConfiguredProvider(settings: ProviderSettings, credential: Readonly<Record<string, string>>, options: Omit<ProviderFactoryOptions, "credentials"> = {}): ProviderAdapter {
-  const apiKey = settings.credentialField ? credential[settings.credentialField] : undefined;
+  const slotNames = settings.credentialField ? [settings.credentialField, ...(settings.credentialFields ?? []).filter((field) => field !== settings.credentialField)] : [];
+  const configuredKeys = slotNames.map((name) => credential[name]?.trim()).filter((value): value is string => !!value);
+  const apiKey = configuredKeys[0];
   if (settings.type !== "local" && settings.credentialField && !apiKey) throw new SafeError("PROVIDER_CREDENTIAL_MISSING", `${settings.id} requires a credential`);
   const profile = EXTRA_FREE_PROVIDERS.find((item) => item.id === settings.id);
   if (profile && settings.freeTierConfirmed !== true) throw new SafeError("FREE_TIER_CONFIRMATION_REQUIRED", `${settings.id}: confirm a free-only account with omni providers enable ${settings.id} --confirm-free-tier before importing or using its key`, 400);
+  if (configuredKeys.length > 1 && settings.type !== "local" && settings.type !== "mcp-stdio" && settings.credentialField) {
+    const providers = configuredKeys.map((key) => {
+      const singleCredential = { ...credential };
+      for (const name of slotNames) if (name !== settings.credentialField) delete singleCredential[name];
+      singleCredential[settings.credentialField!] = key;
+      return createConfiguredProvider(settings, singleCredential, options);
+    });
+    return new RotatingProvider(settings.id, providers);
+  }
   const common = { id: settings.id, baseUrl: settings.baseUrl, apiPrefix: settings.apiPrefix, fetchImpl: options.fetchImpl, skipDnsValidationForTests: options.skipDnsValidationForTests };
   if (settings.type === "mcp-stdio") {
     const mcp = { id: settings.id, command: settings.mcpCommand ?? "", args: settings.mcpArgs ?? [], cwd: settings.mcpWorkingDirectory, callTool: options.mcpToolCaller };

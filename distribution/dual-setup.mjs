@@ -1,5 +1,5 @@
-import {access,readFile,writeFile,mkdir,lstat,copyFile,rename,unlink} from 'node:fs/promises';
-import {join,dirname,resolve,isAbsolute} from 'node:path';
+import {access,readFile,writeFile,mkdir,lstat,copyFile,rename,unlink,readdir} from 'node:fs/promises';
+import {join,dirname,basename,resolve,isAbsolute} from 'node:path';
 import {homedir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {fileURLToPath,pathToFileURL} from 'node:url';
@@ -23,6 +23,7 @@ const SHARED_BROWSER_ENDPOINT=`http://127.0.0.1:${SHARED_BROWSER_SESSION.port}`;
 async function safe(path){for(let p=resolve(path);;p=dirname(p)){try{const info=await lstat(p);if(info.isSymbolicLink()||(info.isFile()&&info.nlink!==1))throw new Error('Linked setup path rejected');}catch(e){if(e.code!=='ENOENT')throw e;}if(p===dirname(p))break;}}
 async function optional(path){await safe(path);try{return await readFile(path,'utf8');}catch(e){if(e.code==='ENOENT')return null;throw e;}}
 async function atomic(path,text,before){await safe(path);await mkdir(dirname(path),{recursive:true,mode:0o700});if(await optional(path)!==before)throw new Error('Concurrent configuration conflict');if(before!==null)await copyFile(path,path+'.backup-'+randomUUID());const temp=path+'.tmp-'+randomUUID();await writeFile(temp,text,{flag:'wx',mode:0o600});if(await optional(path)!==before)throw new Error('Concurrent configuration conflict');await rename(temp,path);}
+async function cleanupBackups(path){const folder=dirname(path),prefix=`${basename(path)}.backup-`;let entries;try{entries=await readdir(folder,{withFileTypes:true});}catch(error){if(error.code==='ENOENT')return [];throw error;}const removed=[];for(const entry of entries){if(!entry.isFile()||!entry.name.startsWith(prefix))continue;const backup=join(folder,entry.name);await safe(backup);await unlink(backup);removed.push(backup);}return removed;}
 export async function connectAntigravity({home=homedir(),root,node=process.execPath,entrypoint=fileURLToPath(new URL('./mcp-regular.mjs',import.meta.url))}) {
   for(const path of [home,root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute paths required');
   const file=join(home,'.gemini/config/mcp_config.json'),raw=await optional(file);
@@ -101,6 +102,7 @@ export async function installSharedBrowserConsumerAutostart({platform=process.pl
     const legacyText=await optional(legacy);if(legacyText!==null){if(!/CreateObject\("WScript\.Shell"\)\.Run/i.test(legacyText)||!/shared-session\.mjs/i.test(legacyText)||!new RegExp(`--port\\s+${SHARED_BROWSER_SESSION.port}`).test(legacyText))throw new Error('Existing browser autostart entry is user-managed; original preserved.');await unlink(legacy);legacyRemoved=true;}
     const names=['OmniRoute Claude Consumer.vbs','OmniRoute Z.AI Consumer.vbs',...PRIVATE_BROWSER_CONSUMERS.map(item=>`OmniRoute ${item.displayName} Consumer Private.vbs`)];
     const removed=[];for(const name of names){const path=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup',name);try{await unlink(path);removed.push(path);}catch(error){if(error.code!=='ENOENT')throw error;}}
+    return {file,removed,legacyRemoved};
   }
   throw new Error('Shared browser consumer autostart supports Windows and Linux desktops.');
 }
@@ -124,14 +126,14 @@ export async function installClaudeConsumerAutostart({platform=process.platform,
   if(platform==='linux'){
     const file=join(home,'.config/autostart/omniroute-claude-consumer.desktop'),before=await optional(file);
     const content=`[Desktop Entry]\nType=Application\nName=OmniRoute Claude Consumer\nExec=${desktopExec(node)} ${desktopExec(entrypoint)} --background --profile ${desktopExec(profile)} --port ${CLAUDE_CONSUMER_PORT}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`;
-    if(before!==content)await atomic(file,content,before);
+     if(before!==content)await atomic(file,content,before);await cleanupBackups(file);
     return {file};
   }
   if(platform==='win32'){
     const appData=env.APPDATA;if(!appData||!isAbsolute(appData))throw new Error('Windows APPDATA is unavailable.');
     const file=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Claude Consumer.vbs'),before=await optional(file);
     const command=`"${node}" "${entrypoint}" --background --profile "${profile}" --port ${CLAUDE_CONSUMER_PORT}`,content=`CreateObject("WScript.Shell").Run "${command.replaceAll('"','""')}", 0, False\r\n`;
-    if(before!==content)await atomic(file,content,before);
+     if(before!==content)await atomic(file,content,before);await cleanupBackups(file);
     return {file};
   }
   throw new Error('Claude consumer autostart supports Windows and Linux desktops.');
@@ -142,14 +144,14 @@ export async function installZaiConsumerAutostart({platform=process.platform,hom
   if(platform==='linux'){
     const file=join(home,'.config/autostart/omniroute-zai-consumer.desktop'),before=await optional(file);
     const content=`[Desktop Entry]\nType=Application\nName=OmniRoute Z.AI Consumer\nExec=${desktopExec(node)} ${desktopExec(entrypoint)} --background --profile ${desktopExec(profile)} --port ${ZAI_CONSUMER_PORT}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`;
-    if(before!==content)await atomic(file,content,before);
+     if(before!==content)await atomic(file,content,before);await cleanupBackups(file);
     return {file};
   }
   if(platform==='win32'){
     const appData=env.APPDATA;if(!appData||!isAbsolute(appData))throw new Error('Windows APPDATA is unavailable.');
     const file=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Z.AI Consumer.vbs'),before=await optional(file);
     const command=`"${node}" "${entrypoint}" --background --profile "${profile}" --port ${ZAI_CONSUMER_PORT}`,content=`CreateObject("WScript.Shell").Run "${command.replaceAll('"','""')}", 0, False\r\n`;
-    if(before!==content)await atomic(file,content,before);
+     if(before!==content)await atomic(file,content,before);await cleanupBackups(file);
     return {file};
   }
   throw new Error('Z.AI consumer autostart supports Windows and Linux desktops.');
@@ -163,13 +165,13 @@ export async function installPrivateBrowserConsumerAutostarts({platform=process.
     if(platform==='linux'){
       const file=join(home,`.config/autostart/omniroute-${item.id}-consumer.desktop`),before=await optional(file);
       const content=`[Desktop Entry]\nType=Application\nName=OmniRoute ${item.displayName} Consumer (Private)\nExec=${desktopExec(node)} ${desktopExec(entrypoint)} --provider ${item.id} --background --profile ${desktopExec(profile)} --port ${item.port}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`;
-      if(before!==content)await atomic(file,content,before);results.push({id:item.id,file});continue;
+       if(before!==content)await atomic(file,content,before);await cleanupBackups(file);results.push({id:item.id,file});continue;
     }
     if(platform==='win32'){
       const appData=env.APPDATA;if(!appData||!isAbsolute(appData))throw new Error('Windows APPDATA is unavailable.');
       const file=join(appData,`Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute ${item.displayName} Consumer Private.vbs`),before=await optional(file);
       const command=`"${node}" "${entrypoint}" --provider ${item.id} --background --profile "${profile}" --port ${item.port}`,content=`CreateObject("WScript.Shell").Run "${command.replaceAll('"','""')}", 0, False\r\n`;
-      if(before!==content)await atomic(file,content,before);results.push({id:item.id,file});continue;
+       if(before!==content)await atomic(file,content,before);await cleanupBackups(file);results.push({id:item.id,file});continue;
     }
     throw new Error('Private browser consumer autostart supports Windows and Linux desktops.');
   }

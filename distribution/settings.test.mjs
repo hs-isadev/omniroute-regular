@@ -44,6 +44,12 @@ test('setup accepts any supported free provider credentials and counts Cloudflar
   assert.equal(accepted.accepted.length,6);
   assert.deepEqual(accepted.accepted,['groq','gemini','mistral','cohere','cerebras','cloudflare']);
 });
+test('partial six-slot input is accepted and retained for key rotation',async()=>{
+  const {paths,protector}=await context();
+  await configure({keys:{GROQ_API_KEY:'fixture-groq-a',GROQ_API_KEY_1:'fixture-groq-b'},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  const vault=await SecretVault.load(paths.vault,protector);const saved=vault.get('groq');
+  assert.equal(saved.GROQ_API_KEY,'fixture-groq-a');assert.equal(saved.GROQ_API_KEY_1,'fixture-groq-b');vault.dispose();
+});
 test('failed replacement preserves existing key and ignores edited endpoint',async()=>{
   const {paths,protector}=await context();
   await configure({keys:{OPENROUTER_API_KEY:fixture},freeOnlyConfirmed:true},paths,{protector,factory:success});
@@ -69,10 +75,10 @@ test('incomplete Cloudflare replacement keeps the existing provider enabled',asy
   const vault=await SecretVault.load(paths.vault,protector);assert.equal(vault.get('cloudflare').CLOUDFLARE_API_TOKEN,'fixture-cloudflare');vault.dispose();
 });
 test('all hosted free profiles have key-entry fields',()=>{
-  assert.equal(Object.keys(fields).length,14);
+  assert.equal(Object.keys(fields).length,22);
   for(const profile of EXTRA_FREE_PROVIDERS) assert.ok(fields[profile.id].includes(profile.credentialField));
-  assert.deepEqual(fields.cerebras,['CEREBRAS_API_KEY']);
-  assert.deepEqual(fields.sambanova,['SAMBANOVA_API_KEY']);
+  assert.deepEqual(fields.cerebras,['CEREBRAS_API_KEY','CEREBRAS_API_KEY_1','CEREBRAS_API_KEY_2','CEREBRAS_API_KEY_3','CEREBRAS_API_KEY_4','CEREBRAS_API_KEY_5']);
+  assert.deepEqual(fields.sambanova,['SAMBANOVA_API_KEY','SAMBANOVA_API_KEY_1','SAMBANOVA_API_KEY_2','SAMBANOVA_API_KEY_3','SAMBANOVA_API_KEY_4','SAMBANOVA_API_KEY_5']);
 });
 test('existing setup preserves orchestrator mode, port, disabled providers and old keys',async()=>{
   const {paths,protector}=await context();

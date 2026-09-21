@@ -23,7 +23,16 @@ projects. Browser credentials stay in the dedicated local profile and are not
 copied from the normal browser profile. Free-provider quotas and service terms
 apply; this is not unlimited inference.
 
-## Legacy 0.5.0 documentation
+Regular mode automatically enables the bounded nano-specialist swarm for
+eligible small coding/light tasks. It uses up to six low-context workers in
+paced waves, then performs one attributed synthesis; no extra switch is needed
+on a fresh install.
+
+## Historical 0.5.0 documentation
+
+The section below is retained for migration context only. The current package
+uses one shared foreground browser session for consumer sign-in and
+diagnostics; it no longer describes six separate background consumer windows.
 
 OmniRoute builds one download for Windows 10/11 x64 and Linux x64 desktops. It
 installs or connects six routes:
@@ -57,9 +66,9 @@ yourself. Browser profiles remain local to the installed machine.
 Setup obtains official Antigravity, installs the bundled pinned OpenCode and
 OmniRoute runtime, connects MCP, and creates launchers. OS security, admin,
 desktop-keyring, browser login, and Antigravity onboarding prompts can still
-require approval. The dedicated Claude and Z.AI browsers start quietly at user
-login on both platforms; normal browser tabs and profiles are not touched. See
-the release's `VERIFICATION.md` for the exact tests and limitations.
+require approval. The current shared browser session is isolated from normal
+browser tabs and profiles and stays foreground for diagnostics. See the
+release's `VERIFICATION.md` for the exact tests and limitations.
 
 ## What changed in 0.5.0
 
@@ -124,7 +133,7 @@ Then try a bounded coding task with relevant code and requirements. The host mus
 
 ## Providers and routing
 
-Regular 0.4.0 offers **12 opt-in free-plan/free-endpoint/evaluation providers** by adding Cerebras and SambaNova. Hugging Face and Vercel credit-based profiles are disabled, even when their keys are retained. See [provider/authentication guide](docs/free-provider-expansion.md). Stronger candidates include NVIDIA Kimi K2.6 and OpenRouter Qwen3 Coder free; their individual connectivity check must pass before activation. Coding quality is not certified by that check. No 120B ceiling is imposed.
+The setup exposes **22 hosted API-key profiles** (free plans, free-model offers, or evaluation tiers). Hugging Face and Vercel credit-based profiles remain disabled in strict Regular mode, even when their keys are retained. See [provider/authentication guide](docs/free-provider-expansion.md). Stronger candidates include NVIDIA Kimi K2.6 and OpenRouter Qwen3 Coder free; their individual connectivity check must pass before activation. Coding quality is not certified by that check. No 120B ceiling is imposed.
 
 Runtime enforces compiled provider endpoints and free-model IDs before loading keys; editing prices to zero cannot admit an unlisted model. Account free-plan eligibility is still your responsibility: connectivity does not prove billing status, and there is no universal billing-status API. Limits stop/fallback only among eligible free workers. No claim of unlimited access, zero security risk, or superiority over every installer is made. See [security/test evidence](docs/testing/key-editor.tdd.md).
 
@@ -139,6 +148,13 @@ A separate machine-local `zai-consumer` profile can call signed-in Z.AI GLM
 models through its own browser-session adapter. It has the same small-task and
 text/coding limits and never shares Claude's browser profile or port. See
 [Z.AI consumer provider](docs/zai-consumer-provider.md).
+
+OpenCode regular mode now gets a stable local session ID and OmniRoute can keep
+durable, compacted session files under the runtime root. Regular small coding
+requests may also fan out six tiny, low-context checks in paced waves; browser
+consumer adapters remain opt-in, small-task-only, and serialized. The setup key
+editor exposes six slots per provider. See
+[open-source additions and session storage](docs/opensource-setup-additions.md).
 
 ## Updates, rollback, troubleshooting
 

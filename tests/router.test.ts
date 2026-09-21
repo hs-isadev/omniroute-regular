@@ -118,6 +118,34 @@ test("regular routing keeps casual and easy repetitive coding requests on one wo
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("regular routing uses low-context nano workers in paced waves when enabled", async () => {
+  const root = await mkdtemp(join(tmpdir(), "omniroute-router-nano-"));
+  try {
+    const ids = ["claude-consumer", "zai-consumer", "qwen-consumer", "kimi-consumer", "deepseek-consumer", "perplexity-consumer"];
+    const config = freeConfigFixture();
+    config.routing.directProviderOrder = [...ids, "groq"];
+    config.routing.nanoSubagentsEnabled = true;
+    config.routing.nanoSubtaskCount = 6;
+    config.routing.maxParallelWorkers = 3;
+    const providers = new Map<string, MockProvider>();
+    const models = [];
+    for (const id of ids) {
+      const provider = new MockProvider(id); provider.responses.push({ text: `${id} nano result` });
+      providers.set(id, provider);
+      const settings = config.providers.find((item) => item.id === id)!; settings.enabled = true; settings.mcpCommand = "node"; settings.mcpArgs = ["adapter.mjs"];
+      models.push(modelFixture({ providerId: id, modelId: settings.models[0]!.modelId, name: id, intelligenceTier: 2, maxOutputTokens: 512, contextWindow: 32_768, capabilities: { text: true, coding: true, toolCalling: false }, route: { ...modelFixture().route, maxConcurrentRequests: 1, allowedTaskClasses: ["micro", "small"], transport: "browser", privacy: "evaluation-logging-possible" } }));
+    }
+    const primary = providers.get(ids[0]!)!; primary.responses.push({ text: "final nano synthesis" });
+    const registry = registryFixture(models);
+    const router = new OmniRouter({ config, providers, registry: async () => registry, audit: new AuditStore(join(root, "routes.jsonl")), logger: new JsonlLogger(join(root, "log.jsonl")) });
+    const result = await router.route({ ...request(`Review this TypeScript module and suggest focused tests and edge cases for the implementation. Include concise notes about interfaces, error handling, retries, context limits, and provider selection. ${"bounded context ".repeat(25)}`), routingMode: "regular", requestedCapabilities: ["coding"] }, AbortSignal.timeout(5000));
+    assert.equal(result.plan.executionMode, "decomposed");
+    assert.equal(result.plan.subtasks.length, 6);
+    assert.deepEqual(result.plan.subtasks.map((item) => item.providerId), ids);
+    assert.match(result.attribution.policyDecisions.find((item) => item.includes("nano fan-out enabled")) ?? "", /paced waves/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("regular routing fans complex coding work out to a bounded API swarm and synthesizes once", async () => {
   const root = await mkdtemp(join(tmpdir(), "omniroute-router-swarm-"));
   try {

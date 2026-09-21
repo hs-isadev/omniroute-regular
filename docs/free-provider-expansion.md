@@ -1,6 +1,6 @@
-# Free provider/authentication guide — reviewed 2026-08-31
+# Free provider/authentication guide — reviewed 2026-09-21
 
-**Dual v0.4.0 exposes 12 eligible providers by adding Cerebras and SambaNova.** Hugging Face/Vercel credit-based profiles remain disabled. Their existing stored keys are retained but are not used by Regular. No provider activates merely by installing: add/reuse your own key and confirm applicable free-plan/evaluation terms. The graphical key form shows signup links and saved-provider status without exporting saved keys.
+**The current package exposes 22 hosted API-key profiles.** Hugging Face/Vercel credit-based profiles remain disabled in strict Regular mode. Their existing stored keys are retained but are not used by Regular. No provider activates merely by installing: add/reuse your own key and confirm applicable free-plan/evaluation terms. The graphical key form shows signup links and saved-provider status without exporting saved keys.
 
 Free access is conditional and quota-limited. [Gemini billing](https://ai.google.dev/gemini-api/docs/billing) distinguishes free projects from billing-enabled paid tiers. [Cloudflare pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/) limits the free plan and requires paid access for some newer models (not included in this package's allowlist). [Cohere](https://docs.cohere.com/docs/rate-limits) distinguishes evaluation and production keys. [Kilo Auto Free](https://kilo.ai/docs/getting-started/rate-limits-and-costs), [Z.AI Flash](https://docs.z.ai/guides/overview/pricing) and [Zen's temporary free list](https://opencode.ai/docs/zen/) are model-specific offers, not permission to use every model. Do not enable billing to pass validation. No API probe can universally prove that your provider account cannot bill.
 
@@ -28,7 +28,7 @@ All additions are opt-in workers. The v0.2 portable launcher is Antigravity plus
 | Cloudflare | [Dashboard](https://dash.cloudflare.com/) | Workers AI free allocation; service token plus account ID |
 | Hugging Face | [Access tokens](https://huggingface.co/settings/tokens) | Inference permission, small recurring credit; no paid balance/BYOK |
 
-The five remaining providers and conditions are in the table above. No browser passwords or consumer login tokens are accepted. Model prices/terms may change; the configured zero-price allowlist is not an account-billing guarantee.
+The remaining profiles and conditions are in the catalog and setup links above. No browser passwords or consumer login tokens are accepted. Model prices/terms may change; the configured zero-price allowlist is not an account-billing guarantee.
 
 ## Additional coding candidates in Regular v0.2
 

@@ -1,5 +1,7 @@
 export {prepareWorkerTask, renderWorkerTask} from "./delegation.js";
 export { compactWorkerPacket, selectMinimalContext } from "./context-planner.js";
+export { DurableSessionStore, compactSessionMessages, estimateSessionTokens } from "./session-compaction.js";
+export type { DurableSessionSnapshot, SessionCompactionOptions, SessionCompactionResult, SessionMessage, SessionMessageRole } from "./session-compaction.js";
 export { ControlledExecutor, type CommandRunner, type ExecutorDeclaration, type ExecutorRequest, type ExecutorResult } from "./executor.js";
 export { TaskLifecycle } from "./task-lifecycle.js";
 export {
@@ -360,6 +362,50 @@ export class OmniRouter {
   }
 
   private regularSwarmPlan(primary: ModelSelection, signals: TaskSignals, snapshot: RegistrySnapshot): { plan: RoutingPlan | null; decision: string | null } {
+    const nanoEligible = this.#config.routing.nanoSubagentsEnabled
+      && signals.suggestedClass === "small"
+      && (signals.intent === "coding" || signals.intent === "light_task")
+      && (signals.estimatedInputTokens >= 96 || signals.requestedOutputs >= 2)
+      && signals.riskLevel === "low";
+    if (nanoEligible) {
+      const maximumWorkers = Math.min(this.#config.routing.nanoSubtaskCount, this.#config.routing.maxSubtasks);
+      const subtaskOutputTokens = Math.min(primary.maxOutputTokens, this.#config.routing.nanoSubtaskOutputTokens);
+      const seed = { ...primary, maxOutputTokens: subtaskOutputTokens, reasoningEffort: "none" as const };
+      const candidates = this.#freeFailover.candidates(seed, snapshot, signals.requiredCapabilities, signals.estimatedInputTokens + 128, "lightweight", { taskClass: "small" });
+      if (candidates.length === 0) return { plan: null, decision: "nano fan-out skipped: no healthy eligible small workers" };
+      const roles = [
+        { id: "nano-requirements", goal: "Extract the two or three most important requirements and ambiguities. Return a tiny checklist." },
+        { id: "nano-edge-cases", goal: "Identify only the highest-impact edge cases or regressions. Return concise bullets." },
+        { id: "nano-implementation", goal: "Suggest the smallest viable implementation approach. Do not write a full solution." },
+        { id: "nano-tests", goal: "Suggest the smallest focused test set that would catch likely failures." },
+        { id: "nano-provider", goal: "Check provider, routing, or context-limit implications relevant to the request." },
+        { id: "nano-safety", goal: "Flag only concrete privacy, security, or quota-compliance concerns." },
+      ].slice(0, maximumWorkers);
+      const primaryModel = modelFrom(snapshot, primary);
+      const synthesisTokens = signals.estimatedInputTokens + roles.length * subtaskOutputTokens + primary.maxOutputTokens + 512;
+      if (primaryModel.contextWindow === null || synthesisTokens > primaryModel.contextWindow) return { plan: null, decision: `nano fan-out skipped: synthesis context estimate ${synthesisTokens} exceeds ${primary.providerId}/${primary.modelId} limit` };
+      const subtasks: RouteSubtask[] = roles.map((role, index) => {
+        const selection = candidates[index % candidates.length]!;
+        return { ...role, dependencies: [], providerId: selection.providerId, modelId: selection.modelId, reasoningEffort: "none" };
+      });
+      return {
+        plan: {
+          schemaVersion: 1,
+          taskClass: "small",
+          complexityScore: 20,
+          riskLevel: "low",
+          confidence: 1,
+          requiredCapabilities: signals.requiredCapabilities,
+          executionMode: "decomposed",
+          primary,
+          subtasks,
+          review: { required: false, providerId: "", modelId: "", criteria: [] },
+          fallbacks: [],
+          shortRationale: "Regular mode used six-or-fewer bounded nano specialists in paced waves before final synthesis.",
+        },
+        decision: `nano fan-out enabled with ${subtasks.length} tiny workers; execution is paced in waves of ${this.#config.routing.maxParallelWorkers}`,
+      };
+    }
     const complexEnough = signals.intent === "high_risk" || (signals.requiredCapabilities.includes("coding") && signals.intent === "complex_task");
     if (!complexEnough || primary.providerId.endsWith("-consumer") || this.#config.routing.maxParallelWorkers < 2 || this.#config.routing.maxSubtasks < 2) return { plan: null, decision: null };
     const maximumWorkers = Math.min(3, this.#config.routing.maxParallelWorkers, this.#config.routing.maxSubtasks);

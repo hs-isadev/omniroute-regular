@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import test from "node:test";
 import { DEFAULT_CONFIG, getRuntimePaths, loadConfig, temporaryRuntimeRoot, validateConfig } from "@omniroute/config";
 
@@ -46,4 +47,16 @@ test("existing config gains free downgrade models without re-enabling a disabled
     assert.equal(upgraded.models.find((item) => item.modelId === "openai/gpt-oss-120b")?.enabled, false);
     assert.equal(upgraded.freeModelOrder?.[0], "openai/gpt-oss-120b");
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("durable session storage has a private runtime directory and six credential slots are declared", () => {
+  const paths = getRuntimePaths("C:/omniroute-test-runtime");
+  assert.equal(paths.sessionsDir, join("C:/omniroute-test-runtime", "sessions"));
+  assert.equal(DEFAULT_CONFIG.privacy.sessionFilesEnabled, true);
+  assert.equal(DEFAULT_CONFIG.routing.nanoSubagentsEnabled, true);
+  assert.equal(DEFAULT_CONFIG.routing.nanoSubtaskCount, 6);
+  assert.ok(DEFAULT_CONFIG.privacy.sessionMaxTokens > 0);
+  for (const provider of DEFAULT_CONFIG.providers.filter((item) => item.credentialFields?.length)) {
+    assert.equal(provider.credentialFields?.length, 6, `${provider.id} should expose base + five slots`);
+  }
 });
