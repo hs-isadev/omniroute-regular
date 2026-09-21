@@ -53,5 +53,9 @@ test('Windows autostart uses a command launcher, removes only the owned legacy V
   assert.match(command,/--launch-only --profile/);
   assert.doesNotMatch(command,/--background/);
   await assert.rejects(access(legacy),{code:'ENOENT'});
+  const upgradedNode=join(root,'versions/next/node.exe'),upgradedEntrypoint=join(root,'versions/next/shared-session.mjs');
+  await mkdir(join(root,'versions/next'),{recursive:true});await writeFile(upgradedNode,'fixture');await writeFile(upgradedEntrypoint,'fixture');
+  await bridge.installBrowserConsumerAutostart({platform:'win32',home,root,node:upgradedNode,entrypoint:upgradedEntrypoint,env:{APPDATA:appData}});
+  const upgraded=await (await import('node:fs/promises')).readFile(result.file,'utf8');assert.match(upgraded,/versions[\\/]next/);
   await assert.rejects(bridge.installBrowserConsumerAutostart({platform:'win32',home,root,node:join(root,'missing.exe'),entrypoint,env:{APPDATA:appData}}),/not found|missing/i);
 });

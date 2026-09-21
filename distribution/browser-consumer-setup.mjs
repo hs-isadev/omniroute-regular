@@ -46,9 +46,10 @@ export async function installBrowserConsumerAutostart({platform=process.platform
   const file=platform==='linux'?join(home,'.config/autostart/omniroute-browser-consumers.desktop'):platform==='win32'?join(env.APPDATA??'','Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.cmd'):null;
   if(!file||!isAbsolute(file))throw new Error('Shared browser consumer autostart supports Windows and Linux desktops.');
   const content=platform==='linux'?`[Desktop Entry]\nType=Application\nName=OmniRoute Browser Consumers\nExec=${desktopQuote(node)} ${desktopQuote(entrypoint)} ${args}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`:`@echo off\r\nstart "" /b ${desktopQuote(node)} ${desktopQuote(entrypoint)} ${args}\r\n`;
+  const owned=text=>/shared-session\.mjs/.test(text)&&/browser-consumer-profile/.test(text)&&/--launch-only/.test(text)&&new RegExp(`--port\\s+${session.port}`).test(text);
   await mkdir(dirname(file),{recursive:true,mode:0o700});
   let before=null;try{before=await readFile(file,'utf8');}catch(error){if(error.code!=='ENOENT')throw error;}
-  if(before!==null&&before!==content)throw new Error(`Existing browser autostart entry is user-managed: ${file}`);
+  if(before!==null&&before!==content&&!owned(before))throw new Error(`Existing browser autostart entry is user-managed: ${file}`);
   if(before!==content)await writeFile(file,content,{mode:0o600});
   let legacyRemoved=false;
   if(platform==='win32'){
