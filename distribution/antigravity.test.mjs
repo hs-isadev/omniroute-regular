@@ -45,6 +45,20 @@ test('unowned collisions and user-modified integration are never overwritten', a
   assert.equal(await readFile(rules,'utf8'),'user modification');
 });
 
+test('workspace integration installs shared skills for Antigravity and OpenCode discovery', async () => {
+  const options=await fixture();
+  const skillsRoot=join(options.root,'skills');
+  await mkdir(join(skillsRoot,'tdd-workflow','references'),{recursive:true});
+  await writeFile(join(skillsRoot,'tdd-workflow','SKILL.md'),'---\nname: tdd-workflow\ndescription: test-first\n---\n');
+  await writeFile(join(skillsRoot,'tdd-workflow','references','quick.md'),'quick reference\n');
+  await integrateWorkspace({...options,skillsRoot,apply:true});
+  assert.match(await readFile(join(options.workspace,'.agents/skills/tdd-workflow/SKILL.md'),'utf8'),/test-first/);
+  assert.match(await readFile(join(options.workspace,'.agents/skills/tdd-workflow/references/quick.md'),'utf8'),/quick reference/);
+  assert.equal((await integrateWorkspace({...options,skillsRoot,apply:true})).changed,false);
+  await removeWorkspaceIntegration({...options,skillsRoot,apply:true});
+  await assert.rejects(readFile(join(options.workspace,'.agents/skills/tdd-workflow/SKILL.md'),'utf8'),/ENOENT/);
+});
+
 test('host environment excludes API keys and code injection environment options', () => {
   const env=hostEnvironment({PATH:'path',HOME:'home',LOCALAPPDATA:'local',DBUS_SESSION_BUS_ADDRESS:'bus',XDG_RUNTIME_DIR:'run',GROQ_API_KEY:'secret',NODE_OPTIONS:'--require evil',OMNIROUTE_HOME:'other'});
   assert.equal(env.PATH,'path');assert.equal(env.DBUS_SESSION_BUS_ADDRESS,'bus');

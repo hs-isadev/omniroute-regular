@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, copyFile, mkdir, readFile, readdir, rm } from "node:fs/promises";
+import { access, copyFile, lstat, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,10 +31,12 @@ export interface HostPaths {
   codexConfig: string;
   codexHooks: string;
   codexAgents: string;
+  codexSkillsDir: string;
   claudeConfig: string;
   claudeSettings: string;
   openCodeConfig: string;
   openCodeInstructions: string;
+  openCodeSkillsDir: string;
 }
 
 export interface PlannedFileChange {
@@ -129,11 +131,38 @@ function defaultHostPaths(home = homedir()): HostPaths {
     codexConfig: join(home, ".codex", "config.toml"),
     codexHooks: join(home, ".codex", "hooks.json"),
     codexAgents: join(home, ".codex", "AGENTS.md"),
+    codexSkillsDir: join(home, ".codex", "skills"),
     claudeConfig: join(home, ".claude.json"),
     claudeSettings: join(home, ".claude", "settings.json"),
     openCodeConfig: join(home, ".config", "opencode", "opencode.json"),
     openCodeInstructions: join(home, ".config", "opencode", "omniroute-regular.md"),
+    openCodeSkillsDir: join(home, ".config", "opencode", "skills"),
   };
+}
+
+interface SkillFile { relativePath: string; text: string; }
+
+async function readSkillPack(root: string): Promise<SkillFile[]> {
+  const files: SkillFile[] = [];
+  async function walk(directory: string, prefix: string): Promise<void> {
+    let entries;
+    try { entries = await readdir(directory, { withFileTypes: true }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT" && !prefix) return; throw error; }
+    for (const entry of entries) {
+      if (entry.name === "taste" || entry.name === "skillopt") continue;
+      const source = join(directory, entry.name);
+      if ((await lstat(source)).isSymbolicLink()) throw new SafeError("SKILL_BUNDLE_UNSAFE", "Skill bundle contains a symlink");
+      const relativePath = prefix ? join(prefix, entry.name) : entry.name;
+      if (entry.isDirectory()) { await walk(source, relativePath); continue; }
+      if (!entry.isFile()) throw new SafeError("SKILL_BUNDLE_UNSAFE", "Skill bundle contains a special file");
+      // Keep only files inside named skill directories. The pack README is
+      // documentation for the archive, not a host skill.
+      if (!prefix) continue;
+      files.push({ relativePath: relativePath.replaceAll("\\", "/"), text: await readFile(source, "utf8") });
+    }
+  }
+  await walk(resolve(root), "");
+  return files;
 }
 
 function codexTomlBlock(nodePath: string, cliPath: string, runtimeRoot: string): string {
@@ -229,12 +258,14 @@ export class IntegrationManager {
   readonly #runtimePaths: RuntimePaths;
   readonly #nodePath: string;
   readonly #cliPath: string;
+  readonly #skillsRoot: string;
 
-  constructor(options: { hostPaths?: HostPaths; runtimePaths?: RuntimePaths; nodePath: string; cliPath: string }) {
+  constructor(options: { hostPaths?: HostPaths; runtimePaths?: RuntimePaths; nodePath: string; cliPath: string; skillsRoot?: string }) {
     this.#hostPaths = options.hostPaths ?? defaultHostPaths();
     this.#runtimePaths = options.runtimePaths ?? getRuntimePaths();
     this.#nodePath = resolve(options.nodePath);
     this.#cliPath = resolve(options.cliPath);
+    this.#skillsRoot = resolve(options.skillsRoot ?? join(dirname(this.#cliPath), "../../../skills"));
   }
 
   async plan(target: IntegrationTarget, action: IntegrationAction): Promise<IntegrationPlan> {
@@ -353,6 +384,7 @@ export class IntegrationManager {
       const afterAgents = replaceManagedBlock(agents.text, AGENTS_START, AGENTS_END, action === "install" ? codexAgentsBlock() : null);
       this.addChange(changes, this.#hostPaths.codexAgents, agents, afterAgents);
     }
+    await this.addHostSkillChanges(changes, this.#hostPaths.codexSkillsDir, action);
     return {
       target: includeHookAndAgents ? "codex" : "chatgpt-desktop",
       action,
@@ -421,7 +453,19 @@ export class IntegrationManager {
     const instruction = await readOptional(instructionPath);
     const managedText = `# OmniRoute regular mode\n\nFor every substantive user request that needs model reasoning or generated output, call the omniroute MCP server's omni_route tool with routingMode=regular. Base the response on its result and preserve the attribution badge verbatim. OpenCode may use its local tools to apply and verify the result. Never request orchestrator mode and never send credentials to tools or prompts.\n`;
     this.addChange(changes, instructionPath, instruction, action === "install" ? managedText : "");
+    await this.addHostSkillChanges(changes, this.#hostPaths.openCodeSkillsDir, action);
     return { target: "opencode", action, changes, changed: changes.length > 0, notes: ["OpenCode is integrated in regular mode only. The MCP tool routes generated work through zero-priced OmniRoute workers."] };
+  }
+
+  private async addHostSkillChanges(changes: PlannedFileChange[], destinationRoot: string, action: IntegrationAction): Promise<void> {
+    if (action !== "install") return;
+    const files = await readSkillPack(this.#skillsRoot);
+    for (const file of files) {
+      const destination = join(destinationRoot, file.relativePath);
+      const before = await readOptional(destination);
+      if (before.existed && before.text !== file.text) throw new SafeError("INTEGRATION_CONFLICT", `Existing skill is not package-owned: ${destination}`);
+      this.addChange(changes, destination, before, file.text);
+    }
   }
 
   private addChange(changes: PlannedFileChange[], path: string, before: { existed: boolean; text: string }, after: string): void {

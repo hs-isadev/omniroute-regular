@@ -1,0 +1,3 @@
+interface:
+  display_name: "Focused Implementation"
+  short_description: "Make small, scoped code changes efficiently"

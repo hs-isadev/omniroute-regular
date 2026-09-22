@@ -133,7 +133,7 @@ test("regular routing uses low-context nano workers in paced waves when enabled"
       const provider = new MockProvider(id); provider.responses.push({ text: `${id} nano result` });
       providers.set(id, provider);
       const settings = config.providers.find((item) => item.id === id)!; settings.enabled = true; settings.mcpCommand = "node"; settings.mcpArgs = ["adapter.mjs"];
-      models.push(modelFixture({ providerId: id, modelId: settings.models[0]!.modelId, name: id, intelligenceTier: 2, maxOutputTokens: 512, contextWindow: 32_768, capabilities: { text: true, coding: true, toolCalling: false }, route: { ...modelFixture().route, maxConcurrentRequests: 1, allowedTaskClasses: ["micro", "small"], transport: "browser", privacy: "evaluation-logging-possible" } }));
+      models.push(modelFixture({ providerId: id, modelId: settings.models[0]!.modelId, name: id, intelligenceTier: 2, maxOutputTokens: 512, contextWindow: 32_768, pricing: { inputPerMillionUsd: 0, outputPerMillionUsd: 0, cachedInputPerMillionUsd: 0, updatedAt: null }, capabilities: { text: true, coding: true, toolCalling: false }, route: { ...modelFixture().route, maxConcurrentRequests: 1, allowedTaskClasses: ["micro", "small"], transport: "browser", privacy: "evaluation-logging-possible" } }));
     }
     const primary = providers.get(ids[0]!)!; primary.responses.push({ text: "final nano synthesis" });
     const registry = registryFixture(models);

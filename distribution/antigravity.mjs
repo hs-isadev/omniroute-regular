@@ -1,6 +1,6 @@
-import { access, lstat, mkdir, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises';
+import { access, copyFile, lstat, mkdir, readdir, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
-import { isAbsolute, join, dirname, resolve, delimiter } from 'node:path';
+import { isAbsolute, join, dirname, relative, resolve, delimiter } from 'node:path';
 
 export const SERVER_NAME = 'omniroute_regular';
 export const DOWNLOAD_URL = 'https://antigravity.google/download';
@@ -45,34 +45,77 @@ function parseConfig(raw) {
 function paths(options) {
   for(const key of ['workspace','node','entrypoint','runtimeRoot']) if(typeof options[key]!=='string' || !isAbsolute(options[key]) || /[\r\n\0]/.test(options[key])) throw new Error(`${key} must be an absolute safe path.`);
   const base=join(options.workspace,'.agents');
-  return {config:join(base,'mcp_config.json'),rules:join(base,'rules/omniroute-regular.md'),owner:join(base,'omniroute-regular.owner.json'),backup:join(base,'omniroute-backups')};
+  const skillsRoot=options.skillsRoot??resolve(join(dirname(options.entrypoint),'..','skills'));
+  if(typeof skillsRoot!=='string'||!isAbsolute(skillsRoot)||/[\r\n\0]/.test(skillsRoot)) throw new Error('skillsRoot must be an absolute safe path.');
+  return {config:join(base,'mcp_config.json'),rules:join(base,'rules/omniroute-regular.md'),owner:join(base,'omniroute-regular.owner.json'),skillsOwner:join(base,'omniroute-skills.owner.json'),skillsRoot,skills:join(base,'skills'),backup:join(base,'omniroute-backups')};
 }
+async function skillFiles(root) {
+  await safePath(root);
+  const result=[];
+  async function walk(directory,prefix='') {
+    let entries;
+    try { entries=await readdir(directory,{withFileTypes:true}); }
+    catch(error) { if(error.code==='ENOENT'&&prefix==='') return; throw error; }
+    for(const entry of entries){
+      if(entry.name==='taste'||entry.name==='skillopt') continue;
+      const source=join(directory,entry.name), rel=prefix?join(prefix,entry.name):entry.name;
+      await safePath(source);
+      if(entry.isSymbolicLink()) throw new Error('Skill bundle contains a symlink/reparse path.');
+      if(entry.isDirectory()) await walk(source,rel);
+      else if(entry.isFile()) { if(prefix) result.push({rel,source}); }
+      else throw new Error('Skill bundle contains a special file.');
+    }
+  }
+  await walk(root);
+  return result;
+}
+async function readSkillBundle(p) {
+  const files=await skillFiles(p.skillsRoot), result=[];
+  for(const file of files){
+    const text=await readFile(file.source,'utf8');
+    result.push({rel:file.rel,source:file.source,destination:join(p.skills,file.rel),text});
+  }
+  return result;
+}
+function skillOwnerMap(owner){ return owner&&typeof owner.skills==='object'&&owner.skills&&!Array.isArray(owner.skills)?owner.skills:{}; }
 export async function integrateWorkspace(options) {
   const p=paths(options); await safePath(options.workspace);
   const [raw,rules,ownerRaw]=await Promise.all([optionalRead(p.config),optionalRead(p.rules),optionalRead(p.owner)]);
   const config=parseConfig(raw), owner=ownerRaw?JSON.parse(ownerRaw):null;
+  const bundle=await readSkillBundle(p), installedSkillOwner=skillOwnerMap(owner);
   const previous=config.mcpServers?.[SERVER_NAME];
   if(previous && (!owner || JSON.stringify(previous)!==JSON.stringify(owner.entry))) throw new Error('MCP entry conflict: existing omniroute_regular is not unchanged package-owned content.');
   if(rules!==null && (!owner || sha(rules)!==owner.rulesHash)) throw new Error('Rules conflict: existing file was modified or is not package-owned.');
+  const skillChanges=[];
+  for(const file of bundle){
+    const before=await optionalRead(file.destination), ownedHash=installedSkillOwner[file.rel];
+    if(before!==null && (!ownedHash||sha(before)!==ownedHash)) throw new Error(`Skill conflict: existing file was modified or is not package-owned: ${file.rel}`);
+    if(before!==file.text) skillChanges.push({path:file.destination,rel:file.rel,before,after:file.text});
+  }
   const entry={command:options.node,args:[options.entrypoint],env:{OMNIROUTE_HOME:options.runtimeRoot,OMNIROUTE_ROUTING_MODE:'regular'}};
-  const changed=JSON.stringify(previous)!==JSON.stringify(entry)||rules!==RULES;
-  const result={applied:!!options.apply,changed,configPath:p.config,rulesPath:p.rules,server:SERVER_NAME};
+  const changed=JSON.stringify(previous)!==JSON.stringify(entry)||rules!==RULES||skillChanges.length>0;
+  const result={applied:!!options.apply,changed,configPath:p.config,rulesPath:p.rules,skillsPath:p.skills,skills:bundle.filter(file=>file.rel.toLowerCase().endsWith('/skill.md')).map(file=>file.rel.split(/[\\/]/)[0]),server:SERVER_NAME};
   if(!options.apply || !changed) return result;
   await mkdir(p.backup,{recursive:true,mode:0o700});
   const backup=join(p.backup,randomUUID()); await mkdir(backup,{mode:0o700});
   if(raw!==null) await writeFile(join(backup,'mcp_config.json'),raw,{mode:0o600});
   if(rules!==null) await writeFile(join(backup,'rules.md'),rules,{mode:0o600});
+  for(const file of skillChanges.filter(item=>item.before!==null)) { const path=join(backup,'skills',file.rel); await mkdir(dirname(path),{recursive:true,mode:0o700}); await writeFile(path,file.before,{mode:0o600}); }
   // Detect concurrent edits before committing. Backups remain recoverable.
   if(await optionalRead(p.config)!==raw || await optionalRead(p.rules)!==rules || await optionalRead(p.owner)!==ownerRaw) throw new Error('Integration conflict: files changed during preview. Retry.');
+  for(const file of skillChanges) if(await optionalRead(file.path)!==file.before) throw new Error('Integration conflict: skill files changed during preview. Retry.');
   config.mcpServers={...config.mcpServers,[SERVER_NAME]:entry};
   const newConfig=JSON.stringify(config,null,2)+'\n';
+  const skillHashes={}; for(const file of bundle) skillHashes[file.rel]=sha(file.text);
   try {
     await atomic(p.config,newConfig); await atomic(p.rules,RULES);
-    await atomic(p.owner,JSON.stringify({schema:1,entry,rulesHash:sha(RULES),backup},null,2)+'\n');
+    for(const file of skillChanges) await atomic(file.path,file.after);
+    await atomic(p.owner,JSON.stringify({schema:2,entry,rulesHash:sha(RULES),skills:skillHashes,backup},null,2)+'\n');
   } catch(error) {
     // Do not overwrite an intervening user edit during rollback.
     if(await optionalRead(p.config)===newConfig) {if(raw===null) await unlink(p.config);else await atomic(p.config,raw);}
     if(await optionalRead(p.rules)===RULES) {if(rules===null) await unlink(p.rules);else await atomic(p.rules,rules);}
+    for(const file of skillChanges){if(await optionalRead(file.path)!==file.after) continue;if(file.before===null) await unlink(file.path); else await atomic(file.path,file.before);}
     throw error;
   }
   return {...result,backup};
@@ -83,10 +126,12 @@ export async function removeWorkspaceIntegration(options) {
   if(!ownerRaw) return {applied:false,changed:false};
   const owner=JSON.parse(ownerRaw),raw=await optionalRead(p.config),rules=await optionalRead(p.rules),config=parseConfig(raw);
   if(JSON.stringify(config.mcpServers?.[SERVER_NAME])!==JSON.stringify(owner.entry) || rules===null || sha(rules)!==owner.rulesHash) throw new Error('Integration was modified; manual removal is required. No files changed.');
+  for(const rel of Object.keys(skillOwnerMap(owner))){ const path=join(p.skills,rel),current=await optionalRead(path); if(current!==null&&sha(current)!==owner.skills[rel]) throw new Error(`Skill integration was modified; manual removal is required: ${rel}`); }
   if(!options.apply) return {applied:false,changed:true};
   delete config.mcpServers[SERVER_NAME];
   await atomic(p.config,JSON.stringify(config,null,2)+'\n');
   await unlink(p.rules); await unlink(p.owner);
+  for(const rel of Object.keys(skillOwnerMap(owner))) await unlink(join(p.skills,rel)).catch(error=>{if(error.code!=='ENOENT') throw error;});
   return {applied:true,changed:true};
 }
 

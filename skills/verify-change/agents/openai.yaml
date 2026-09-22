@@ -1,0 +1,3 @@
+interface:
+  display_name: "Verify Change"
+  short_description: "Run the smallest useful validation checks"

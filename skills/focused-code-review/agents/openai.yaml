@@ -1,0 +1,3 @@
+interface:
+  display_name: "Focused Code Review"
+  short_description: "Find concrete risks in small code changes"

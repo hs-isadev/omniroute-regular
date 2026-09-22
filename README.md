@@ -28,6 +28,14 @@ eligible small coding/light tasks. It uses up to six low-context workers in
 paced waves, then performs one attributed synthesis; no extra switch is needed
 on a fresh install.
 
+The package also installs the portable hackathon skill pack into the selected
+workspace's `.agents/skills/` directory for Antigravity and OpenCode. It
+includes practical routing, implementation, debugging, review, verification,
+repository-mapping, accessibility, frontend, and scraping skills. The heavy
+opinionated `taste` and measurement-only `skillopt` skills are intentionally
+excluded. Codex's global integration remains explicit: run `omni integrate
+codex --user --apply` when you want to attach it to an existing Codex install.
+
 ## Historical 0.5.0 documentation
 
 The section below is retained for migration context only. The current package

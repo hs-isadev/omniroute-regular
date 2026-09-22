@@ -403,7 +403,7 @@ export class OmniRouter {
           fallbacks: [],
           shortRationale: "Regular mode used six-or-fewer bounded nano specialists in paced waves before final synthesis.",
         },
-        decision: `nano fan-out enabled with ${subtasks.length} tiny workers; execution is paced in waves of ${this.#config.routing.maxParallelWorkers}`,
+        decision: `nano fan-out enabled with ${subtasks.length} tiny workers; execution uses paced waves of ${this.#config.routing.maxParallelWorkers}`,
       };
     }
     const complexEnough = signals.intent === "high_risk" || (signals.requiredCapabilities.includes("coding") && signals.intent === "complex_task");

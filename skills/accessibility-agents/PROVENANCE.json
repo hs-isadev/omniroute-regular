@@ -1,0 +1,85 @@
+{
+  "name": "accessibility-agents",
+  "repo": "Community-Access/accessibility-agents",
+  "commit": "161c60c7493ad657f371ad8f91253d33c3b12044",
+  "changes": [
+    "Replaced automatic native-agent router",
+    "Vendored 16 specialist references without installing agents/hooks/MCP/config",
+    "OmniRoute-first domain reference workflow"
+  ],
+  "auditedAt": "2026-08-31T12:18:38.304Z",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "b1a2badc5d07c1853c88b831eb6be247cedb9be42242ecf583d6bc4a5b62ec35"
+    },
+    {
+      "path": "references/accessibility-lead.md",
+      "sha256": "e036fdb050e67f984b412591983b9cf10e4a73dc83bed70ee564da377c5a264a"
+    },
+    {
+      "path": "references/alt-text-headings.md",
+      "sha256": "c82d94f8fa57cb29602478485a0c65cd8dd2244c80f89a3b0c453c15891f17b8"
+    },
+    {
+      "path": "references/aria-specialist.md",
+      "sha256": "0792f0f5cca804ab3521e4f160a86c4c847832e2d697437981ebf9a3af5256f5"
+    },
+    {
+      "path": "references/cognitive-accessibility.md",
+      "sha256": "a2343df1d43a9e5a22cf848ef32a5240f0852c0ebc2b7017dde40b1ad1db662b"
+    },
+    {
+      "path": "references/contrast-master.md",
+      "sha256": "1e708a78520297a3de2af24fbf321738bc01b9b2160e65b9cb2c9189f8a16519"
+    },
+    {
+      "path": "references/forms-specialist.md",
+      "sha256": "a900c0ff15df01dc96e73c8c0c4394f3c57dfe614e3644efbe90c7798f39ce3b"
+    },
+    {
+      "path": "references/i18n-accessibility.md",
+      "sha256": "838d751465ef4e8f5ed03a045f5957385edd75653ae6a90dfee8bd373d42e0db"
+    },
+    {
+      "path": "references/keyboard-navigator.md",
+      "sha256": "7d40c05dc1afba5699394dffa7639d82830ecb14275e327574d6f52044e218ee"
+    },
+    {
+      "path": "references/link-checker.md",
+      "sha256": "4286f1fdf4d065d66e1fc084172e59ffb378690eb1103777f0b18906fe3bdfdb"
+    },
+    {
+      "path": "references/live-region-controller.md",
+      "sha256": "20159888215bf48133ac0bfa06ecacd6b0fddc5d72c1b430cb09a0114fd19389"
+    },
+    {
+      "path": "references/media-accessibility.md",
+      "sha256": "f39a6337d09ec1c8b18daad010dcd351c319e4a4f63ba4987d808170937875c2"
+    },
+    {
+      "path": "references/mobile-accessibility.md",
+      "sha256": "07fb3c704f3f0c52d66e09d92eca4566f4fcd64f005e7e3110799d5164303fbf"
+    },
+    {
+      "path": "references/modal-specialist.md",
+      "sha256": "677f040a5075f3fa0ff7ee8e3cae8e923f5366eff5f24f73da2551944c56e364"
+    },
+    {
+      "path": "references/tables-data-specialist.md",
+      "sha256": "e35598b5cf65a36be15e0b354ddea43f3a1ce84c047969b9b177ec56826d9139"
+    },
+    {
+      "path": "references/testing-coach.md",
+      "sha256": "9e1bcbc39650e60deb09deb18ce34acbdee4b5d54a14a0ff2029f9baa5d0bee2"
+    },
+    {
+      "path": "references/wcag-guide.md",
+      "sha256": "7fd92cdc63bf73c485f782ff970af7fb7a338bbd82042c543fc2ee49a0a7d8e0"
+    },
+    {
+      "path": "SKILL.md",
+      "sha256": "8a14a663f38c2e8e28291f953d3c287a858fc7e997fd153da3a8b551334cc3b3"
+    }
+  ]
+}

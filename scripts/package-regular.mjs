@@ -65,6 +65,10 @@ for(const group of ['apps','packages']) {
 for(const name of ['browser-consumer-adapter','claude-consumer-adapter','zai-consumer-adapter']) await cp(join(root,'packages',name,'src'),join(appStage,'packages',name,'src'),{recursive:true});
 const npmCli=join(work,nodeFolder,linux?'lib/node_modules/npm/bin/npm-cli.js':'node_modules/npm/bin/npm-cli.js');
 await run(process.execPath,[npmCli,'ci','--omit=dev','--ignore-scripts','--no-audit','--no-fund',`--os=${linux?'linux':'win32'}`,'--cpu=x64'],appStage);
+// The portable app carries the shared Agent Skills pack. Setup installs it
+// into the selected workspace's .agents/skills directory so Antigravity and
+// OpenCode can discover the same files without mutating a user's global home.
+await cp(join(root,'skills'),join(appStage,'skills'),{recursive:true,dereference:true});
 await cp(appStage,join(payload,'app'),{recursive:true,dereference:true});
 await mkdir(join(payload,'app/distribution'),{recursive:true});
 for(const name of ['launch.mjs','settings.mjs','antigravity.mjs','mcp-regular.mjs','install.mjs','guided-setup.mjs','browser-consumer-setup.mjs','key-editor.mjs','regular-policy.mjs','private-key-path.ps1']) await cp(join(root,'distribution',name),join(payload,'app/distribution',name));
@@ -76,6 +80,7 @@ await cp(join(root,'README.md'),join(release,'README.md'));
 await mkdir(join(release,'docs'),{recursive:true});
 await cp(join(root,'docs/free-provider-expansion.md'),join(release,'docs/free-provider-expansion.md'));
 await cp(join(root,'docs/opensource-setup-additions.md'),join(release,'docs/opensource-setup-additions.md'));
+await cp(join(root,'docs/hackathon-skill-pack.md'),join(release,'docs/hackathon-skill-pack.md'));
 await cp(join(root,'docs/antigravity-regular.md'),join(release,'docs/antigravity-regular.md'));
 await mkdir(join(release,'docs/testing'),{recursive:true});
 await cp(join(root,'docs/testing/antigravity-regular.tdd.md'),join(release,'docs/testing/antigravity-regular.tdd.md'));
@@ -83,8 +88,6 @@ await cp(join(root,'docs/testing/guided-setup.tdd.md'),join(release,'docs/testin
 await cp(join(root,'docs/testing/key-editor.tdd.md'),join(release,'docs/testing/key-editor.tdd.md'));
 await mkdir(join(release,'plans'),{recursive:true});
 await cp(join(root,'plans/antigravity-regular.md'),join(release,'plans/antigravity-regular.md'));
-await mkdir(join(release,'skills/omniroute-first-delegation'),{recursive:true});
-await cp(join(root,'skills/omniroute-first-delegation/SKILL.md'),join(release,'skills/omniroute-first-delegation/SKILL.md'));
 const lock=JSON.parse(await readFile(join(root,'package-lock.json'),'utf8'));
 const dependencies=Object.entries(lock.packages).filter(([name,item])=>name&&(!item.dev||item.devOptional===false)).map(([name,item])=>({path:name,version:item.version??null,license:item.license??'See package LICENSE',integrity:item.integrity??null,resolved:item.resolved??null}));
 await writeFile(join(payload,'dependencies.json'),JSON.stringify({node:{version:'22.23.2',license:'node/LICENSE'},packages:dependencies},null,2)+'\n');

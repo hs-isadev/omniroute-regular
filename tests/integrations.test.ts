@@ -63,6 +63,30 @@ test("Claude Code merge preserves unrelated MCP servers and hooks", async () => 
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("Codex and OpenCode receive the shared skill pack without overwriting user skills", async () => {
+  const root = await mkdtemp(join(tmpdir(), "omniroute-skill-pack-"));
+  const home = join(root, "home"), host = defaultHostPaths(home), skillsRoot = join(root, "skills");
+  const runtime = getRuntimePaths(join(root, "runtime"));
+  const manager = new IntegrationManager({ hostPaths: host, runtimePaths: runtime, nodePath: "C:\\node.exe", cliPath: "C:\\omni.js", skillsRoot });
+  try {
+    await mkdir(join(skillsRoot, "tdd-workflow", "references"), { recursive: true });
+    await writeFile(join(skillsRoot, "tdd-workflow", "SKILL.md"), "---\nname: tdd-workflow\ndescription: test-first\n---\n");
+    await writeFile(join(skillsRoot, "tdd-workflow", "references", "quick.md"), "quick reference\n");
+    await mkdir(join(home, ".codex"), { recursive: true });
+    const codexPlan = await manager.plan("codex", "install");
+    assert.ok(codexPlan.changes.some((change) => change.path.endsWith("codex\\skills\\tdd-workflow\\SKILL.md")));
+    await manager.apply(codexPlan);
+    assert.match(await readFile(join(host.codexSkillsDir, "tdd-workflow", "SKILL.md"), "utf8"), /test-first/);
+    assert.match(await readFile(join(host.codexSkillsDir, "tdd-workflow", "references", "quick.md"), "utf8"), /quick reference/);
+    assert.equal((await manager.plan("codex", "install")).changed, false);
+
+    await mkdir(join(home, ".config", "opencode"), { recursive: true });
+    await manager.apply(await manager.plan("opencode", "install"));
+    assert.match(await readFile(join(host.openCodeSkillsDir, "tdd-workflow", "SKILL.md"), "utf8"), /test-first/);
+    assert.match(await readFile(join(host.openCodeSkillsDir, "tdd-workflow", "references", "quick.md"), "utf8"), /quick reference/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("OpenCode integration preserves user config, adds managed regular MCP/instructions, and is idempotent/removable", async () => {
   const root = await mkdtemp(join(tmpdir(), "omniroute-opencode-"));
   const home = join(root, "home"), host = defaultHostPaths(home);
