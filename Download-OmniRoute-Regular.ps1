@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param([string]$Destination = (Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Downloads\OmniRoute-Regular-0.2.6'))
 $ErrorActionPreference = 'Stop'
-$version = 'v0.2.6-regular.4'
+$version = 'v0.2.6-regular.5'
 $archive = 'OmniRoute-Regular-0.2.6-windows-x64.zip'
 $base = "https://github.com/hs-isadev/omniroute-regular/releases/download/$version"
 $destination = [IO.Path]::GetFullPath($Destination)

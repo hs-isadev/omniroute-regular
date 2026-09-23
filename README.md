@@ -6,9 +6,9 @@ skills, provider adapters, and setup scripts. Antigravity itself is not
 redistributed; setup opens its official download page and keeps its login in
 the official app.
 
-- [Windows x64 one-click package](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.2.6-regular.4/OmniRoute-Regular-0.2.6-windows-x64.zip) · [SHA-256](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.2.6-regular.4/OmniRoute-Regular-0.2.6-windows-x64.zip.sha256)
-- [Linux x64 one-click package](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.2.6-regular.4/OmniRoute-Regular-0.2.6-linux-x64.tar.gz) · [SHA-256](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.2.6-regular.4/OmniRoute-Regular-0.2.6-linux-x64.tar.gz.sha256)
-- [Release notes and verification](https://github.com/hs-isadev/omniroute-regular/releases/tag/v0.2.6-regular.4)
+- [Windows x64 one-click package](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.2.6-regular.5/OmniRoute-Regular-0.2.6-windows-x64.zip) · [SHA-256](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.2.6-regular.5/OmniRoute-Regular-0.2.6-windows-x64.zip.sha256)
+- [Linux x64 one-click package](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.2.6-regular.5/OmniRoute-Regular-0.2.6-linux-x64.tar.gz) · [SHA-256](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.2.6-regular.5/OmniRoute-Regular-0.2.6-linux-x64.tar.gz.sha256)
+- [Release notes and verification](https://github.com/hs-isadev/omniroute-regular/releases/tag/v0.2.6-regular.5)
 
 For a download-and-install flow without manually opening the release page, run
 [`Download-OmniRoute-Regular.cmd`](Download-OmniRoute-Regular.cmd) on Windows or

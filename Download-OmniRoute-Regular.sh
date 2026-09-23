@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 umask 077
-version='v0.2.6-regular.4'
+version='v0.2.6-regular.5'
 archive='OmniRoute-Regular-0.2.6-linux-x64.tar.gz'
 base="https://github.com/hs-isadev/omniroute-regular/releases/download/$version"
 destination=${1:-"${HOME:?}/Downloads/OmniRoute-Regular-0.2.6"}
