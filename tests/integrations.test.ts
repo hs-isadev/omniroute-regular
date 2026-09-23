@@ -74,7 +74,7 @@ test("Codex and OpenCode receive the shared skill pack without overwriting user 
     await writeFile(join(skillsRoot, "tdd-workflow", "references", "quick.md"), "quick reference\n");
     await mkdir(join(home, ".codex"), { recursive: true });
     const codexPlan = await manager.plan("codex", "install");
-    assert.ok(codexPlan.changes.some((change) => change.path.endsWith("codex\\skills\\tdd-workflow\\SKILL.md")));
+    assert.ok(codexPlan.changes.some((change) => change.path.endsWith(join(".codex", "skills", "tdd-workflow", "SKILL.md"))));
     await manager.apply(codexPlan);
     assert.match(await readFile(join(host.codexSkillsDir, "tdd-workflow", "SKILL.md"), "utf8"), /test-first/);
     assert.match(await readFile(join(host.codexSkillsDir, "tdd-workflow", "references", "quick.md"), "utf8"), /quick reference/);

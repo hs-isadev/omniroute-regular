@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import test from "node:test";
 import { DEFAULT_CONFIG, getRuntimePaths, loadConfig, temporaryRuntimeRoot, validateConfig } from "@omniroute/config";
 
@@ -50,8 +51,9 @@ test("existing config gains free downgrade models without re-enabling a disabled
 });
 
 test("durable session storage has a private runtime directory and six credential slots are declared", () => {
-  const paths = getRuntimePaths("C:/omniroute-test-runtime");
-  assert.equal(paths.sessionsDir, join("C:/omniroute-test-runtime", "sessions"));
+  const root = join(tmpdir(), "omniroute-test-runtime");
+  const paths = getRuntimePaths(root);
+  assert.equal(paths.sessionsDir, join(root, "sessions"));
   assert.equal(DEFAULT_CONFIG.privacy.sessionFilesEnabled, true);
   assert.equal(DEFAULT_CONFIG.routing.nanoSubagentsEnabled, true);
   assert.equal(DEFAULT_CONFIG.routing.nanoSubtaskCount, 6);

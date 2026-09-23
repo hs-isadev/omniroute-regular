@@ -5,7 +5,8 @@ const source=name=>readFile(new URL(name,import.meta.url),'utf8');
 test('default packages bundle MCP but not OpenCode and include provenance',async()=>{
   const build=await source('../scripts/package-regular.mjs');
   assert.doesNotMatch(build,/const openCodePackage|opencode:.*1\.18/);
-  for(const name of ['antigravity.mjs','mcp-regular.mjs','install.mjs','browser-consumer-setup.mjs','browser-consumer-adapter','claude-consumer-adapter','zai-consumer-adapter','provenance.json','dependencies.json','docs/testing/antigravity-regular.tdd.md','skills/omniroute-first-delegation/SKILL.md']) assert.ok(build.includes(name),name);
+  for(const name of ['antigravity.mjs','mcp-regular.mjs','install.mjs','browser-consumer-setup.mjs','browser-consumer-adapter','claude-consumer-adapter','zai-consumer-adapter','provenance.json','dependencies.json','docs/testing/antigravity-regular.tdd.md']) assert.ok(build.includes(name),name);
+  assert.match(build,/cp\(join\(root,'skills'\),join\(appStage,'skills'\)/);
   assert.match(build,/join\(appStage,'packages',name,'src'\)/);
 });
 test('v0.5 release preserves attribution and includes both browser consumer routes',async()=>{
@@ -16,7 +17,7 @@ test('v0.5 release preserves attribution and includes both browser consumer rout
   assert.match(build,/packages\/zai-consumer-adapter/);
   assert.match(build,/personalDataIncluded:false/);
   assert.match(build,/THIRD-PARTY-NOTICES\.md/);
-  assert.match(build,/skills\/omniroute-first-delegation\/SKILL\.md/);
+  assert.match(build,/cp\(join\(repo,'skills'\),join\(release,'skills'\)/);
   const notice=await source('../THIRD-PARTY-NOTICES.md');
   assert.match(notice,/Copyright \(c\) 2026 diegosouzapw/);
   assert.match(notice,/MIT License/);

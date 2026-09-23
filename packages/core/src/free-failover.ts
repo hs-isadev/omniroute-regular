@@ -41,7 +41,9 @@ export class FreeModelFailover {
 
   private free(model: ModelEntry): boolean {
     const settings = this.config.providers.find((item) => item.id === model.providerId);
-    return !!settings?.enabled && settings.freeTierOnly && model.route.freeStatus === "confirmed" && model.pricing.inputPerMillionUsd === 0 && model.pricing.outputPerMillionUsd === 0;
+    // Older registry snapshots may omit route metadata. Treat those entries
+    // as non-free instead of throwing while evaluating fallback candidates.
+    return !!settings?.enabled && settings.freeTierOnly && model.route?.freeStatus === "confirmed" && model.pricing.inputPerMillionUsd === 0 && model.pricing.outputPerMillionUsd === 0;
   }
 
   private key(selection: Pick<ModelSelection, "providerId" | "modelId">): string { return `${selection.providerId}\0${selection.modelId}`; }
