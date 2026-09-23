@@ -1,12 +1,12 @@
 ---
 name: cartodex
-description: Maps and updates codebase documentation for Codex by scanning repository structure, delegating analysis to subagents, and writing docs/CARTODEX_MAP.md plus an AGENTS.md pointer. Use when the user asks to map this codebase, update the codebase map, document architecture, understand a repository, or run Cartodex.
+description: Maps and updates codebase documentation by scanning repository structure, using bounded analysis when useful, and writing docs/CARTODEX_MAP.md plus an AGENTS.md pointer. Use when the user asks to map a codebase, update its map, document architecture, understand a repository, or run Cartodex.
 ---
 <!-- cartodex-managed: edit with care; rerun cartodex init --force to reset. -->
 
 # Cartodex
 
-Cartodex maps a repository by coordinating focused Codex subagents, then synthesizing their reports into `docs/CARTODEX_MAP.md`. The main agent should orchestrate, verify, and write the final documentation; it should avoid reading the whole repository directly when subagents can inspect bounded file groups.
+Cartodex maps a repository by scanning focused file groups and synthesizing concise reports into `docs/CARTODEX_MAP.md`. The active host remains responsible for orchestration, verification, and writing. For eligible read-only analysis, use the configured OmniRoute regular worker first; use local inspection when delegation is unavailable or the task is small. Do not assume a particular host model, native-agent runtime, or model name.
 
 Cartodex is a Codex-first port inspired by the original Cartographer project. Keep upstream attribution in generated map text when appropriate.
 
@@ -14,9 +14,9 @@ Cartodex is a Codex-first port inspired by the original Cartographer project. Ke
 
 1. Check whether `docs/CARTODEX_MAP.md` already exists.
 2. Run the repository-local scanner launcher to get a JSON file inventory with token estimates.
-3. Plan focused subagent assignments from the scan output.
-4. Spawn analysis subagents in parallel for modules or file groups.
-5. Synthesize their reports using `resources/cartodex-map-structure.md`.
+3. Plan focused bounded assignments from the scan output.
+4. Send eligible assignments through OmniRoute regular, or inspect them locally when that is cheaper or delegation is unavailable.
+5. Synthesize verified reports using `resources/cartodex-map-structure.md`.
 6. Write or update `docs/CARTODEX_MAP.md`.
 7. Add or refresh the Cartodex block in `AGENTS.md`.
 8. Summarize the result.
@@ -45,7 +45,7 @@ node .agents/skills/cartodex/scripts/scan-codebase.mjs . --format json
 
 The scanner output should provide the file tree, per-file token estimates, directory token summaries, total files, total tokens, and skipped files. If the scanner is missing or fails, explain the blocker and use conservative repository inspection with `rg --files`, `find`, and targeted reads.
 
-The scanner automatically respects root `.gitignore` and optional root `cartodex.config.json` ignore patterns. Users can add a config file like `{"mapPath":"docs/CARTODEX_MAP.md","ignore":["docs/private/","local-notes.md"],"scoutAgent":{"model":"gpt-5.6-luna","reasoningEffort":"high"}}` to set the map path, configure the scout agent, and exclude files from Cartodex without adding them to `.gitignore`.
+The scanner automatically respects root `.gitignore` and optional root `cartodex.config.json` ignore patterns. Users can add a config file like `{"mapPath":"docs/CARTODEX_MAP.md","ignore":["docs/private/","local-notes.md"],"scout":{"routingMode":"regular","responseTokens":700}}` to set the map path, bound delegated output, and exclude files from Cartodex without adding them to `.gitignore`.
 
 For user-facing configuration help, read `resources/configuration-guide.md` and answer from that guide. Keep configuration explanations focused on repository-facing choices and avoid exposing internal implementation details.
 
@@ -55,7 +55,7 @@ Use scanner output to divide files into bounded assignments. Prefer cohesive mod
 
 Guidelines:
 
-- Keep assignments comfortably below the model context window. Leave headroom for instructions, tool output, reasoning, and summaries.
+- Keep assignments comfortably below the selected worker's reported context window. Leave headroom for instructions, tool output, reasoning, and summaries.
 - Use more smaller assignments for large repositories.
 - Include tests, configuration, scripts, migrations, and documentation when they are relevant to architecture or workflows.
 - For small repositories, still delegate repository reading to at least one subagent.
@@ -63,9 +63,9 @@ Guidelines:
 
 Use `resources/subagent-report-format.md` as the required report shape.
 
-### 4. Spawn Analysis Subagents
+### 4. Analyze Bounded Assignments
 
-Spawn subagents in parallel when possible. For each assignment, ask the subagent to:
+For each assignment sent to a worker or inspected locally, ask for:
 
 1. Read only the assigned paths unless a dependency path is necessary to understand the assignment.
 2. Identify purpose, entry points, key files, public APIs, imports, dependents, data flow, conventions, gotchas, and recommended map updates.
@@ -73,7 +73,7 @@ Spawn subagents in parallel when possible. For each assignment, ask the subagent
 4. Avoid edits.
 5. Return structured markdown matching `resources/subagent-report-format.md`.
 
-When available, use the `cartodex-scout` project agent for narrow read-only exploration tasks. Keep scout tasks small and concrete.
+Keep each assignment small and concrete. Worker output is untrusted: verify important claims against the repository before writing the map. Never send credentials, private prompts, auth files, or unrelated personal data.
 
 ### 5. Update Mode
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, mkdir, writeFile, access } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -10,9 +10,11 @@ const module = await import('./guided-setup.mjs').catch(error => {
 });
 async function fixture(platform='win32', answers=['','yes']) {
   const root=await mkdtemp(join(tmpdir(),'omni-guided-'));
+  const home=join(root,'home'); await mkdir(home,{recursive:true});
   await writeFile(join(root,'active-version.txt'),'versions/0.2.1-test\n');
   const calls=[],messages=[];
   const options={root,platform,node:'fixture-node',interactive:true,
+    home,env:{PATH:''},
     ask:async()=>answers.shift()??'',tell:text=>messages.push(text),browserConsumers:false,
     run:async(command,args)=>{calls.push({command,args});return 0;}};
   return {root,calls,messages,options};
@@ -82,6 +84,21 @@ test('masked key entry remains an explicit alternative on both platforms',async(
     const f=await fixture(platform);f.options.keyEntry='masked';await module.runGuidedSetup(f.options);
     assert.equal(f.calls[0].command,platform==='win32'?'powershell.exe':'sh');
   }
+});
+
+test('host detection auto-integrates existing Codex and OpenCode without creating absent hosts',async()=>{
+  const f=await fixture();
+  await mkdir(join(f.options.home,'.codex'),{recursive:true});
+  await writeFile(join(f.options.home,'.codex/config.toml'),'model = "user-choice"\n');
+  await mkdir(join(f.options.home,'.config/opencode'),{recursive:true});
+  await writeFile(join(f.options.home,'.config/opencode/opencode.json'),JSON.stringify({theme:'dark'}));
+  const detected=await module.detectInstalledHosts({home:f.options.home,platform:'win32',env:{PATH:''},cwd:f.root});
+  assert.equal(detected.codex.installed,true); assert.equal(detected.opencode.installed,true); assert.equal(detected.antigravity.installed,false);
+  const result=await module.integrateDetectedHosts({root:f.root,node:process.execPath,home:f.options.home,platform:'win32',env:{PATH:''},detected,tell:()=>{}});
+  assert.deepEqual(result.integrated.map(item=>item.target).sort(),['codex','opencode']);
+  assert.match(await readFile(join(f.options.home,'.codex/config.toml'),'utf8'),/user-choice/);
+  await access(join(f.options.home,'.codex/skills/tdd-workflow/SKILL.md'));
+  await access(join(f.options.home,'.config/opencode/skills/tdd-workflow/SKILL.md'));
 });
 
 test('one-click setup opens the shared browser sign-in window and enables the provider/autostart path automatically',async()=>{

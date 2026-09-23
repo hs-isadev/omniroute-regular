@@ -2,8 +2,10 @@
 
 The one-click Regular package includes a portable, practical skill pack for
 fast building. Setup copies it into the selected workspace at
-`.agents/skills/`, which is recognized by Antigravity and OpenCode. The same
-pack can be copied into Codex with the explicit integration command:
+`.agents/skills/`, which is recognized by Antigravity and OpenCode. It also
+checks for existing Codex/OpenCode installations and applies the managed
+global integration only when those hosts are present; user-owned files are
+never overwritten. Codex can be attached explicitly with:
 
 ```powershell
 omni integrate codex --user --apply

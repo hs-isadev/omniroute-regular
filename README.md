@@ -33,8 +33,9 @@ workspace's `.agents/skills/` directory for Antigravity and OpenCode. It
 includes practical routing, implementation, debugging, review, verification,
 repository-mapping, accessibility, frontend, and scraping skills. The heavy
 opinionated `taste` and measurement-only `skillopt` skills are intentionally
-excluded. Codex's global integration remains explicit: run `omni integrate
-codex --user --apply` when you want to attach it to an existing Codex install.
+excluded. Setup checks for existing Codex and OpenCode installations and
+applies the managed integration only when found; absent hosts are left alone.
+Codex can also be attached explicitly with `omni integrate codex --user --apply`.
 
 ## Historical 0.5.0 documentation
 

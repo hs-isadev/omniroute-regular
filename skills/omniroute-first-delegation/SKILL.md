@@ -1,13 +1,13 @@
 ---
 name: omniroute-first-delegation
-description: Use OmniRoute first for eligible Codex and Antigravity work to reduce host-token use while preserving host control, verification, and safety boundaries.
+description: Use OmniRoute first for eligible work in Codex, Antigravity, OpenCode, and similar hosts while preserving host control, verification, and safety boundaries.
 metadata:
   short-description: Route bounded work through OmniRoute
 ---
 
 # OmniRoute-first delegation
 
-Use this skill for Codex and Antigravity requests that are substantive,
+Use this skill for host requests that are substantive,
 ordinary, and safe to summarize: planning, repository reading, coding design,
 small independent implementation tasks, analysis, documentation, and review.
 The host remains the owner of the canonical task, local files, tools,
@@ -63,6 +63,7 @@ require explicit user approval.
 
 For Codex, use the managed OmniRoute MCP server and its user-level instruction
 integration. For Antigravity, use the workspace `omniroute_regular` MCP server
-and the managed `.agents/rules` rule. In both hosts, keep `omni_route` as the
-single routing authority for the delegated request and verify the result before
-applying it.
+and the managed `.agents/rules` rule. For OpenCode, use its managed MCP/instruction
+integration. In every host, keep `omni_route` as the single routing authority
+for the delegated request and verify the result before applying it. Host model
+names and generations are descriptive metadata, not routing commands.
