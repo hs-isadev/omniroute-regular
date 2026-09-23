@@ -35,3 +35,13 @@ test('Linux extracted-package smoke follows package version instead of a stale a
   assert.doesNotMatch(smoke,/OmniRoute-Regular-\d+\.\d+\.\d+/);
   assert.match(smoke,/version=/);
 });
+test('root download entrypoints verify the release and hand off to one-click setup',async()=>{
+  const windows=await source('../Download-OmniRoute-Regular.ps1');
+  assert.match(windows,/Get-FileHash/);
+  assert.match(windows,/Setup\.cmd/);
+  assert.match(windows,/Start-Process/);
+  const linux=await source('../Download-OmniRoute-Regular.sh');
+  assert.match(linux,/sha256sum --check/);
+  assert.match(linux,/Setup\.sh/);
+  assert.match(linux,/exec /);
+});

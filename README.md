@@ -1,22 +1,30 @@
-# OmniRoute Private 0.6.3 — popup-tolerant browser startup
+# OmniRoute Regular 0.2.6 — one-click Windows/Linux setup
 
-The current release is `OmniRoute Private 0.6.3`. It waits through transient
-startup overlays before judging a browser consumer signed out and opens Kimi at
-its authenticated home route. It retains conservative request spacing, rolling
-budgets, and blocking-notice cooldowns for browser consumers,
-alongside bounded parallel API
-workers for complex coding and high-risk requests, followed by one attributed
-final synthesis. Casual and easy repetitive work stays single-worker. The shared,
-isolated Chromium-family browser session still supports Claude, Z.AI, Qwen, Kimi,
-DeepSeek, and Perplexity alongside the API-key and host integrations.
-See the complete release guide and downloads on the [`v0.6.3-private.1` GitHub Release](https://github.com/hs-isadev/omniroute-regular/releases/tag/v0.6.3-private.1).
+Download the feature-complete package from the top-level links below. Each
+archive bundles the Node runtime, production dependencies, MCP server, portable
+skills, provider adapters, and setup scripts. Antigravity itself is not
+redistributed; setup opens its official download page and keeps its login in
+the official app.
 
-## Current release setup
+- [Windows x64 one-click package](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.2.6-regular.4/OmniRoute-Regular-0.2.6-windows-x64.zip) · [SHA-256](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.2.6-regular.4/OmniRoute-Regular-0.2.6-windows-x64.zip.sha256)
+- [Linux x64 one-click package](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.2.6-regular.4/OmniRoute-Regular-0.2.6-linux-x64.tar.gz) · [SHA-256](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.2.6-regular.4/OmniRoute-Regular-0.2.6-linux-x64.tar.gz.sha256)
+- [Release notes and verification](https://github.com/hs-isadev/omniroute-regular/releases/tag/v0.2.6-regular.4)
 
-1. Extract the release package.
-2. Windows: double-click `Install-Windows.cmd`. Linux: run `sh Install-Linux.sh`.
-3. Add your own provider keys in the API Keys window and complete the free-account confirmation.
-4. Sign in to any web consumers you want to use in the dedicated browser window, then sign in to Antigravity.
+For a download-and-install flow without manually opening the release page, run
+[`Download-OmniRoute-Regular.cmd`](Download-OmniRoute-Regular.cmd) on Windows or
+[`Download-OmniRoute-Regular.sh`](Download-OmniRoute-Regular.sh) on Linux.
+
+## One-click behavior
+
+1. Download the matching archive or run the root downloader above.
+2. Run `Setup.cmd` (Windows) or `Setup.sh` (Linux) inside the extracted package.
+3. Setup installs the bundled runtime, preserves existing local data, opens the
+   provider key flow, and starts the guided host setup.
+4. Setup also writes one owned per-user startup entry for the shared foreground
+   browser adapter: Windows Startup on login or Linux desktop autostart. The
+   adapter opens its isolated browser profile on every desktop login; you sign
+   in once with your own accounts. No cookies, credentials, or sessions ship in
+   the archive.
 
 The package contains no API keys, browser sessions, vaults, or personal
 projects. Browser credentials stay in the dedicated local profile and are not
@@ -100,7 +108,7 @@ This is quota-limited, not unlimited free frontier inference. The host still con
 
 ## Windows x64
 
-1. Download the Windows ZIP and its SHA-256 file from a trusted release source. Check `Get-FileHash .\OmniRoute-Regular-0.2.2-windows-x64.zip -Algorithm SHA256` against it, then extract the ZIP.
+1. Download the Windows ZIP and its SHA-256 file from a trusted release source. Check `Get-FileHash .\OmniRoute-Regular-0.2.6-windows-x64.zip -Algorithm SHA256` against it, then extract the ZIP.
 2. Install/sign in to official Antigravity. Choose a host model your account offers on the free plan; do not enable paid credits/overages.
 3. Run `Setup.cmd`. It installs for your Windows user and opens **Notepad with API key slots and signup links**. Providers already saved in this installation are marked; their secret values are never shown. One suitable free provider is enough. Blank slots retain saved keys.
 4. Fill only the keys you want to add/change, **save and close Notepad**, then return to setup. Type **yes** to confirm free-plan accounts (no billing/overages/BYOK/top-up) and import. Optionally test Kimi/Qwen candidates. Short validation requests use free quota; successful keys are encrypted and removed from the text file. Failed entries stay for retry.
@@ -108,7 +116,7 @@ This is quota-limited, not unlimited free frontier inference. The host still con
 
 To resume later, run `%LOCALAPPDATA%\OmniRouteRegular\Connect.cmd`. To add keys only, run `%LOCALAPPDATA%\OmniRouteRegular\Settings.cmd`. Blank fields keep saved keys, so you do not need to paste every key again.
 
-**Text-file risk:** Notepad/editor session backups, clipboard history, disk snapshots and malware can retain plaintext. Disable editor session recovery before entering keys. Cleanup is not secure erasure. For less exposure, use `Connect.cmd --masked` or `Settings.cmd` instead. Files are created under `%LOCALAPPDATA%\OmniRouteRegular-KeyEntry\<profile-id>\credentials.txt`, outside the package/project, with current-user-only permissions. Cancelled/failed imports leave pending plaintext there. No OS-login startup task is added.
+**Text-file risk:** Notepad/editor session backups, clipboard history, disk snapshots and malware can retain plaintext. Disable editor session recovery before entering keys. Cleanup is not secure erasure. For less exposure, use `Connect.cmd --masked` or `Settings.cmd` instead. Files are created under `%LOCALAPPDATA%\OmniRouteRegular-KeyEntry\<profile-id>\credentials.txt`, outside the package/project, with current-user-only permissions. Cancelled/failed imports leave pending plaintext there. The current Setup path also installs the owned browser-consumer startup entry described above.
 
 Advanced/manual launch remains available:
 
