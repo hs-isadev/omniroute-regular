@@ -1,4 +1,4 @@
-# OmniRoute Regular 0.2.8
+# OmniRoute Regular 0.2.9 Windows / 0.2.8 Linux
 
 One-click installer downloads for Windows 10/11 x64 and Linux x64 desktops.
 Each package includes the OmniRoute runtime, provider integrations, setup
@@ -7,8 +7,10 @@ not included.
 
 ## Downloads
 
-- [Windows x64 installer](OmniRoute-Regular-0.2.8-windows-x64.zip) — SHA-256: `b9046d66b430a22c564e821bf8cacb3f31caa7888158f36253655e9ce36396ec`
+- [Windows x64 installer](OmniRoute-Regular-0.2.9-windows-x64.zip) — SHA-256: `f815bc8e7d94c2769a44e88bada3d75c4adebf6c71e0452e04d34a99ec03c9ed`
 - [Linux x64 installer](OmniRoute-Regular-0.2.8-linux-x64.tar.gz) — SHA-256: `22c57d80268265123b4b6570d484278eed765ada2dcf19361ffb9258c736c705`
+
+The 0.2.9 update is Windows-only; the Linux 0.2.8 package is unchanged.
 
 ## Install
 
