@@ -1,4 +1,4 @@
-# OmniRoute Regular 0.2.7
+# OmniRoute Regular 0.2.8
 
 One-click installer downloads for Windows 10/11 x64 and Linux x64 desktops.
 Each package includes the OmniRoute runtime, provider integrations, setup
@@ -7,8 +7,8 @@ not included.
 
 ## Downloads
 
-- [Windows x64 installer](OmniRoute-Regular-0.2.7-windows-x64.zip) — SHA-256: `718D0DCA3B10629EDC3059CFC9E4F44FA14E5302FE2A6929C8B809BD03A337AF`
-- [Linux x64 installer](OmniRoute-Regular-0.2.7-linux-x64.tar.gz) — SHA-256: `7EFF6A28FD34E5BA1B0F7A07BC54A50D35567EDF9D0755D195E24BB4EA8DA87F`
+- [Windows x64 installer](OmniRoute-Regular-0.2.8-windows-x64.zip) — SHA-256: `b9046d66b430a22c564e821bf8cacb3f31caa7888158f36253655e9ce36396ec`
+- [Linux x64 installer](OmniRoute-Regular-0.2.8-linux-x64.tar.gz) — SHA-256: `22c57d80268265123b4b6570d484278eed765ada2dcf19361ffb9258c736c705`
 
 ## Install
 
@@ -19,7 +19,9 @@ not included.
    key** links, and six masked key slots per provider. You can leave unused
    slots blank or skip key setup and sign in to supported browser providers.
 4. After key validation, the popup lists providers whose connection check
-   passed and are enabled, plus any new keys that could not be validated.
+   passed and are enabled, providers that connected but remained disabled
+   (their entered keys are not saved), and any keys that could not be
+   validated. Timeouts retry once before fallback.
 5. Sign in to Antigravity and any consumer accounts yourself; credentials and
    browser sessions stay on your device.
 
