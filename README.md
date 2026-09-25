@@ -1,38 +1,41 @@
-# OmniRoute Regular 0.2.9 Windows / 0.2.8 Linux
+# OmniRoute setup for Windows and Linux
 
-One-click installer downloads for Windows 10/11 x64 and Linux x64 desktops.
-Each package includes the OmniRoute runtime, provider integrations, setup
-scripts, and bundled dependencies. Personal API keys and account sign-ins are
-not included.
+## Download
 
-## Downloads
+Download the latest setup package: [OmniRoute Dual 0.5.2 for Windows and
+Linux](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.5.2/OmniRoute-Dual-0.5.2.zip)
+(about 217 MB).
 
-- [Windows x64 installer](OmniRoute-Regular-0.2.9-windows-x64.zip) — SHA-256: `f815bc8e7d94c2769a44e88bada3d75c4adebf6c71e0452e04d34a99ec03c9ed`
-- [Linux x64 installer](OmniRoute-Regular-0.2.8-linux-x64.tar.gz) — SHA-256: `22c57d80268265123b4b6570d484278eed765ada2dcf19361ffb9258c736c705`
+SHA-256: `78ec8a1f945032bea5556bceaa58176c01049cf313147967cd5fc5c4c2e42214` ([checksum file](OmniRoute-Dual-0.5.2.zip.sha256)).
 
-The 0.2.9 update is Windows-only; the Linux 0.2.8 package is unchanged.
+The ZIP contains both installers, OmniRoute, bundled OpenCode, and the skill files. Your API keys, passwords, and account sign-ins are not included.
 
 ## Install
 
-1. Download and extract the package for your operating system.
-2. Windows: double-click `Setup.cmd`. Linux: run `sh Setup.sh` in the extracted
-   folder.
-3. Follow the guided prompts. The Windows key popup has provider labels, **Get
-   key** links, and six masked key slots per provider. You can leave unused
-   slots blank or skip key setup and sign in to supported browser providers.
-4. After key validation, the popup lists providers whose connection check
-   passed and are enabled, providers that connected but remained disabled
-   (their entered keys are not saved), and any keys that could not be
-   validated. Timeouts retry once before fallback.
-5. Sign in to Antigravity and any consumer accounts yourself; credentials and
-   browser sessions stay on your device.
+1. Download and extract the ZIP. Do not run setup from inside the ZIP.
+2. Windows: double-click `Install-Windows.cmd`. Linux: open the extracted
+   folder in Terminal and run `sh Install-Linux.sh`.
+3. Follow the numbered prompts. Setup connects supported existing Codex,
+   OpenCode, and Antigravity installs. If ChatGPT or Antigravity is missing, it
+   can open the official install page; you install and sign in yourself.
+4. Enter any API keys you want to use in the labeled key window. There are six
+   slots per supported provider; unused slots can stay blank. Optional
+   browser-based providers require you to sign in yourself.
 
-The setup is one-click to start, then interactive for API keys, sign-ins,
-project selection, and operating-system prompts. Windows setup is per-user.
-Linux requires a logged-in desktop session and an unlocked Secret Service
-keyring; it may request administrator approval only to install missing system
-keyring prerequisites. OmniRoute itself runs as your normal user.
+Setup keeps existing settings and keys on your computer. It does not upload them. The installer is one-click to start, with sign-in, API-key entry, and operating-system permission prompts where needed.
 
-Provider availability, free quotas, and account terms vary. A successful key
-check confirms connectivity at setup time; it does not guarantee future quota
-or uninterrupted service.
+## Open OmniRoute OpenCode
+
+Use the Desktop/app-menu shortcut, or open a new terminal and run:
+
+```text
+omni harness opencode --mode regular
+```
+
+This opens the installed OpenCode connected to OmniRoute, using the same settings and saved conversations as its shortcut.
+
+## Important ChatGPT note
+
+The setup can check for the ChatGPT desktop app and open its official download page if it is missing. ChatGPT's regular chats cannot connect directly to an MCP server running on your computer, so this installer does not claim to wire local OmniRoute MCP into ChatGPT. See [OpenAI's MCP help page](https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps).
+
+Free quotas and provider availability vary. Browser sign-in services are for small tasks, not unlimited API use. Paid fallback is off.
