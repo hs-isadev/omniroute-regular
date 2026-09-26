@@ -1,16 +1,40 @@
-import {access,readFile,writeFile,readdir,mkdir,cp,mkdtemp,chmod} from 'node:fs/promises';
+import {access,readFile,writeFile,readdir,mkdir,cp,mkdtemp,chmod,rename,unlink} from 'node:fs/promises';
+import {createWriteStream} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {spawn,execFileSync} from 'node:child_process';
 import {join,resolve,relative} from 'node:path';
+import {Readable} from 'node:stream';
+import {pipeline} from 'node:stream/promises';
 import {prepareRuntimePayload} from './prepare-runtime-payload.mjs';
 import {verifyPackage} from '../distribution/install.mjs';
+import {BUNDLED_SKILLS} from '../distribution/skill-catalog.mjs';
 
-const repo=resolve(import.meta.dirname,'..'),version='0.6.6-private.5',release=join(repo,'release','OmniRoute-Private-'+version);
+const repo=resolve(import.meta.dirname,'..'),version='0.6.6-private.10',release=join(repo,'release','OmniRoute-Private-'+version);
 try{await access(release);throw new Error('Private package folder exists; preserve it before rebuilding.');}catch(error){if(error.code!=='ENOENT')throw error;}
 await mkdir(release,{recursive:true});const work=await mkdtemp(join(repo,'.build','private-'));
 async function run(command,args){await new Promise((resolvePromise,reject)=>{const child=spawn(command,args,{stdio:'inherit',windowsHide:true});child.once('error',reject);child.once('exit',code=>code===0?resolvePromise():reject(new Error(`${command} failed ${code}`)));});}
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
-const integrity={'windows-x64':'xW5wtSxWYbI7DcmQWMlNWIiDBdMJON1vDiEmVWo88R9tT/PaahOhWKgp7FoWDqJKf89jS3ZIzkqnkU3F2dio7A==','linux-x64':'bdRSJ6gbK/EnLNWxROOQYXFXiUeqeFxGz8DIO8LCqnii99A2OWFAyZ3Da5gpvfT1Yrp9/lYL55n/tM3ale5smg=='};
+const opencodeRelease='https://github.com/anomalyco/opencode/releases/download/v1.18.25/';
+const opencodeArtifacts={
+  'windows-x64':{file:'opencode-windows-x64.zip',sha256:'831e213e5f454d6e8b26f0fb24c7b3d42b40e47d73d154672a9192702eb08416'},
+  'linux-x64':{file:'opencode-linux-x64.tar.gz',sha256:'58a3729a6f3432dd6d2917fcc4a949788891a035818646ad480e12c947f56e78'}
+};
+async function verifiedOpenCodeArchive(platform){
+  const artifact=opencodeArtifacts[platform],archive=join(repo,'.cache',artifact.file);
+  try{await access(archive);}catch{
+    await mkdir(join(repo,'.cache'),{recursive:true});
+    const temporary=archive+'.part';
+    try{
+      const response=await fetch(opencodeRelease+artifact.file,{redirect:'follow'});
+      if(!response.ok||!response.body)throw new Error(`Official OpenCode download failed (${response.status}) for ${artifact.file}`);
+      await pipeline(Readable.fromWeb(response.body),createWriteStream(temporary,{flags:'w'}));
+      await rename(temporary,archive);
+    }catch(error){try{await unlink(temporary);}catch{}throw error;}
+  }
+  const actual=createHash('sha256').update(await readFile(archive)).digest('hex');
+  if(actual!==artifact.sha256)throw new Error(`Official OpenCode SHA-256 mismatch for ${artifact.file}: ${actual}`);
+  return archive;
+}
 const browserPackages=['claude-consumer-adapter','zai-consumer-adapter','browser-consumer-adapter'];
 const hosts=['opencode','antigravity','codex','claude-code','claude-web-consumer','glm-web-consumer','qwen-web-consumer','kimi-web-consumer','deepseek-web-consumer','perplexity-web-consumer'];
 for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']]){
@@ -18,15 +42,21 @@ for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']])
   const target=join(release,label),payload=join(target,'payload');await mkdir(target);await cp(join(source,'payload'),payload,{recursive:true,errorOnExist:true,force:false});
   for(const name of ['config','contracts','core','integrations','mcp-server','observability','providers','vault'])await cp(join(repo,'packages',name,'dist'),join(payload,'app/packages',name,'dist'),{recursive:true,force:true});
   for(const name of ['cli','daemon'])await cp(join(repo,'apps',name,'dist'),join(payload,'app/apps',name,'dist'),{recursive:true,force:true});
-  for(const name of browserPackages)await cp(join(repo,'packages',name),join(payload,'app/packages',name),{recursive:true,force:true});
+  for(const name of browserPackages){
+    const source=join(repo,'packages',name),target=join(payload,'app/packages',name);
+    // The shareable installer owns browser autostart through the stable package launcher.
+    // Do not bundle standalone task-scheduler experiments from the developer checkout.
+    await cp(source,target,{recursive:true,force:true,filter:path=>name!=='browser-consumer-adapter'||!path.split(/[\\/]/).includes('scripts')});
+  }
   for(const name of ['playwright','playwright-core'])await cp(join(repo,'node_modules',name),join(payload,'app/node_modules',name),{recursive:true,force:true});
   await cp(join(repo,'package.json'),join(payload,'app/package.json'),{force:true});await cp(join(repo,'package-lock.json'),join(payload,'app/package-lock.json'),{force:true});
-  for(const name of ['dual-chat.mjs','dual-setup.mjs','devin.mjs','gui-keys.mjs','settings-gui.py','Settings.ps1','settings.mjs','key-editor.mjs','mcp-regular.mjs','regular-policy.mjs','antigravity.mjs','install.mjs'])await cp(join(repo,'distribution',name),join(payload,'app/distribution',name));
+  for(const name of ['dual-chat.mjs','dual-setup.mjs','skill-catalog.mjs','devin.mjs','gui-keys.mjs','settings-gui.py','Settings.ps1','settings.mjs','key-editor.mjs','mcp-regular.mjs','regular-policy.mjs','antigravity.mjs','install.mjs'])await cp(join(repo,'distribution',name),join(payload,'app/distribution',name));
   await cp(join(repo,'distribution/dual'),join(payload,'app/distribution/dual'),{recursive:true});
+  for(const name of BUNDLED_SKILLS)await cp(join(repo,'distribution/skills',name),join(payload,'app/distribution/skills',name),{recursive:true});
   const windows=platform==='windows-x64',wrappers=windows?['Launch.ps1','Launch.cmd','Connect.ps1','Connect.cmd','Manage.ps1']:['Launch.sh','Connect.sh','Manage.sh'];
   for(const name of wrappers)await cp(join(repo,'distribution/dual',name),join(payload,name));for(const name of windows?['Setup.ps1','Setup.cmd']:['Setup.sh'])await cp(join(repo,'distribution/dual',name),join(target,name));
-  const archive=join(repo,'.cache',`opencode-${platform}-1.18.25.tgz`);if(createHash('sha512').update(await readFile(archive)).digest('base64')!==integrity[platform])throw new Error('OpenCode official npm checksum mismatch');
-  const extracted=join(work,platform);await mkdir(extracted);await run(process.platform==='win32'?'tar.exe':'tar',['-xzf',archive,'-C',extracted]);await mkdir(join(payload,'opencode'));await cp(join(extracted,'package/bin',windows?'opencode.exe':'opencode'),join(payload,'opencode',windows?'opencode.exe':'opencode'));await cp(join(repo,'distribution/OPENCODE-LICENSE.txt'),join(payload,'opencode/LICENSE.txt'));await cp(join(repo,'THIRD-PARTY-NOTICES.md'),join(payload,'app/THIRD-PARTY-NOTICES.md'));if(!windows)await chmod(join(payload,'opencode/opencode'),0o755);
+  const archive=await verifiedOpenCodeArchive(platform);
+  const extracted=join(work,platform);await mkdir(extracted);await run(process.platform==='win32'?'tar.exe':'tar',[windows?'-xf':'-xzf',archive,'-C',extracted]);await mkdir(join(payload,'opencode'));await cp(join(extracted,windows?'opencode.exe':'opencode'),join(payload,'opencode',windows?'opencode.exe':'opencode'));await cp(join(repo,'distribution/OPENCODE-LICENSE.txt'),join(payload,'opencode/LICENSE.txt'));await cp(join(repo,'THIRD-PARTY-NOTICES.md'),join(payload,'app/THIRD-PARTY-NOTICES.md'));if(!windows)await chmod(join(payload,'opencode/opencode'),0o755);
   await writeFile(join(payload,'dual-provenance.json'),JSON.stringify({version,hosts,status:'shareable-family-package',personalDataIncluded:false,browserSessionsIncluded:false,publishable:true,sourceBaseline:'OmniRoute 0.6.6: five independently validated encrypted credential slots per provider, credential-pool failover, explicit slot results, current Groq catalog, and verified host/runtime repair',notice:'Each recipient signs in with their own accounts. No credentials or sessions are included, and no CAPTCHA or anti-bot bypass is implemented.'},null,2)+'\n');
   await writeFile(join(payload,'provenance.json'),JSON.stringify({version,platform,builtAt:new Date().toISOString(),sourceBaseCommit:execFileSync('git',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8',windowsHide:true}).trim(),workingTreeChanges:true,runtimeFormat:'generated/minified JavaScript and required launch assets',developmentSourceIncluded:false,sourceMapsIncluded:false,signature:'unsigned; verify release SHA-256'},null,2)+'\n');
   console.log(JSON.stringify(await prepareRuntimePayload(payload,repo)));
@@ -37,4 +67,5 @@ await cp(join(repo,'distribution/dual/README.md'),join(release,'README.md'));awa
 await writeFile(join(release,'PRIVATE-USE-NOTICE.txt'),'SHAREABLE FAMILY PACKAGE. No API keys, browser profiles, cookies, passwords, or account sessions are included. Each recipient signs in with their own accounts after installation. Setup opens one dedicated local browser profile with six user-controlled sign-in tabs. The adapters pace usage and stop on verification or blocking notices; they do not bypass CAPTCHA, anti-bot, rate-limit, or access controls.\n');
 await cp(join(repo,'docs/routing-policy.md'),join(release,'ROUTING-POLICY.md'));
 await cp(join(repo,'docs/host-orchestration.md'),join(release,'HOST-ORCHESTRATION.md'));
+await run('git',['archive','--format=zip','--prefix=code/','--output',join(release,'code.zip'),'HEAD']);
 console.log(`Staged shareable package: ${release}`);

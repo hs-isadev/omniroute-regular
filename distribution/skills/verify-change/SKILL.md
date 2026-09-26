@@ -1,7 +1,6 @@
 ---
 name: verify-change
 description: Validate an implemented change with the smallest useful checks and a concise evidence-based verdict.
-compatibility: opencode
 metadata:
   audience: developers
 ---

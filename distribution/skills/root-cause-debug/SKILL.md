@@ -1,7 +1,6 @@
 ---
 name: root-cause-debug
 description: Diagnose a reproducible error or failing test using evidence before proposing or applying a fix.
-compatibility: opencode
 metadata:
   audience: developers
 ---

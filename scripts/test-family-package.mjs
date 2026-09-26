@@ -5,8 +5,10 @@ import {resolve,join,relative,dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {verifyPackage} from '../distribution/install.mjs';
+import {BUNDLED_SKILLS} from '../distribution/skill-catalog.mjs';
 
-const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-Private-0.6.6-private.5';
+const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-Private-0.6.6-private.10';
+const bundledSkills=BUNDLED_SKILLS;
 const archive=resolve(process.argv[2]??join(repo,'release',name+'.zip'));
 const temp=await mkdtemp(join(repo,'test-artifacts/family-smoke-'));
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -23,6 +25,21 @@ async function run(command,args,options={}) {
 await run(process.platform==='win32'?'tar.exe':'tar',['-xf',archive,'-C',temp]);
 const family=join(temp,name);
 for(const [label,platform] of [['Windows','windows-x64'],['Linux','linux-x64']]) await verifyPackage(join(family,label),platform);
+const windowsSetup=await readFile(join(family,'Windows','Setup.ps1'),'utf8');
+assert.match(windowsSetup,/\@\('OmniRoute API Keys','keys'\)/);
+assert.match(windowsSetup,/Launch\.ps1.*-Action '\+\$item\[1\]/);
+const linuxBootstrap=await readFile(join(family,'Linux','payload/app/distribution/dual/bootstrap-linux.mjs'),'utf8');
+assert.match(linuxBootstrap,/\['API Keys','keys'\]/);
+const sourceArchive=join(family,'code.zip');await access(sourceArchive);
+const sourceEntries=(await run(process.platform==='win32'?'tar.exe':'tar',['-tf',sourceArchive])).split(/\r?\n/).filter(Boolean);
+assert.ok(sourceEntries.includes('code/distribution/dual/Setup.ps1'));
+assert.ok(sourceEntries.includes('code/distribution/dual/bootstrap-linux.mjs'));
+assert.ok(!sourceEntries.some(path=>/(?:^|\/)(?:\.git|\.env|vault\.json|credentials\.txt|auth\.json)(?:$|\/)/i.test(path)));
+for(const label of ['Windows','Linux']){
+  const skillRoot=join(family,label,'payload/app/distribution/skills');
+  assert.deepEqual((await readdir(skillRoot)).sort(),bundledSkills.slice().sort());
+  for(const skill of bundledSkills){const content=await readFile(join(skillRoot,skill,'SKILL.md'),'utf8');assert.match(content,new RegExp(`^---\\r?\\nname: ${skill}\\r?\\n`));}
+}
 
 let scanned=0;
 async function inspect(dir) {
@@ -31,6 +48,7 @@ async function inspect(dir) {
     assert.equal(entry.isSymbolicLink(),false);
     if(entry.isDirectory()){await inspect(path);continue;}
     scanned++;
+    assert.doesNotMatch(rel,/app\/packages\/browser-consumer-adapter\/scripts\//);
     assert.doesNotMatch(rel,/(?:^|\/)(?:\.git|\.env|vault\.json|credentials\.txt|auth\.json|test-artifacts|plans)(?:$|[\/.])/i);
     assert.doesNotMatch(rel,/(?:^|\/)(?:cookies|Login Data)(?:$|-(?:journal|wal|shm)$|\.(?:db|sqlite)$)/i);
     const owned=/\/app\/(?:packages|apps|distribution|node_modules\/@omniroute)\//.test(rel);
@@ -43,7 +61,7 @@ async function inspect(dir) {
 }
 await inspect(family);
 const platform=process.platform==='win32'?'Windows':'Linux',bundle=join(family,platform),install=join(temp,'Install With Spaces');
-const previousBundle=join(repo,'release','OmniRoute-Private-0.6.5-private.1',platform);
+const previousBundle=join(repo,'release','OmniRoute-Private-0.6.6-private.8',platform);
 await verifyPackage(previousBundle,process.platform==='win32'?'windows-x64':'linux-x64');
 if(process.platform==='win32'){
   await run('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(previousBundle,'Setup.ps1'),'-InstallRoot',install,'-InstallOnly']);
@@ -77,6 +95,8 @@ let registeredHandshakes=0,registeredOpenCodeHandshakes=0;
 if(process.platform==='win32'){
   const settingsSmoke=await run('powershell.exe',['-NoLogo','-NoProfile','-STA','-NonInteractive','-ExecutionPolicy','Bypass','-File',join(app,'distribution/Settings.ps1'),'-InstallRoot',install,'-AppRoot',app,'-NodePath',node,'-RuntimeRoot',join(install,'data'),'-Simple','-SmokeTest']);
   assert.match(settingsSmoke,/65 masked/);
+  const devinBootstrapSmoke=await run('powershell.exe',['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',join(repo,'scripts/test-devin-bootstrap.ps1'),'-BootstrapPath',join(bundle,'payload/app/distribution/dual/bootstrap.ps1'),'-TestRoot',join(temp,'Devin Bootstrap Smoke')]);
+  assert.match(devinBootstrapSmoke,/PASS: a Devin checksum mismatch skips the optional installer, refreshes stale cache, and lets bootstrap continue/);
   const hostHome=join(temp,'Antigravity Home With Spaces');await mkdir(hostHome,{recursive:true});
   const runtimePaths=(await moduleAt('packages/config/dist/index.js')).getRuntimePaths(join(install,'data'));
   const runtimeConfig=(await moduleAt('distribution/settings.mjs')).regularConfig();for(const provider of runtimeConfig.providers)provider.enabled=false;
@@ -87,8 +107,8 @@ if(process.platform==='win32'){
   const hostConfig=join(hostHome,'.gemini/config/mcp_config.json');
   const startup=join(cleanEnv.APPDATA,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.vbs');await mkdir(dirname(startup),{recursive:true});
   await writeFile(startup,`CreateObject("WScript.Shell").Run """${join(install,previousActive,'node/node.exe')}"" ""${join(install,previousActive,'app/packages/browser-consumer-adapter/runtime/shared-session.mjs')}"" --background --profile ""${join(install,'data/browser-consumer-profile')}"" --port 47842", 0, False\r\n`);
-  const repair=async()=>{await (await import(pathToFileURL(join(install,(await readFile(join(install,'active-version.txt'),'utf8')).trim(),'app/distribution/dual-setup.mjs')).href)).repairHostRegistrations({root:install,home:hostHome,env:cleanEnv});};
-  const assertStartup=async expectedActive=>{const text=await readFile(startup,'utf8'),expectedNode=join(install,expectedActive,'node/node.exe'),expectedEntry=join(install,expectedActive,'app/packages/browser-consumer-adapter/runtime/shared-session.mjs');assert.match(text,new RegExp(expectedNode.replace(/[\\^$.*+?()[\]{}|]/g,'\\$&')));assert.match(text,new RegExp(expectedEntry.replace(/[\\^$.*+?()[\]{}|]/g,'\\$&')));await access(expectedNode);await access(expectedEntry);};
+  const repair=async()=>await (await import(pathToFileURL(join(install,(await readFile(join(install,'active-version.txt'),'utf8')).trim(),'app/distribution/dual-setup.mjs')).href)).repairHostRegistrations({root:install,home:hostHome,env:cleanEnv});
+  const assertStartup=async expectedActive=>{const text=await readFile(startup,'utf8');assert.match(text,/Launch\.ps1/);assert.match(text,/browser-consumers/);assert.doesNotMatch(text,/versions[\\/]|node\.exe|shared-session\.mjs/);await access(join(install,'Launch.ps1'));await access(join(install,expectedActive,'app/packages/browser-consumer-adapter/runtime/shared-session.mjs'));};
   const handshake=async(expectedActive,host='antigravity')=>{
     const expectedNode=join(install,expectedActive,'node/node.exe'),expectedEntrypoint=join(install,expectedActive,'app/distribution/mcp-regular.mjs');
     const entry=host==='antigravity'?JSON.parse(await readFile(hostConfig,'utf8')).mcpServers.omniroute_regular:JSON.parse(await readFile(join(hostHome,'.config/opencode/opencode.json'),'utf8')).mcp.omniroute;
@@ -102,7 +122,13 @@ if(process.platform==='win32'){
     try{const initialized=await invoke('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:`${host}-registration-smoke`,version:'1'}});assert.equal(initialized.serverInfo.name,'omniroute');server.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');const tools=await invoke('tools/list',{});assert.deepEqual(tools.tools.map(tool=>tool.name).sort(),['omni_models','omni_route','omni_routes','omni_usage']);if(host==='antigravity')registeredHandshakes++;else registeredOpenCodeHandshakes++;}
     finally{server.stdin.end();server.kill();for(const pending of requests.values())clearTimeout(pending.timer);}
   };
-  await repair();await assertStartup(active);await handshake(active);await handshake(active,'opencode');
+  const repaired=await repair();assert.deepEqual(repaired.skills.skillNames,bundledSkills);assert.deepEqual(repaired.skills.availableByHost,{codex:bundledSkills.length,opencode:bundledSkills.length,antigravity:bundledSkills.length});
+  for(const [host,path] of [['codex','.codex/skills'],['opencode','.config/opencode/skills'],['antigravity','.gemini/config/skills']])for(const skill of bundledSkills)await access(join(hostHome,path,skill,'SKILL.md'));
+  for(const [host,path] of [['codex','.codex/AGENTS.md'],['opencode','.config/opencode/AGENTS.md']]){
+    const instructions=await readFile(join(hostHome,path),'utf8');
+    assert.match(instructions,/OmniRoute.*first/i);assert.match(instructions,/routingMode=["']regular["']/);
+  }
+  await assertStartup(active);await handshake(active);await handshake(active,'opencode');
   await run('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(install,'Manage.ps1'),'-Action','rollback'],{env:cleanEnv});
   assert.equal((await readFile(join(install,'active-version.txt'),'utf8')).trim(),previousActive);await assertStartup(previousActive);await handshake(previousActive);await handshake(previousActive,'opencode');
   await run('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(bundle,'Setup.ps1'),'-InstallRoot',install,'-InstallOnly'],{env:cleanEnv});

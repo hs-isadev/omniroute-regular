@@ -34,6 +34,16 @@ running it, and configures only a local OmniRoute MCP—never a Devin API key or
 model selection. OS security/admin/keyring prompts can still
 require approval. Antigravity may show its own first-run onboarding.
 
+Setup also installs eleven compact, reusable skills in Codex, OpenCode and
+Antigravity: focused implementation, focused code review, root-cause debugging,
+verify change, TDD workflow, coding standards, search first, security review,
+context budget, OmniRoute-first delegation, and GitHub package release. It adds persistent
+OmniRoute-first guidance to Codex and OpenCode; Antigravity already receives its
+global OmniRoute rules during setup.
+
+Existing same-named skills are left untouched. Restart an app that was already
+open during setup to refresh its skill list.
+
 ## After setup
 
 - **OmniRoute OpenCode:** OmniRoute is the main model. Small questions prefer
@@ -44,7 +54,10 @@ require approval. Antigravity may show its own first-run onboarding.
 - **OmniRoute Antigravity, Codex, and Claude Code:** each host's own model is the
   main agent; OmniRoute provides MCP workers. Rules encourage delegation but
   cannot guarantee every host call uses a worker. Each host's own quota applies.
-- **OmniRoute API Keys:** open the same masked form to add or replace keys later.
+- **Add keys later:** click **OmniRoute API Keys** on the Windows Desktop or in
+  the Start Menu. On Linux, open your applications menu and choose **OmniRoute
+  API Keys**. Both shortcuts open the same masked key form so you can add or
+  replace provider keys without rerunning setup.
 - **OmniRoute Usage:** shows exact provider-reported worker tokens offloaded.
   Actual host tokens saved stays unavailable because a counterfactual host-only
   run cannot be observed.
@@ -57,8 +70,10 @@ require approval. Antigravity may show its own first-run onboarding.
 Windows launchers appear on the Desktop; Linux launchers appear in the app menu.
 Restart a host after changing keys. Developer hosts are not registered for
 autostart. One shared consumer browser starts minimized in the background at user
-login. It uses the persistent profile `browser-consumer-profile`, the loopback-only
-endpoint `127.0.0.1:47842`, and six provider tabs; it does not reuse the user's
+login. Its startup entry calls the stable installed launcher, which re-reads the
+active version each time instead of saving a version-specific Node path. It uses
+the persistent profile `browser-consumer-profile`, the loopback-only endpoint
+`127.0.0.1:47842`, and six provider tabs; it does not reuse the user's
 normal browser profile. Chrome, Edge, Opera, Opera GX, Brave, Vivaldi and Chromium
 are detected on Windows and Linux (Opera GX itself is Windows-only). Override
 detection with `OMNIROUTE_BROWSER`. Firefox and Safari do not expose the Chromium

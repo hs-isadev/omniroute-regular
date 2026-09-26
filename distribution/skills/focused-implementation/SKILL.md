@@ -1,7 +1,6 @@
 ---
 name: focused-implementation
 description: Implement a small, clearly scoped code change with minimal exploration and focused validation.
-compatibility: opencode
 metadata:
   audience: developers
 ---

@@ -51,7 +51,7 @@ test('shared browser launch opens all providers in one persistent loopback sessi
   assert.ok(args.includes('--start-minimized'));
   assert.deepEqual(args.slice(-session.urls.length),session.urls);
   assert.doesNotMatch(args.join(' '),/--headless|--no-sandbox|--incognito/);
-  const windowsLaunch=runtime.buildSharedBrowserLaunch({platform:'win32',browserPath:'C:\\Program Files\\Browser\\browser.exe',profileDir:'C:\\Safe Profile',background:true});
+  const windowsLaunch=await runtime.buildSharedBrowserLaunch({platform:'win32',browserPath:'C:\\Program Files\\Browser\\browser.exe',profileDir:'C:\\Safe Profile',background:true});
   assert.equal(windowsLaunch.command,'C:\\Program Files\\Browser\\browser.exe');
   assert.ok(windowsLaunch.args.includes('--user-data-dir=C:\\Safe Profile'));
   assert.ok(windowsLaunch.args.includes('--start-minimized'));
@@ -95,12 +95,12 @@ test('all browser consumers configure against one endpoint and install one Linux
     assert.deepEqual(provider.mcpArgs,[join(root,'adapter.mjs'),'--provider',id,'--endpoint','http://127.0.0.1:47842']);
   }
   const autostart=join(home,'.config/autostart');await mkdir(autostart,{recursive:true});
+  await writeFile(join(root,'Launch.sh'),'#!/bin/sh\n');
   for(const name of ['omniroute-claude-consumer.desktop','omniroute-zai-consumer.desktop','omniroute-qwen-consumer.desktop','omniroute-kimi-consumer.desktop','omniroute-deepseek-consumer.desktop','omniroute-perplexity-consumer.desktop'])await writeFile(join(autostart,name),'legacy');
   const result=await setup.installSharedBrowserConsumerAutostart({platform:'linux',home,root,node,entrypoint});
   const text=await readFile(result.file,'utf8');
-  assert.match(text,/--port 47842/);
-  assert.match(text,/browser-consumer-profile/);
-  assert.match(text,/--background/);
+  assert.match(text,/Launch\.sh.*browser-consumers/);
+  assert.doesNotMatch(text,/versions[\\/]|node\/node|shared-session\.mjs|--port|browser-consumer-profile/);
   assert.doesNotMatch(text,/--provider|cookie|token|password/i);
   assert.equal(result.removed.length,6);
   for(const path of result.removed)await assert.rejects(access(path),{code:'ENOENT'});
@@ -108,6 +108,7 @@ test('all browser consumers configure against one endpoint and install one Linux
 
 test('Windows installs one hidden shared startup entry and removes exact legacy entries',async()=>{
   const home=await mkdtemp(join(tmpdir(),'private-consumers-win-')),root=join(home,'install'),appData=join(home,'AppData/Roaming');
+  await mkdir(root,{recursive:true});await writeFile(join(root,'Launch.ps1'),'# stable package launcher\n');
   const startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup');await mkdir(startup,{recursive:true});
   const legacy=['OmniRoute Claude Consumer.vbs','OmniRoute Z.AI Consumer.vbs','OmniRoute Qwen Consumer Private.vbs','OmniRoute Kimi Consumer Private.vbs','OmniRoute DeepSeek Consumer Private.vbs','OmniRoute Perplexity Consumer Private.vbs'];
   for(const name of legacy)await writeFile(join(startup,name),'legacy');
@@ -115,8 +116,9 @@ test('Windows installs one hidden shared startup entry and removes exact legacy 
   const text=await readFile(result.file,'utf8');
   assert.match(text,/WScript\.Shell/);
   assert.match(text,/, 0, False/);
-  assert.match(text,/--background/);
-  assert.match(text,/browser-consumer-profile/);
+  assert.match(text,/Launch\.ps1/);
+  assert.match(text,/browser-consumers/);
+  assert.doesNotMatch(text,/versions[\\/]|node\.exe|shared-session\.mjs|--port|browser-consumer-profile/);
   assert.equal(result.removed.length,6);
   for(const path of result.removed)await assert.rejects(access(path),{code:'ENOENT'});
 });

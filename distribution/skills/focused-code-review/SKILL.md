@@ -1,7 +1,6 @@
 ---
 name: focused-code-review
 description: Review a patch or small code area for concrete correctness, security, regression, and test risks.
-compatibility: opencode
 metadata:
   audience: developers
 ---

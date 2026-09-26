@@ -10,6 +10,8 @@ const profileIndex=process.argv.indexOf('--profile'),requestedProfile=profileInd
 if(profileIndex>=0&&(!requestedProfile||!isAbsolute(requestedProfile)))throw new Error('The shared browser profile path must be absolute.');
 const profile=requestedProfile||join(homedir(),'.omniroute-browser-consumers','browser-profile');
 const portIndex=process.argv.indexOf('--port'),port=portIndex>=0?Number(process.argv[portIndex+1]):session.port;
+const browserIndex=process.argv.indexOf('--browser'),requestedBrowser=browserIndex>=0?process.argv[browserIndex+1]:undefined;
+if(browserIndex>=0&&(!requestedBrowser||!isAbsolute(requestedBrowser)))throw new Error('The browser path must be absolute.');
 if(!Number.isInteger(port)||port<1024||port>65535)throw new Error('The shared browser port must be between 1024 and 65535.');
 const endpoint=`http://127.0.0.1:${port}`;
 const sites=[
@@ -22,7 +24,7 @@ async function version(){const response=await fetch(`${endpoint}/json/version`);
 async function waitReady(timeout=30000){const started=Date.now();while(Date.now()-started<timeout){try{return await version();}catch{await new Promise(resolve=>setTimeout(resolve,500));}}throw new Error('The shared browser did not start within 30 seconds.');}
 async function start(){
   await mkdir(profile,{recursive:true,mode:0o700});let running=false;try{await version();running=true;}catch{}
-  if(!running){const browserPath=await findConsumerBrowser(session,{home:homedir()}),launch=buildSharedBrowserLaunch({browserPath,profileDir:profile,cdpPort:port,background});const child=spawn(launch.command,launch.args,{detached:true,stdio:'ignore',windowsHide:true});child.unref();}
+  if(!running){const launch=await buildSharedBrowserLaunch({browserPath:requestedBrowser,profileDir:profile,cdpPort:port,background});const child=spawn(launch.command,launch.args,{detached:true,stdio:'ignore',windowsHide:true});child.unref();}
   await waitReady();const browser=await chromium.connectOverCDP(endpoint),context=browser.contexts()[0];if(!context)throw new Error('The shared browser has no usable profile.');
   const pages=[];
   for(const site of sites){const origin=new URL(site.url).origin;let page=context.pages().find(candidate=>candidate.url().startsWith(origin)&&!pages.includes(candidate));if(!page){page=await context.newPage();await page.goto(site.url,{waitUntil:'domcontentloaded',timeout:30000});}pages.push(page);}

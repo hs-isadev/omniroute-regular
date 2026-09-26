@@ -7,6 +7,52 @@ import {dirname,join} from 'node:path';
 import {getRuntimePaths,loadConfig,saveConfig} from '../packages/config/dist/index.js';
 import {regularConfig} from './settings.mjs';
 const mod=await import('./dual-setup.mjs').catch(e=>{if(e.code!=='ERR_MODULE_NOT_FOUND')throw e;return {};});
+test('the selected portable workflow skills install globally and user-owned collisions are preserved',async()=>{
+  assert.equal(typeof mod.installBundledSkills,'function','global skill installer missing');
+  const home=await mkdtemp(join(tmpdir(),'dual-skills-'));
+  const names=['focused-implementation','focused-code-review','root-cause-debug','verify-change','tdd-workflow','coding-standards','search-first','security-review','context-budget','omniroute-first-delegation','github-package-release'];
+  const collision=join(home,'.codex/skills',names[0],'SKILL.md'),custom='---\nname: focused-implementation\ndescription: My existing skill\n---\nKeep this file.\n';
+  await mkdir(dirname(collision),{recursive:true});await writeFile(collision,custom);
+  const first=await mod.installBundledSkills({home});
+  assert.deepEqual(first.skillNames,names);
+  assert.deepEqual(first.newlyInstalledByHost,{codex:10,opencode:11,antigravity:11});
+  assert.deepEqual(first.availableByHost,{codex:10,opencode:11,antigravity:11});
+  assert.deepEqual(first.preservedConflicts,[{host:'codex',skill:names[0]}]);
+  assert.equal(await readFile(collision,'utf8'),custom);
+  for(const [host,path] of [['codex','.codex/skills'],['opencode','.config/opencode/skills'],['antigravity','.gemini/config/skills']]){
+    for(const name of names){
+      if(host==='codex'&&name===names[0])continue;
+      const content=await readFile(join(home,path,name,'SKILL.md'),'utf8');
+      assert.match(content,new RegExp(`^---\\r?\\nname: ${name}\\r?\\n`));
+      assert.doesNotMatch(content,/^compatibility:\s*opencode\s*$/m);
+    }
+  }
+  const second=await mod.installBundledSkills({home});
+  assert.deepEqual(second.newlyInstalledByHost,{codex:0,opencode:0,antigravity:0});
+  assert.equal(await readFile(collision,'utf8'),custom);
+});
+test('OmniRoute-first global instructions install safely and idempotently for Codex and OpenCode',async()=>{
+  assert.equal(typeof mod.installOmniRouteGlobalRules,'function','global routing-rule installer missing');
+  const home=await mkdtemp(join(tmpdir(),'dual-global-rules-'));
+  const codex=join(home,'.codex/AGENTS.md');await mkdir(dirname(codex),{recursive:true});await writeFile(codex,'My existing Codex preferences.\n');
+  const first=await mod.installOmniRouteGlobalRules({home});
+  assert.deepEqual(first.installedHosts,['codex','opencode']);
+  assert.deepEqual(first.preservedConflicts,[]);
+  const beforeCodex=await readFile(codex,'utf8'),opencode=await readFile(join(home,'.config/opencode/AGENTS.md'),'utf8');
+  assert.match(beforeCodex,/My existing Codex preferences/);
+  for(const content of [beforeCodex,opencode]){
+    assert.match(content,/BEGIN OMNIROUTE REGULAR GLOBAL ROUTING/);
+    assert.match(content,/routingMode="regular"/);
+    assert.match(content,/Never send credentials/i);
+  }
+  const second=await mod.installOmniRouteGlobalRules({home});
+  assert.deepEqual(second.alreadyConfiguredHosts,['codex','opencode']);
+  assert.equal(await readFile(codex,'utf8'),beforeCodex);
+  const edited=beforeCodex.replace("Use OmniRoute's configured MCP","Use my chosen router");await writeFile(codex,edited);
+  const third=await mod.installOmniRouteGlobalRules({home});
+  assert.deepEqual(third.preservedConflicts,[{host:'codex'}]);
+  assert.equal(await readFile(codex,'utf8'),edited);
+});
 test('global Antigravity setup is repeatable and preserves unrelated MCP entries and rules',async()=>{
   assert.equal(typeof mod.connectAntigravity,'function','combined global connector missing');
   const home=await mkdtemp(join(tmpdir(),'dual-host-')),root=join(home,'install');await mkdir(join(home,'.gemini/config'),{recursive:true});
@@ -86,11 +132,23 @@ test('host registration repair refreshes an existing browser-consumer startup co
   const node=join(payload,'node',process.platform==='win32'?'node.exe':'node'),mcp=join(payload,'app/distribution/mcp-regular.mjs'),shared=join(payload,'app/packages/browser-consumer-adapter/src/shared-session.mjs');
   for(const file of [node,mcp,shared]){await mkdir(join(file,'..'),{recursive:true});await writeFile(file,'fixture');}
   await writeFile(join(root,'active-version.txt'),active+'\n');
+  await writeFile(join(root,'Launch.ps1'),'# stable package launcher\n');
   const startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup');await mkdir(startup,{recursive:true});
   const vbs=join(startup,'OmniRoute Browser Consumers.vbs'),old=join(root,'versions/0.6.4-private.1-old');
   await writeFile(vbs,`CreateObject("WScript.Shell").Run """${join(old,'node/node.exe')}"" ""${join(old,'app/packages/browser-consumer-adapter/runtime/shared-session.mjs')}"" --background --profile ""${join(root,'data/browser-consumer-profile')}"" --port 47842", 0, False\r\n`);
   await mod.repairHostRegistrations({root,home,env:{APPDATA:appData}});
-  const repaired=await readFile(vbs,'utf8');assert.match(repaired,new RegExp(node.replace(/[\\^$.*+?()[\]{}|]/g,'\\$&')));assert.match(repaired,new RegExp(shared.replace(/[\\^$.*+?()[\]{}|]/g,'\\$&')));assert.doesNotMatch(repaired,/0\.6\.4-private/);
+  const repaired=await readFile(vbs,'utf8');assert.match(repaired,/Launch\.ps1/);assert.match(repaired,/browser-consumers/);assert.doesNotMatch(repaired,/versions[\\/]|node\.exe|shared-session\.mjs/);
+  await mod.repairHostRegistrations({root,home,env:{APPDATA:appData}});assert.equal(await readFile(vbs,'utf8'),repaired);
+  const custom='User-managed startup entry\r\n';await writeFile(vbs,custom);
+  await assert.rejects(mod.repairHostRegistrations({root,home,env:{APPDATA:appData}}),/autostart conflict/i);assert.equal(await readFile(vbs,'utf8'),custom);
+});
+test('Linux browser-consumer autostart uses the stable root launcher instead of a versioned Node path',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'dual-autostart-linux-')),root=join(home,'Install With Spaces'),active='versions/0.6.5-private.1-new',payload=join(root,active);
+  const node=join(payload,'node/node'),entrypoint=join(payload,'app/packages/browser-consumer-adapter/src/shared-session.mjs');
+  for(const file of [node,entrypoint]){await mkdir(dirname(file),{recursive:true});await writeFile(file,'fixture');}
+  await mkdir(root,{recursive:true});await writeFile(join(root,'Launch.sh'),'#!/bin/sh\n');await writeFile(join(root,'active-version.txt'),active+'\n');
+  const result=await mod.installSharedBrowserConsumerAutostart({platform:'linux',home,root,node,entrypoint});
+  const startup=await readFile(result.file,'utf8');assert.match(startup,/Exec=.*Launch\.sh.*browser-consumers/);assert.doesNotMatch(startup,/versions[\\/]|node\/node|shared-session\.mjs/);
 });
 test('OpenCode environment excludes upstream credentials and points both models at local router',()=>{
   assert.equal(typeof mod.openCodeEnvironment,'function','isolated environment missing');
@@ -127,12 +185,14 @@ test('installer entrypoints include user-friendly editor workflow and no GitHub 
   assert.match(managePs,/repair-hosts/);assert.match(managePs,/\$active\+'\/app\/distribution\/dual-setup\.mjs'/);
   assert.match(manageSh,/repair-hosts/);assert.match(manageSh,/\$active\/app\/distribution\/dual-setup\.mjs/);
 });
-test('Windows one-click setup installs only a verified official Devin CLI and exposes a visible login launcher',async()=>{
+test('Windows one-click setup installs only the current verified Devin CLI and skips optional checksum failures',async()=>{
   const bootstrap=await readFile(new URL('./dual/bootstrap.ps1',import.meta.url),'utf8');
   assert.match(bootstrap,/https:\/\/static\.devin\.ai\/cli\/devin-updater-x86_64-pc-windows\.exe/);
-  assert.match(bootstrap,/55052CE42B90E3D8A7492E18CD6B978F9A0F2BA6718B4730DD3F519B75827BEE/i);
+  assert.match(bootstrap,/C52356D07CE4E23E7768E87562FECB974EFAC6F4A65E112B938CCCF9A043B9CE/i);
+  assert.match(bootstrap,/Remove-Item -LiteralPath \$installer -Force/);
   assert.match(bootstrap,/Get-AuthenticodeSignature/);
   assert.match(bootstrap,/Exafunction, Inc\./);
+  assert.match(bootstrap,/Optional Devin CLI setup was skipped; OmniRoute setup will continue/);
   assert.doesNotMatch(bootstrap,/Invoke-Expression|\|\s*iex|curl.*\|/i);
   const setup=await readFile(new URL('./dual/Setup.ps1',import.meta.url),'utf8');
   assert.match(setup,/OmniRoute Devin CLI/);
@@ -140,6 +200,12 @@ test('Windows one-click setup installs only a verified official Devin CLI and ex
   const launch=await readFile(new URL('./dual/Launch.ps1',import.meta.url),'utf8');
   assert.match(launch,/ValidateSet\([^)]*'devin'/);
   assert.doesNotMatch(launch,/fusion|astra|sol|terra|--model/i);
+});
+test('browser-consumer login launchers resolve the active runtime through the stable installed wrapper',async()=>{
+  const ps=await readFile(new URL('./dual/Launch.ps1',import.meta.url),'utf8');
+  const sh=await readFile(new URL('./dual/Launch.sh',import.meta.url),'utf8');
+  assert.match(ps,/ValidateSet\([^)]*'browser-consumers'/);assert.match(ps,/active-version\.txt/);assert.match(ps,/shared-session\.mjs/);assert.match(ps,/Test-Path/);
+  assert.match(sh,/browser-consumers/);assert.match(sh,/active-version\.txt/);assert.match(sh,/shared-session\.mjs/);
 });
 test('new setup saves keys before starting Antigravity so its MCP sees the saved profile',async()=>{
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');

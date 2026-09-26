@@ -26,10 +26,14 @@ function Install-VerifiedDevinCli {
   $download=Join-Path $InstallRoot 'downloads'
   New-Item -ItemType Directory -Path $download -Force | Out-Null
   $installer=Join-Path $download 'Devin-CLI-x86_64.exe'
+  $expectedHash='C52356D07CE4E23E7768E87562FECB974EFAC6F4A65E112B938CCCF9A043B9CE'
+  if((Test-Path -LiteralPath $installer) -and (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne $expectedHash){
+    Remove-Item -LiteralPath $installer -Force
+  }
   if(-not(Test-Path -LiteralPath $installer)){
     Invoke-WebRequest -Uri 'https://static.devin.ai/cli/devin-updater-x86_64-pc-windows.exe' -OutFile $installer
   }
-  if((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne '55052CE42B90E3D8A7492E18CD6B978F9A0F2BA6718B4730DD3F519B75827BEE'){
+  if((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne $expectedHash){
     throw 'Official Devin CLI installer checksum failed.'
   }
   $signature=Get-AuthenticodeSignature -LiteralPath $installer
@@ -67,4 +71,8 @@ if(-not(Get-Command git -ErrorAction SilentlyContinue)){
     if($LASTEXITCODE -ne 0){throw 'Git installation needs OS approval. Install Git for Windows, then rerun Setup.'}
   }else{throw 'Git for Windows is required for OpenCode coding tools. Install it and rerun Setup.'}
 }
-$null=Install-VerifiedDevinCli
+try {
+  $null=Install-VerifiedDevinCli
+} catch {
+  Write-Warning ("Optional Devin CLI setup was skipped; OmniRoute setup will continue. " + $_.Exception.Message)
+}

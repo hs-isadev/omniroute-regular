@@ -79,9 +79,11 @@ export function buildBrowserLaunch(definition,{platform=process.platform,browser
   return {command:'powershell.exe',args:['-NoLogo','-NoProfile','-NonInteractive','-Command',`Start-Process -FilePath ${ps(browserPath)} -ArgumentList @(${args.map(ps).join(',')})${background?' -WindowStyle Minimized':''}`]};
 }
 
-export function buildSharedBrowserLaunch({platform=process.platform,browserPath,profileDir,cdpPort=sharedSession.port,background=false}){
+export async function buildSharedBrowserLaunch({platform=process.platform,browserPath,profileDir,cdpPort=sharedSession.port,background=false}){
   const args=buildSharedBrowserArguments(profileDir,{cdpPort,background});
-  return {command:browserPath,args};
+  if(browserPath)return {command:browserPath,args};
+  const defaultBrowserPath=await findConsumerBrowser(sharedSession,{home:homedir()});
+  return {command:defaultBrowserPath,args};
 }
 
 export async function minimizeBrowserWindow(context,page){
