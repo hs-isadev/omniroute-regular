@@ -1,63 +1,51 @@
-# OmniRoute Dual 0.5.5
+# OmniRoute setup
 
-One download for Windows and Linux. It installs OmniRoute and OpenCode, then
-connects OmniRoute to Codex, OpenCode, and Antigravity. No source-code checkout
-or manual MCP editing is needed.
+OmniRoute is a Windows/Linux desktop setup that connects coding assistants to
+OmniRoute and its eligible AI providers. Setup handles the software and MCP
+wiring; you provide your own API keys and sign in to your own accounts.
 
 ## Download
 
-[Download the Windows + Linux setup package](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.5.5/OmniRoute-Dual-0.5.5.zip) — about 228 MB.
+Get the newest installer from the [GitHub Releases page](https://github.com/hs-isadev/omniroute-regular/releases/latest).
+Download the combined Windows/Linux ZIP, extract the whole folder, and keep the
+SHA-256 file beside it so you can verify the download. The release will also
+offer an optional source archive named **code.zip**; it is not needed to install.
 
-SHA-256: `9b1a287ce16d6e5b4810a3a20f59c65ab942276e1c3078f943aa67e57198b660` ([checksum file](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.5.5/OmniRoute-Dual-0.5.5.zip.sha256)).
+## Set it up
 
-## Install
+1. Extract the installer ZIP.
+2. On Windows, double-click **Install-Windows.cmd**. On Linux, open a terminal
+   in the extracted folder and run **sh Install-Linux.sh**.
+3. In the API Keys window, add the provider keys you want to use, confirm that
+   you are using free/evaluation access, and choose **Save and test**.
+4. Sign in when the dedicated browser or an AI app opens. OmniRoute cannot sign
+   in for you or copy accounts from your usual browser.
+5. Restart an app that was already open during setup.
 
-1. Download and extract the ZIP. Do not run setup from inside the ZIP.
-2. Windows: double-click `Install-Windows.cmd`. Linux: open the extracted
-   folder in Terminal and run `sh Install-Linux.sh`.
-3. Setup checks for Codex and Antigravity. If either app is missing, it guides
-   you to install it. Sign in when each app opens, then confirm so setup can
-   connect MCP. On Windows, Codex is the coding view inside ChatGPT desktop; on
-   Linux, setup uses Codex CLI. OpenCode is bundled.
-4. Enter any API keys you want in the labeled key window. Each supported
-   provider has up to six slots; leave unused slots blank. Optional browser
-   providers ask you to sign in yourself.
+Some operating-system security, administrator, keyring, download, or first-run
+prompts still need your approval. Codex and Claude Code are connected only when
+already installed; the installer does not sign you in to those apps.
 
-Setup configures one OmniRoute MCP server in Codex, OpenCode, and Antigravity,
-then opens/reopens the apps so they load the new settings. It verifies that the
-bundled OpenCode shortcut actually discovers one connected OmniRoute MCP before
-calling setup complete. The OpenCode config uses the format documented by
-OpenCode; if you installed an earlier OmniRoute package that wrote an invalid
-nested entry, rerunning this setup migrates that OmniRoute-owned entry. Other
-MCP entries are kept. Setup honors `CODEX_HOME` if your Codex uses a custom
-settings folder and stops if any required host config cannot be linked.
+## What is included
 
-Your API keys and account sign-ins stay on your device. Setup never reads
-passwords or browser cookies. Cancelled sign-in means MCP linking does not
-continue; finish sign-in and rerun setup.
+- One installer for Windows 10/11 x64 and Linux x64 desktops.
+- OmniRoute, OpenCode, and automatic MCP setup for Antigravity. Existing Codex
+  and Claude Code installations are connected when supported.
+- A dedicated local browser profile for the optional signed-in web consumers.
+  It opens for setup/sign-in and is configured to start minimized at later
+  device logins.
+- Eleven practical skills installed globally for Codex, OpenCode, and
+  Antigravity: focused implementation, code review, root-cause debugging,
+  change verification, TDD workflow, coding standards, search first, security
+  review, context budget, OmniRoute-first delegation, and GitHub package release.
 
-## Use OmniRoute OpenCode
+The installer contains no API keys, passwords, browser cookies, account
+sessions, or personal projects. Provider quotas, availability, and terms apply;
+free access is not unlimited. Read **VERIFICATION.md** in the downloaded ZIP for
+what was tested and what was not.
 
-Open the Desktop/app-menu shortcut, or run this in a new terminal:
+## Source code
 
-```text
-omni harness opencode --mode regular
-```
-
-This opens the installed OpenCode with the same OmniRoute settings and saved
-conversations as the shortcut.
-
-## What is tested
-
-The full test suite passed (169 passed, 2 platform-specific skips). Windows and
-Linux were each tested by installing twice into an isolated temporary location;
-both bundled OpenCode checks found one connected OmniRoute MCP and completed a
-local tool round trip. Codex, OpenCode, and Antigravity config fixtures passed.
-The release payload scan checked 7,672 files and found no keys, browser profiles,
-or account data. The ZIP includes detailed verification notes; the signed-in
-Codex and Antigravity app panels were not interactively tested on another
-person's device.
-
-Codex's coding view can use the local MCP configuration. Regular ChatGPT chats
-cannot connect directly to a server running on your computer. Provider quotas
-vary; free availability is not a promise of unlimited access.
+The GitHub release provides the source separately in **code.zip**. It contains
+the source snapshot used for the package, not credentials or installed account
+data. You do not need it to set up OmniRoute.
