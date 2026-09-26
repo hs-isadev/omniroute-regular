@@ -29,7 +29,7 @@ const windowsSetup=await readFile(join(family,'Windows','Setup.ps1'),'utf8');
 assert.match(windowsSetup,/\@\('OmniRoute API Keys','keys'\)/);
 assert.match(windowsSetup,/Launch\.ps1.*-Action '\+\$item\[1\]/);
 const linuxBootstrap=await readFile(join(family,'Linux','payload/app/distribution/dual/bootstrap-linux.mjs'),'utf8');
-assert.match(linuxBootstrap,/\['API Keys','keys'\]/);
+assert.match(linuxBootstrap,/["']API Keys["],["']keys["']/);
 const sourceArchive=join(family,'code.zip');await access(sourceArchive);
 const sourceEntries=(await run(process.platform==='win32'?'tar.exe':'tar',['-tf',sourceArchive])).split(/\r?\n/).filter(Boolean);
 assert.ok(sourceEntries.includes('code/distribution/dual/Setup.ps1'));
