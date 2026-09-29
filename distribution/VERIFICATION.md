@@ -1,4 +1,4 @@
-# OmniRoute 0.6.6-private.9 verification
+# OmniRoute 0.6.6-private.11 verification
 
 - TypeScript build/typecheck passes.
 - Core, routing, integration and security tests pass, including least-dispatched
@@ -26,6 +26,11 @@
   and emits an actionable repair message instead of a missing-executable dialog.
   The regression suite covers the Windows VBS migration, Linux desktop entry,
   repeat repair, active-version changes, and preservation of unknown startup data.
+- A Windows startup command left by an older release (`OmniRoute Browser
+  Consumers.cmd`) is now recognized only when it contains the legacy browser
+  session signature and a version-pinned Node path. Setup migrates that exact
+  command to the stable VBS launcher and removes it; unknown same-name commands
+  are preserved and reported as conflicts.
 - The package includes eleven compact, portable skills: focused implementation,
   focused code review, root-cause debugging, verify change, TDD workflow, coding
   standards, search first, security review, context budget, OmniRoute-first
@@ -69,11 +74,9 @@
   dependent. Browser consumers were not used for the API validation and retain
   their existing task-class, capability, context, serialization and pacing limits.
 
-Local source gates on 2026-09-26: `npm run test:regular` passed 156 tests with
-two platform-inapplicable skips; `npm test` passed the TypeScript build and all
-193 core/integration/security tests. The Windows/Linux release archive is also
-validated against its per-platform SHA-256 manifests before the extracted
-family-package smoke test.
+Local source gates on 2026-09-29: `npm run test:regular` passed 160 tests with
+two skips. The Windows/Linux release archive is also validated against its
+per-platform SHA-256 manifests before the extracted family-package smoke test.
 
 GUI shortcuts for API Keys and Antigravity hide only the package-owned PowerShell
 console. Errors still produce an attention dialog. OpenCode and usage terminals,
