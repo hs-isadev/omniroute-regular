@@ -154,18 +154,27 @@ export async function repairBrowserConsumerRuntime({root,runtime}){
   if(repaired.length)await saveConfig(config,paths);
   return {changed:repaired.length>0,providers:repaired};
 }
-export async function repairBrowserConsumerAutostart({root,runtime,home=homedir(),env}){
+function isLegacyBrowserConsumerAutostart(content){
+  return content.includes('shared-session.mjs')&&content.includes('browser-consumer-profile')&&content.includes('--port 47842');
+}
+function isLegacyVersionPinnedBrowserConsumerCommand(content){
+  return isLegacyBrowserConsumerAutostart(content)&&/versions[\\/]/i.test(content)&&/node[\\/]node\.exe/i.test(content);
+}
+export async function repairBrowserConsumerAutostart({root,runtime,home=homedir(),env,platform=process.platform}){
   if(!env)return {changed:false,reason:'not-requested'};
-  const platform=process.platform,file=platform==='win32'&&env.APPDATA?join(env.APPDATA,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.vbs'):
+  const file=platform==='win32'&&env.APPDATA?join(env.APPDATA,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.vbs'):
     platform==='linux'?join(home,'.config/autostart/omniroute-browser-consumers.desktop'):null;
   if(!file)return {changed:false,reason:'unsupported-or-unconfigured'};
-  const before=await optional(file);if(before===null)return {changed:false,reason:'not-installed'};
+  const legacyCommandFile=platform==='win32'&&env.APPDATA?join(env.APPDATA,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.cmd'):null;
+  const before=await optional(file),beforeLegacyCommand=legacyCommandFile?await optional(legacyCommandFile):null;
+  if(before===null&&beforeLegacyCommand===null)return {changed:false,reason:'not-installed'};
   const stable=await stableBrowserConsumerAutostart(platform,root,env);
-  const legacy=before.includes('shared-session.mjs')&&before.includes('browser-consumer-profile')&&before.includes('--port 47842');
-  if(before!==stable&&!legacy)throw new Error('Browser consumer autostart conflict; original preserved');
+  const legacy=before!==null&&isLegacyBrowserConsumerAutostart(before),legacyCommand=beforeLegacyCommand!==null&&isLegacyVersionPinnedBrowserConsumerCommand(beforeLegacyCommand);
+  if(before!==null&&before!==stable&&!legacy)throw new Error('Browser consumer autostart conflict; original preserved');
+  if(beforeLegacyCommand!==null&&!legacyCommand)throw new Error('Browser consumer autostart conflict; original preserved');
   const entrypoint=join(runtime.payload,'app/packages/browser-consumer-adapter/src/shared-session.mjs');await requireRuntimeFile(entrypoint,'browser consumer startup entrypoint');
   await installSharedBrowserConsumerAutostart({platform,home,root,node:runtime.node,entrypoint,env});
-  return {changed:(await optional(file))!==before,file};
+  return {changed:(await optional(file))!==before||(legacyCommandFile!==null&&(await optional(legacyCommandFile))!==beforeLegacyCommand),file};
 }
 export async function repairHostRegistrations({root,home=homedir(),env}){
   const runtime=await resolveActiveRuntime(root);
@@ -234,12 +243,14 @@ export async function installSharedBrowserConsumerAutostart({platform=process.pl
   }
   if(platform==='win32'){
     const appData=env.APPDATA;if(!appData||!isAbsolute(appData))throw new Error('Windows APPDATA is unavailable.');
-    const file=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.vbs'),before=await optional(file);
+    const startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup'),file=join(startup,'OmniRoute Browser Consumers.vbs'),before=await optional(file);
+    const legacyCommand=join(startup,'OmniRoute Browser Consumers.cmd'),legacyCommandContent=await optional(legacyCommand);
+    if(legacyCommandContent!==null&&!isLegacyVersionPinnedBrowserConsumerCommand(legacyCommandContent))throw new Error('Browser consumer autostart conflict; original preserved');
     const launcher=join(root,'Launch.ps1');await requireRuntimeFile(launcher,'stable browser consumer launcher');
     const content=await stableBrowserConsumerAutostart(platform,root,env);
     if(before!==content)await atomic(file,content,before);
-    const names=['OmniRoute Claude Consumer.vbs','OmniRoute Z.AI Consumer.vbs',...PRIVATE_BROWSER_CONSUMERS.map(item=>`OmniRoute ${item.displayName} Consumer Private.vbs`)];
-    const removed=[];for(const name of names){const path=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup',name);try{await unlink(path);removed.push(path);}catch(error){if(error.code!=='ENOENT')throw error;}}
+    const names=['OmniRoute Browser Consumers.cmd','OmniRoute Claude Consumer.vbs','OmniRoute Z.AI Consumer.vbs',...PRIVATE_BROWSER_CONSUMERS.map(item=>`OmniRoute ${item.displayName} Consumer Private.vbs`)];
+    const removed=[];for(const name of names){const path=join(startup,name);try{await unlink(path);removed.push(path);}catch(error){if(error.code!=='ENOENT')throw error;}}
     return {file,removed};
   }
   throw new Error('Shared browser consumer autostart supports Windows and Linux desktops.');

@@ -154,6 +154,9 @@ test('Windows repair migrates a version-pinned browser-consumer CMD when the sta
   assert.match(stable,/Launch\.ps1/);assert.match(stable,/browser-consumers/);assert.doesNotMatch(stable,/versions[\\/]|node\.exe|shared-session\.mjs/);
   await assert.rejects(readFile(oldCommand),{code:'ENOENT'});
   const second=await mod.repairBrowserConsumerAutostart({platform:'win32',root,runtime,home,env:{APPDATA:appData,SystemRoot:'C:\\Windows'}});assert.equal(second.changed,false);
+  const custom='User-managed startup command\r\n';await writeFile(oldCommand,custom);
+  await assert.rejects(mod.repairBrowserConsumerAutostart({platform:'win32',root,runtime,home,env:{APPDATA:appData,SystemRoot:'C:\\Windows'}}),/autostart conflict/i);
+  assert.equal(await readFile(oldCommand,'utf8'),custom);
 });
 test('Linux browser-consumer autostart uses the stable root launcher instead of a versioned Node path',async()=>{
   const home=await mkdtemp(join(tmpdir(),'dual-autostart-linux-')),root=join(home,'Install With Spaces'),active='versions/0.6.5-private.1-new',payload=join(root,active);
