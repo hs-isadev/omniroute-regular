@@ -13,7 +13,7 @@
 - The family archive is inspected against its manifest and checksums. It contains
   generated runtime code and required launch assets, no repository checkout,
   development tests/plans, source maps, user credentials or browser sessions.
-- Windows extracted-package tests install 0.6.6-private.8 then 0.6.6-private.9
+- Windows extracted-package tests install 0.6.6-private.8 then 0.6.6-private.11
   into a path containing spaces, verify the bundled Node executable and MCP
   entrypoint, repair the exact Antigravity and OpenCode registrations, complete
   initialize/tools-list using each registered command, roll back and repeat both
@@ -70,6 +70,11 @@
   recorded.
 - Linux payload integrity is checked. Native Linux desktop/keyring/onboarding and
   live Antigravity account interactions are not claimed as verified on Windows.
+- The 0.6.6-private.11 extracted-family smoke scanned 2,779 archive entries,
+  verified both OS manifests, and completed three registered Antigravity plus
+  three OpenCode MCP initialize/tools-list handshakes on Windows. Its provider
+  request used a fake provider; no live inference ran. Native Linux installation
+  was not tested.
 - Browser account sessions, provider availability and host model choice are user-
   dependent. Browser consumers were not used for the API validation and retain
   their existing task-class, capability, context, serialization and pacing limits.
