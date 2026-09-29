@@ -142,6 +142,19 @@ test('host registration repair refreshes an existing browser-consumer startup co
   const custom='User-managed startup entry\r\n';await writeFile(vbs,custom);
   await assert.rejects(mod.repairHostRegistrations({root,home,env:{APPDATA:appData}}),/autostart conflict/i);assert.equal(await readFile(vbs,'utf8'),custom);
 });
+test('Windows repair migrates a version-pinned browser-consumer CMD when the stable VBS is missing',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'dual-autostart-cmd-')),root=join(home,'OmniRouteRegular'),active='versions/0.6.6-private.10-new',payload=join(root,active);
+  const runtime={payload,node:join(payload,'node','node.exe')},shared=join(payload,'app/packages/browser-consumer-adapter/src/shared-session.mjs');
+  for(const file of [runtime.node,shared,join(root,'Launch.ps1')]){await mkdir(dirname(file),{recursive:true});await writeFile(file,'fixture');}
+  const appData=join(home,'AppData/Roaming'),startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup');await mkdir(startup,{recursive:true});
+  const oldCommand=join(startup,'OmniRoute Browser Consumers.cmd'),vbs=join(startup,'OmniRoute Browser Consumers.vbs');
+  await writeFile(oldCommand,'@echo off\r\nstart "" /b "C:\\Users\\test\\AppData\\Local\\OmniRouteRegular\\versions\\0.6.6-private.4-old\\node\\node.exe" "C:\\Users\\test\\AppData\\Local\\OmniRouteRegular\\versions\\0.6.6-private.4-old\\app\\packages\\browser-consumer-adapter\\runtime\\shared-session.mjs" --background --launch-only --profile "C:\\Users\\test\\AppData\\Local\\OmniRouteRegular\\data\\browser-consumer-profile" --port 47842\r\n');
+  const repaired=await mod.repairBrowserConsumerAutostart({platform:'win32',root,runtime,home,env:{APPDATA:appData,SystemRoot:'C:\\Windows'}});
+  assert.equal(repaired.changed,true);const stable=await readFile(vbs,'utf8');
+  assert.match(stable,/Launch\.ps1/);assert.match(stable,/browser-consumers/);assert.doesNotMatch(stable,/versions[\\/]|node\.exe|shared-session\.mjs/);
+  await assert.rejects(readFile(oldCommand),{code:'ENOENT'});
+  const second=await mod.repairBrowserConsumerAutostart({platform:'win32',root,runtime,home,env:{APPDATA:appData,SystemRoot:'C:\\Windows'}});assert.equal(second.changed,false);
+});
 test('Linux browser-consumer autostart uses the stable root launcher instead of a versioned Node path',async()=>{
   const home=await mkdtemp(join(tmpdir(),'dual-autostart-linux-')),root=join(home,'Install With Spaces'),active='versions/0.6.5-private.1-new',payload=join(root,active);
   const node=join(payload,'node/node'),entrypoint=join(payload,'app/packages/browser-consumer-adapter/src/shared-session.mjs');
