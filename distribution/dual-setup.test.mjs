@@ -103,6 +103,12 @@ test('setup identifies malformed OmniRoute config and preserves it unchanged',as
   await assert.rejects(mod.ensureSetupConfig(root),error=>error.message.includes(paths.config)&&/invalid|truncated JSON/i.test(error.message));
   assert.equal(await readFile(paths.config,'utf8'),malformed);
 });
+test('malformed OmniRoute config errors identify the file and leave its contents intact',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'dual-config-parse-error-')),paths=getRuntimePaths(join(home,'install','data')),malformed='{"providers":';
+  await mkdir(dirname(paths.config),{recursive:true});await writeFile(paths.config,malformed);
+  await assert.rejects(loadConfig(paths),error=>error.message.includes(paths.config)&&/invalid|truncated JSON/i.test(error.message));
+  assert.equal(await readFile(paths.config,'utf8'),malformed);
+});
 test('global Antigravity setup refuses missing runtime files before registration',async()=>{
   const home=await mkdtemp(join(tmpdir(),'dual-host-missing-')),root=join(home,'install');
   const configPath=join(home,'.gemini/config/mcp_config.json');
