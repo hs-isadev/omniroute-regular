@@ -70,11 +70,12 @@
   recorded.
 - Linux payload integrity is checked. Native Linux desktop/keyring/onboarding and
   live Antigravity account interactions are not claimed as verified on Windows.
-- The previous 0.6.6-private.11 extracted-family smoke scanned 2,779 archive entries,
+- The 0.6.6-private.12 extracted-family smoke scanned 2,779 archive entries,
   verified both OS manifests, and completed three registered Antigravity plus
   three OpenCode MCP initialize/tools-list handshakes on Windows. Its provider
   request used a fake provider; no live inference ran. Native Linux installation
-  was not tested. The .12 archive will be recorded separately after its own smoke.
+  was not tested. The smoke also verified update/rollback, the source archive,
+  setup UI fields, and safe optional-Devin failure handling.
 - Browser account sessions, provider availability and host model choice are user-
   dependent. Browser consumers were not used for the API validation and retain
   their existing task-class, capability, context, serialization and pacing limits.
@@ -92,4 +93,6 @@ by backing up the empty file and writing a safe default. Malformed non-empty JSO
 is rejected with the exact file path; the original file is left unchanged. This
 prevents a partial/empty host config from aborting setup with an unhelpful
 “Unexpected end of JSON input” message. A failed optional Devin CLI checksum
-remains a warning and does not cause this config failure.
+remains a warning and does not cause this config failure. The regression suite
+passed 165 distribution tests (two platform-specific skips), including empty
+and malformed config recovery. The main `npm test` suite passed 193 tests.
