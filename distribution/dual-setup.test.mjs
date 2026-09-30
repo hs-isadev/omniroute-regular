@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,readFile,writeFile} from 'node:fs/promises';
+import {mkdtemp,mkdir,readdir,readFile,writeFile} from 'node:fs/promises';
 import {EventEmitter} from 'node:events';
 import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
@@ -69,6 +69,24 @@ test('global Antigravity setup is repeatable and preserves unrelated MCP entries
   assert.equal(JSON.parse(await readFile(path,'utf8')).mcpServers.omniroute_regular.command,node);
   await writeFile(path,JSON.stringify({mcpServers:{omniroute_regular:{command:'user-owned'}}}));
   await assert.rejects(mod.connectAntigravity(options),/conflict/i);
+});
+test('global Antigravity setup accepts an empty MCP file and preserves its backup',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'dual-host-empty-config-')),root=join(home,'install'),configDir=join(home,'.gemini/config'),path=join(configDir,'mcp_config.json'),empty='  \r\n';
+  await mkdir(configDir,{recursive:true});await writeFile(path,empty);
+  const runtime=join(root,'versions/0.6.6-private.11-test'),node=join(runtime,'node',process.platform==='win32'?'node.exe':'node'),entrypoint=join(runtime,'app/distribution/mcp-regular.mjs');
+  await mkdir(dirname(node),{recursive:true});await mkdir(dirname(entrypoint),{recursive:true});await writeFile(node,'fixture');await writeFile(entrypoint,'// fixture');
+  await mod.connectAntigravity({home,root,node,entrypoint});
+  const saved=JSON.parse(await readFile(path,'utf8'));assert.equal(saved.mcpServers.omniroute_regular.command,node);
+  const backups=(await readdir(configDir)).filter(name=>name.startsWith('mcp_config.json.backup-'));
+  assert.equal(backups.length,1);assert.equal(await readFile(join(configDir,backups[0]),'utf8'),empty);
+});
+test('global Antigravity setup reports malformed config path without changing the file',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'dual-host-bad-config-')),root=join(home,'install'),configDir=join(home,'.gemini/config'),path=join(configDir,'mcp_config.json'),malformed='{"mcpServers":';
+  await mkdir(configDir,{recursive:true});await writeFile(path,malformed);
+  const runtime=join(root,'versions/0.6.6-private.11-test'),node=join(runtime,'node',process.platform==='win32'?'node.exe':'node'),entrypoint=join(runtime,'app/distribution/mcp-regular.mjs');
+  await mkdir(dirname(node),{recursive:true});await mkdir(dirname(entrypoint),{recursive:true});await writeFile(node,'fixture');await writeFile(entrypoint,'// fixture');
+  await assert.rejects(mod.connectAntigravity({home,root,node,entrypoint}),error=>error.message.includes(path)&&/not valid JSON/i.test(error.message));
+  assert.equal(await readFile(path,'utf8'),malformed);
 });
 test('global Antigravity setup refuses missing runtime files before registration',async()=>{
   const home=await mkdtemp(join(tmpdir(),'dual-host-missing-')),root=join(home,'install');
