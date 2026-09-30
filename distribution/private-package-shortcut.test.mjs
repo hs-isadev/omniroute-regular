@@ -33,9 +33,9 @@ test('private package version is bumped consistently without overwriting the pri
     source('scripts/package-private.mjs'),
     source('scripts/seal-private.mjs'),
     source('scripts/test-family-package.mjs'),
-    source('docs/releases/v0.6.6-private.11.md')
+    source('docs/releases/v0.6.6-private.12.md')
   ]);
-  for(const file of [packager,sealer,packageTest])assert.match(file,/0\.6\.6-private\.11/);
+  for(const file of [packager,sealer,packageTest])assert.match(file,/0\.6\.6-private\.12/);
   assert.match(packager,/Private package folder exists; preserve it before rebuilding/);
   assert.match(sealer,/Archive already exists; never silently overwrite/);
   assert.match(notes,/OmniRoute API Keys/);

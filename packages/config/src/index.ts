@@ -362,7 +362,12 @@ export function isSafeProviderBaseUrl(url: URL, allowLoopbackHttp: boolean): boo
 export async function loadConfig(paths = getRuntimePaths()): Promise<OmniConfig> {
   try {
     await access(paths.config, constants.R_OK);
-    return mergeConfig(DEFAULT_CONFIG, JSON.parse(await readFile(paths.config, "utf8")) as unknown);
+    const raw = await readFile(paths.config, "utf8");
+    if (!raw.trim()) return deepClone(DEFAULT_CONFIG);
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw) as unknown; }
+    catch { throw new Error(`OmniRoute configuration at "${paths.config}" contains invalid or truncated JSON; the original file was preserved.`); }
+    return mergeConfig(DEFAULT_CONFIG, parsed);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return deepClone(DEFAULT_CONFIG);
     throw error;

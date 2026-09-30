@@ -45,10 +45,19 @@ export async function connectAntigravity({home=homedir(),root,node=process.execP
   for(const path of [home,root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute paths required');
   await requireRuntimeFile(node,'Node executable');await requireRuntimeFile(entrypoint,'MCP entrypoint');
   const file=join(home,'.gemini/config/mcp_config.json'),raw=await optional(file);
-  const config=raw===null?{}:JSON.parse(raw.replace(/^\uFEFF/,''));
-  if(!config||Array.isArray(config)||typeof config!=='object'||(config.mcpServers!==undefined&&(!config.mcpServers||Array.isArray(config.mcpServers)||typeof config.mcpServers!=='object')))throw new Error('Invalid existing MCP configuration');
+  let config={};
+  if(raw!==null&&raw.trim()){
+    try{config=JSON.parse(raw.replace(/^\uFEFF/,''));}
+    catch{throw new Error(`Antigravity MCP configuration at "${file}" is not valid JSON; the original file was preserved.`);}
+  }
+  if(!config||Array.isArray(config)||typeof config!=='object'||(config.mcpServers!==undefined&&(!config.mcpServers||Array.isArray(config.mcpServers)||typeof config.mcpServers!=='object')))throw new Error(`Invalid Antigravity MCP configuration at "${file}"; the original file was preserved.`);
   const entry={command:node,args:[entrypoint],env:{OMNIROUTE_HOME:join(root,'data'),OMNIROUTE_ROUTING_MODE:'regular'}};
-  const ownerFile=join(root,'antigravity-owner.json'),ownerRaw=await optional(ownerFile),owner=ownerRaw?JSON.parse(ownerRaw):null;
+  const ownerFile=join(root,'antigravity-owner.json'),ownerRaw=await optional(ownerFile);let owner=null;
+  if(ownerRaw!==null&&ownerRaw.trim()){
+    try{owner=JSON.parse(ownerRaw);}
+    catch{throw new Error(`OmniRoute Antigravity ownership record at "${ownerFile}" is not valid JSON; the original file was preserved.`);}
+    if(!owner||Array.isArray(owner)||typeof owner!=='object')throw new Error(`Invalid OmniRoute Antigravity ownership record at "${ownerFile}"; the original file was preserved.`);
+  }
   const previous=config.mcpServers?.omniroute_regular;
   if(previous&&JSON.stringify(previous)!==JSON.stringify(entry)&&JSON.stringify(previous)!==JSON.stringify(owner?.entry)){
     // Recognize the exact v0.2 managed installation shape, never arbitrary commands.
@@ -402,9 +411,20 @@ export async function showUsage(root) {
   const summary=await new AuditStore(getRuntimePaths(join(root,'data')).routes).tokenSavingsSummary();
   console.log(JSON.stringify(summary,null,2));return summary;
 }
+export async function ensureSetupConfig(root){
+  if(!isAbsolute(root))throw new Error('Absolute install root required');
+  const paths=getRuntimePaths(join(root,'data')),before=await optional(paths.config);
+  if(before!==null&&before.trim()){
+    await loadConfig(paths);
+    return {changed:false,recoveredEmpty:false};
+  }
+  const config=regularConfig();for(const provider of config.providers){provider.enabled=false;provider.freeTierConfirmed=false;}
+  if(before===null)await saveConfig(config,paths);
+  else await atomic(paths.config,JSON.stringify(config,null,2)+'\n',before);
+  return {changed:true,recoveredEmpty:before!==null};
+}
 export async function setupBoth(root,{noKeys=false,noLaunch=false,home=homedir()}={}) {
-  const paths=getRuntimePaths(join(root,'data'));
-  if(await optional(paths.config)===null){const config=regularConfig();for(const p of config.providers){p.enabled=false;p.freeTierConfirmed=false;}await saveConfig(config,paths);}
+  await ensureSetupConfig(root);
   const registrations=await repairHostRegistrations({root,home,env:process.env});
   const devin=await configureDevinIntegration(root,{runtime:registrations});
   console.log('Four hosts configured: OpenCode = OmniRoute main model; Antigravity, Codex and Claude Code = OmniRoute MCP workers.');
