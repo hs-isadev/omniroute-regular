@@ -88,6 +88,21 @@ test('global Antigravity setup reports malformed config path without changing th
   await assert.rejects(mod.connectAntigravity({home,root,node,entrypoint}),error=>error.message.includes(path)&&/not valid JSON/i.test(error.message));
   assert.equal(await readFile(path,'utf8'),malformed);
 });
+test('setup replaces an empty OmniRoute config with disabled defaults and preserves its backup',async()=>{
+  assert.equal(typeof mod.ensureSetupConfig,'function','empty config repair missing');
+  const home=await mkdtemp(join(tmpdir(),'dual-setup-empty-config-')),root=join(home,'install'),paths=getRuntimePaths(join(root,'data')),empty='  \r\n';
+  await mkdir(dirname(paths.config),{recursive:true});await writeFile(paths.config,empty);
+  const result=await mod.ensureSetupConfig(root);assert.deepEqual(result,{changed:true,recoveredEmpty:true});
+  const config=await loadConfig(paths);assert.ok(config.providers.length>0);assert.ok(config.providers.every(provider=>!provider.enabled));
+  const backups=(await readdir(dirname(paths.config))).filter(name=>name.startsWith('config.json.backup-'));
+  assert.equal(backups.length,1);assert.equal(await readFile(join(dirname(paths.config),backups[0]),'utf8'),empty);
+});
+test('setup identifies malformed OmniRoute config and preserves it unchanged',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'dual-setup-bad-config-')),root=join(home,'install'),paths=getRuntimePaths(join(root,'data')),malformed='{"providers":';
+  await mkdir(dirname(paths.config),{recursive:true});await writeFile(paths.config,malformed);
+  await assert.rejects(mod.ensureSetupConfig(root),error=>error.message.includes(paths.config)&&/invalid|truncated JSON/i.test(error.message));
+  assert.equal(await readFile(paths.config,'utf8'),malformed);
+});
 test('global Antigravity setup refuses missing runtime files before registration',async()=>{
   const home=await mkdtemp(join(tmpdir(),'dual-host-missing-')),root=join(home,'install');
   const configPath=join(home,'.gemini/config/mcp_config.json');
