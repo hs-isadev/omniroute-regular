@@ -89,10 +89,23 @@ test("paid, unknown-price, disabled, unhealthy, incapable and undersized alterna
   assert.deepEqual(ladder.candidates(primary, f.snapshot, ["coding"], 20), []);
 });
 
-for (const error of [new SafeError("STREAM_PARTIAL", "partial"), new ProviderHttpError("groq", 401, null, "bad key"), new ProviderHttpError("groq", 400, null, "bad request")]) test(`no automatic retry or provider change for ${error.message}`, async () => {
+for (const error of [new SafeError("STREAM_PARTIAL", "partial"), new ProviderHttpError("groq", 400, null, "bad request")]) test(`no automatic retry or provider change for ${error.message}`, async () => {
   const f = fixture(); let calls = 0;
   await assert.rejects(new FreeModelFailover(f.config, f.providers).run(primary, f.snapshot, ["text"], 20, AbortSignal.timeout(5000), f.audit, "worker", async () => { calls++; throw error; }));
   assert.equal(calls, 1);
+});
+
+test("authentication failure after the provider key pool is exhausted cools that model and tries another provider", async () => {
+  const f = fixture(), calls: string[] = [];
+  const result = await new FreeModelFailover(f.config, f.providers).run(primary, f.snapshot, ["text"], 20, AbortSignal.timeout(5000), f.audit, "worker", async selection => {
+    calls.push(`${selection.providerId}/${selection.modelId}`);
+    if (selection.providerId === "groq") throw new ProviderHttpError("groq", 401, null, "bad key");
+    return "healthy provider answer";
+  });
+  assert.equal(result.selection.providerId, "gemini");
+  assert.equal(calls[0], "groq/small");
+  assert.ok(calls.some(call => call.startsWith("gemini/")));
+  assert.ok(f.audit.fallbackAttempts.some(item => item.outcome === "worker: authentication"));
 });
 
 test("cancelled work does not try another provider", async () => {

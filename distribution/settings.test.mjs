@@ -65,6 +65,38 @@ test('a failed credential slot is identified and does not overwrite that saved s
   assert.equal(saved.find(item=>item.slot===2).values.GROQ_API_KEY,'fixture-old-two');
   assert.equal(saved.find(item=>item.slot===3).values.GROQ_API_KEY,'fixture-good-three');vault.dispose();
 });
+test('a new key submitted to a filled slot moves to the next free slot without replacing saved keys',async()=>{
+  const {paths,protector}=await context();
+  await configure({slots:{groq:[{GROQ_API_KEY:'fixture-existing-one'},{GROQ_API_KEY:'fixture-existing-two'}]},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  const result=await configure({slots:{groq:[{GROQ_API_KEY:'fixture-new-key'}]},freeOnlyConfirmed:true},paths,{protector,factory:success,existingSetup:true});
+  assert.deepEqual(result.slotResults.map(item=>[item.requestedSlot,item.slot,item.status]),[[1,3,'ACCEPTED']]);
+  const vault=await SecretVault.load(paths.vault,protector);const saved=vault.getCredentialSlots('groq');
+  assert.deepEqual(saved.map(item=>item.values.GROQ_API_KEY),['fixture-existing-one','fixture-existing-two','fixture-new-key']);vault.dispose();
+});
+test('a credential already saved in another slot is reported and never validated or duplicated',async()=>{
+  const {paths,protector}=await context();
+  await configure({slots:{groq:[{GROQ_API_KEY:'fixture-same-key'}]},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  let validations=0;
+  const result=await configure({slots:{groq:[{},{},{GROQ_API_KEY:'fixture-same-key'}]},freeOnlyConfirmed:true},paths,{protector,existingSetup:true,factory:()=>{validations++;return success();}});
+  assert.deepEqual(result.slotResults.map(item=>[item.status,item.reasonCode,item.matchedSlot]),[['DUPLICATE','DUPLICATE_CREDENTIAL',1]]);
+  assert.equal(validations,0);
+  const vault=await SecretVault.load(paths.vault,protector);assert.deepEqual(vault.getCredentialSlots('groq').map(item=>item.slot),[1]);vault.dispose();
+});
+test('duplicate keys in one submission are saved only once',async()=>{
+  const {paths,protector}=await context();
+  const result=await configure({slots:{groq:[{GROQ_API_KEY:'fixture-repeated-key'},{GROQ_API_KEY:'fixture-repeated-key'}]},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  assert.deepEqual(result.slotResults.map(item=>item.status),['ACCEPTED','DUPLICATE']);
+  const vault=await SecretVault.load(paths.vault,protector);assert.deepEqual(vault.getCredentialSlots('groq').map(item=>item.slot),[1]);vault.dispose();
+});
+test('a full provider pool refuses a new key without overwriting or validating it',async()=>{
+  const {paths,protector}=await context();
+  await configure({slots:{groq:Array.from({length:5},(_,index)=>({GROQ_API_KEY:`fixture-filled-${index+1}`}))},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  let validations=0;
+  const result=await configure({slots:{groq:[{GROQ_API_KEY:'fixture-sixth-key'}]},freeOnlyConfirmed:true},paths,{protector,existingSetup:true,factory:()=>{validations++;return success();}});
+  assert.deepEqual(result.slotResults.map(item=>[item.slot,item.status,item.reasonCode]),[[1,'FAILED','NO_EMPTY_SLOT']]);
+  assert.equal(validations,0);
+  const vault=await SecretVault.load(paths.vault,protector);assert.deepEqual(vault.getCredentialSlots('groq').map(item=>item.values.GROQ_API_KEY),Array.from({length:5},(_,index)=>`fixture-filled-${index+1}`));vault.dispose();
+});
 test('setup rejects more than five credential slots per provider',async()=>{
   const {paths,protector}=await context();
   await assert.rejects(configure({slots:{groq:Array.from({length:6},()=>({GROQ_API_KEY:'fixture'}))},freeOnlyConfirmed:true},paths,{protector,factory:success}),/five|5/i);

@@ -189,6 +189,29 @@ test("provider credential pool rotates slots and fails over within the same prov
   assert.deepEqual(calls, ["Bearer fake-second"]);
 });
 
+test("concurrent provider requests reserve different API-key slots before sending", async () => {
+  const config = configFixture();
+  config.providers.find((provider) => provider.id === "openai")!.enabled = true;
+  const calls: string[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const providers = createProviders(config, {
+    credentials: { openai: [{ OPENAI_API_KEY: "fake-concurrent-first" }, { OPENAI_API_KEY: "fake-concurrent-second" }] },
+    skipDnsValidationForTests: true,
+    fetchImpl: async (_url, init) => {
+      const authorization = String((init?.headers as Record<string, string>)?.authorization ?? "");
+      calls.push(authorization);
+      if (calls.length === 2) release();
+      await gate;
+      return Response.json({ id: "response", output_text: "ok" });
+    },
+  });
+  const provider = providers.get("openai")!;
+  const request = { modelId: "gpt-5.6-sol", prompt: "synthetic", instructions: "reply", reasoningEffort: "low" as const, maxOutputTokens: 16, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null };
+  await Promise.all([provider.generate(request), provider.generate(request)]);
+  assert.deepEqual(calls, ["Bearer fake-concurrent-first", "Bearer fake-concurrent-second"]);
+});
+
 test("model registry isolates a slow provider from later provider health checks", async () => {
   const config = configFixture();
   const slowSettings = config.providers.find((provider) => provider.id === "openai")!;
