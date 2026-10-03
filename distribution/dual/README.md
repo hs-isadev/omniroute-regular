@@ -56,8 +56,9 @@ open during setup to refresh its skill list.
   cannot guarantee every host call uses a worker. Each host's own quota applies.
 - **Add keys later:** click **OmniRoute API Keys** on the Windows Desktop or in
   the Start Menu. On Linux, open your applications menu and choose **OmniRoute
-  API Keys**. Both shortcuts open the same masked key form so you can add or
-  replace provider keys without rerunning setup.
+  API Keys**. Both shortcuts open the masked key form with five slots per provider.
+  Add or replace provider keys without rerunning setup; routing settings and
+  other saved keys are preserved. OmniRoute restarts after an accepted key change.
 - **OmniRoute Usage:** shows exact provider-reported worker tokens offloaded.
   Actual host tokens saved stays unavailable because a counterfactual host-only
   run cannot be observed.

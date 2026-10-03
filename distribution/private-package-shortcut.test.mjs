@@ -22,7 +22,7 @@ test('Windows setup creates API Keys shortcuts that open the stable key editor',
   assert.match(launcher,/ValidateSet\([^\n]*'keys'/);
   assert.match(launcher,/\$guiAction=\$Action -in @\([^\n]*'keys'/);
   assert.match(launcher,/if\(\$guiAction\).*?\$node \$entry \$Action/s);
-  assert.match(readme,/click \*\*OmniRoute API Keys\*\*[\s\S]*five slots per provider[\s\S]*add or\s+replace provider keys/);
+  assert.match(readme,/click \*\*OmniRoute API Keys\*\*[\s\S]*five slots per provider[\s\S]*add or\s+replace provider keys/i);
 });
 
 test('Linux setup creates a clickable API Keys application-menu launcher',async()=>{
@@ -31,7 +31,7 @@ test('Linux setup creates a clickable API Keys application-menu launcher',async(
   assert.match(bootstrap,/omniroute-'\+action\+'\.desktop/);
   assert.match(bootstrap,/quote\(join\(root,'Launch\.sh'\)\)\+' '\+action/);
   assert.match(settingsGui,/parser\.add_argument\('--existing', action='store_true'\)/);
-  assert.match(settingsGui,/if existing_setup:[\s\S]*--existing/);
+  assert.match(settingsGui,/if existing_setup:[\s\S]*--existing[\s\S]*--restart/);
 });
 
 test('private package version is bumped consistently without overwriting the prior release',async()=>{

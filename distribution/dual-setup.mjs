@@ -450,7 +450,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
     if(action==='opencode')await launchOpenCode(root,args);
     else if(action==='antigravity')await launchAntigravity(root);
     else if(action==='devin')await launchDevin(root);
-    else if(action==='keys')await openKeyForm(root);
+    else if(action==='keys')await openKeyForm(root,{existingSetup:true});
     else if(action==='usage')await showUsage(root);
     else if(action==='setup')await setupBoth(root,{noKeys:args.includes('--no-keys'),noLaunch:args.includes('--no-launch')});
     else if(action==='repair-hosts')await repairHostRegistrations({root,env:process.env});

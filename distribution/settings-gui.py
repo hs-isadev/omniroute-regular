@@ -27,7 +27,7 @@ PROVIDER_FIELDS = {}
 for provider, _, field, _ in PROVIDERS:
     PROVIDER_FIELDS.setdefault(provider, []).append(field)
 
-def submit(node, app, runtime, credentials, consent):
+def submit(node, app, runtime, credentials, consent, existing_setup=False):
     if consent is not True or not isinstance(credentials, dict):
         raise ValueError('Confirm free-account settings and use the provided fields.')
     legacy = not (set(credentials) - FIELDS)
@@ -53,7 +53,10 @@ def submit(node, app, runtime, credentials, consent):
     env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'DISPLAY', 'WAYLAND_DISPLAY', 'DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME')}
     env['OMNIROUTE_HOME'] = runtime
     try:
-        result = subprocess.run([node, str(pathlib.Path(app) / 'distribution/settings.mjs')], input=json.dumps(payload), text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, timeout=1000, check=False)
+        command = [node, str(pathlib.Path(app) / 'distribution/settings.mjs')]
+        if existing_setup:
+            command.extend(('--existing', '--restart'))
+        result = subprocess.run(command, input=json.dumps(payload), text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, timeout=1000, check=False)
         data = json.loads(result.stdout)
         if result.returncode != 0 or data.get('ready') is not True:
             raise ValueError('Validation failed')
@@ -70,9 +73,10 @@ def main():
     parser = argparse.ArgumentParser()
     for name in ('node', 'app', 'runtime'): parser.add_argument('--' + name, required=True)
     parser.add_argument('--smoke-test', action='store_true')
+    parser.add_argument('--existing', action='store_true')
     args = parser.parse_args()
     window = tk.Tk()
-    window.title('OmniRoute - Your API keys')
+    window.title('OmniRoute - Provider keys (existing setup)' if args.existing else 'OmniRoute - Your API keys')
     window.geometry('1180x700')
     outer = ttk.Frame(window, padding=18)
     outer.pack(fill='both', expand=True)
@@ -114,7 +118,7 @@ def main():
         for (provider, slot, field), box in boxes.items(): slots[provider][slot - 1][field] = box.get().strip()
         state['busy'] = True; button.configure(state='disabled'); status.set('Testing your keys. This can take a few minutes. Please keep this window open.')
         def work():
-            try: inbox.put(submit(args.node, args.app, args.runtime, slots, True))
+            try: inbox.put(submit(args.node, args.app, args.runtime, slots, True, args.existing))
             except ValueError: inbox.put({'ready': False, 'error': 'Check the key fields: single-line values only.'})
             finally: slots.clear()
         threading.Thread(target=work, daemon=True).start()
@@ -125,7 +129,7 @@ def main():
         if result['ready']:
             state['ready'] = True
             for box in boxes.values(): box.delete(0, 'end')
-            message = 'Validation finished. Both host launchers are ready.'
+            message = 'Your existing OmniRoute setup was updated; its routing settings and other saved keys were kept.' if args.existing else 'Validation finished. Both host launchers are ready.'
             accepted = [f"{item['providerId']} slot {item['slot']}" for item in result['slotResults'] if item['status'] == 'ACCEPTED']
             failed = [f"{item['providerId']} slot {item['slot']} ({item.get('reasonCode', 'PROVIDER_ERROR')})" for item in result['slotResults'] if item['status'] == 'FAILED']
             stored = [f"{item['providerId']} ({len(item['slots'])} stored)" for item in result['stored']]
