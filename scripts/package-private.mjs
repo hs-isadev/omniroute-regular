@@ -9,7 +9,7 @@ import {prepareRuntimePayload} from './prepare-runtime-payload.mjs';
 import {verifyPackage} from '../distribution/install.mjs';
 import {BUNDLED_SKILLS} from '../distribution/skill-catalog.mjs';
 
-const repo=resolve(import.meta.dirname,'..'),version='0.6.6-private.13',release=join(repo,'release','OmniRoute-Private-'+version);
+const repo=resolve(import.meta.dirname,'..'),version='0.6.6-private.14',release=join(repo,'release','OmniRoute-Private-'+version);
 try{await access(release);throw new Error('Private package folder exists; preserve it before rebuilding.');}catch(error){if(error.code!=='ENOENT')throw error;}
 await mkdir(release,{recursive:true});const work=await mkdtemp(join(repo,'.build','private-'));
 async function run(command,args){await new Promise((resolvePromise,reject)=>{const child=spawn(command,args,{stdio:'inherit',windowsHide:true});child.once('error',reject);child.once('exit',code=>code===0?resolvePromise():reject(new Error(`${command} failed ${code}`)));});}

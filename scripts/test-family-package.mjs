@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {verifyPackage} from '../distribution/install.mjs';
 import {BUNDLED_SKILLS} from '../distribution/skill-catalog.mjs';
 
-const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-Private-0.6.6-private.13';
+const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-Private-0.6.6-private.14';
 const bundledSkills=BUNDLED_SKILLS;
 const archive=resolve(process.argv[2]??join(repo,'release',name+'.zip'));
 const temp=await mkdtemp(join(repo,'test-artifacts/family-smoke-'));
@@ -32,11 +32,11 @@ const linuxBootstrap=await readFile(join(family,'Linux','payload/app/distributio
 assert.match(linuxBootstrap,/["']API Keys["],["']keys["']/);
 const windowsDualSetup=await readFile(join(family,'Windows','payload/app/distribution/dual-setup.mjs'),'utf8');
 const windowsKeyForm=await readFile(join(family,'Windows','payload/app/distribution/Settings.ps1'),'utf8');
-assert.ok(windowsDualSetup.includes("else if(action==='keys')await openKeyForm(root,{existingSetup:true});"));
+assert.match(windowsDualSetup,/else if\([A-Za-z_$][\w$]*===['"]keys['"]\)await [A-Za-z_$][\w$]*\([A-Za-z_$][\w$]*,\{existingSetup:(?:true|!0)\}\)/);
 assert.ok(windowsKeyForm.includes('for($slot=1;$slot -le 5;$slot++)'));
 const linuxKeyForm=await readFile(join(family,'Linux','payload/app/distribution/settings-gui.py'),'utf8');
 assert.ok(linuxKeyForm.includes("parser.add_argument('--existing', action='store_true')"));
-assert.ok(linuxKeyForm.includes("command.append('--existing')"));
+assert.ok(linuxKeyForm.includes("command.extend(('--existing', '--restart'))"));
 const sourceArchive=join(family,'code.zip');await access(sourceArchive);
 const sourceEntries=(await run(process.platform==='win32'?'tar.exe':'tar',['-tf',sourceArchive])).split(/\r?\n/).filter(Boolean);
 assert.ok(sourceEntries.includes('code/distribution/dual/Setup.ps1'));
