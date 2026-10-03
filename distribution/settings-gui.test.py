@@ -40,15 +40,16 @@ class KeyFormTests(unittest.TestCase):
             self.assertEqual(result['failed'], ['zai'])
 
     def test_five_slots_are_sent_and_per_slot_results_are_preserved(self):
-        response = '{"ready":true,"accepted":["groq"],"failed":["mistral"],"slotResults":[{"providerId":"groq","slot":2,"status":"ACCEPTED","reasonCode":"SUCCESS"},{"providerId":"mistral","slot":4,"status":"FAILED","reasonCode":"INVALID_AUTHENTICATION"}],"stored":[{"providerId":"groq","slots":[1,2]}]}'
+        response = '{"ready":true,"accepted":["groq"],"failed":["mistral"],"slotResults":[{"providerId":"groq","slot":3,"requestedSlot":1,"status":"ACCEPTED","reasonCode":"SUCCESS"},{"providerId":"groq","slot":2,"status":"DUPLICATE","reasonCode":"DUPLICATE_CREDENTIAL","matchedSlot":1},{"providerId":"mistral","slot":4,"status":"FAILED","reasonCode":"INVALID_AUTHENTICATION"}],"stored":[{"providerId":"groq","slots":[1,2,3]}]}'
         slots = {'groq': [{}, {'GROQ_API_KEY': 'fixture-slot-two'}, {}, {}, {}]}
         with patch.object(gui.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, response)) as run:
             result = gui.submit('/node', '/app', '/runtime', slots, True)
             payload = run.call_args.kwargs['input']
         self.assertNotIn('fixture-slot-two', str(run.call_args.args))
         self.assertIn('"slots"', payload)
-        self.assertEqual(result['slotResults'][0]['slot'], 2)
-        self.assertEqual(result['slotResults'][1]['reasonCode'], 'INVALID_AUTHENTICATION')
-        self.assertEqual(result['stored'], [{'providerId': 'groq', 'slots': [1, 2]}])
+        self.assertEqual(result['slotResults'][0]['slot'], 3)
+        self.assertEqual(result['slotResults'][1]['status'], 'DUPLICATE')
+        self.assertEqual(result['slotResults'][2]['reasonCode'], 'INVALID_AUTHENTICATION')
+        self.assertEqual(result['stored'], [{'providerId': 'groq', 'slots': [1, 2, 3]}])
 
 if __name__ == '__main__': unittest.main()
