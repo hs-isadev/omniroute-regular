@@ -14,6 +14,13 @@ test('Linux form uses Python isolated mode without credentials in arguments',()=
   assert.ok(c.args.some(v=>/install[/\\]data$/.test(v)));assert.throws(()=>mod.keyFormCommand('relative',{platform:'linux'}),/absolute/i);
   assert.throws(()=>mod.keyFormCommand('/install',{platform:'darwin'}),/Windows or Linux/);
 });
+test('existing key editor opens the five-slot form in configuration-preserving mode',()=>{
+  const windows=mod.keyFormCommand('/install',{platform:'win32',node:'/node.exe',app:'/app',systemRoot:'C:/Windows',existingSetup:true});
+  assert.ok(windows.args.includes('-ExistingSetup'));
+  assert.ok(!windows.args.includes('-RequireReady'));
+  const linux=mod.keyFormCommand('/install',{platform:'linux',node:'/node',app:'/app',existingSetup:true});
+  assert.ok(linux.args.includes('--existing'));
+});
 test('form launch rejects a relative profile before starting any child process',async()=>{
   await assert.rejects(mod.openKeyForm('relative'),/Absolute/);
 });

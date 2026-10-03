@@ -7,25 +7,31 @@ const root=resolve(import.meta.dirname,'..');
 async function source(path){return readFile(resolve(root,path),'utf8');}
 
 test('Windows setup creates API Keys shortcuts that open the stable key editor',async()=>{
-  const [setup,launcher,readme]=await Promise.all([
+  const [setup,launcher,readme,dualSetup,form]=await Promise.all([
     source('distribution/dual/Setup.ps1'),
     source('distribution/dual/Launch.ps1'),
-    source('distribution/dual/README.md')
+    source('distribution/dual/README.md'),
+    source('distribution/dual-setup.mjs'),
+    source('distribution/Settings.ps1')
   ]);
   assert.match(setup,/@\('OmniRoute API Keys','keys'\)/);
   assert.match(setup,/Launch\.ps1.*-Action '\+\$item\[1\]/);
   assert.match(setup,/foreach\(\$location in @\(\$desktop,\$startMenu\)\)/);
+  assert.match(dualSetup,/else if\(action==='keys'\)await openKeyForm\(root,\{existingSetup:true\}\)/);
+  assert.match(form,/for\(\$slot=1;\$slot -le 5;\$slot\+\+\)/);
   assert.match(launcher,/ValidateSet\([^\n]*'keys'/);
   assert.match(launcher,/\$guiAction=\$Action -in @\([^\n]*'keys'/);
   assert.match(launcher,/if\(\$guiAction\).*?\$node \$entry \$Action/s);
-  assert.match(readme,/click \*\*OmniRoute API Keys\*\*[\s\S]*add or\s+replace provider keys/);
+  assert.match(readme,/click \*\*OmniRoute API Keys\*\*[\s\S]*five slots per provider[\s\S]*add or\s+replace provider keys/);
 });
 
 test('Linux setup creates a clickable API Keys application-menu launcher',async()=>{
-  const bootstrap=await source('distribution/dual/bootstrap-linux.mjs');
+  const [bootstrap,settingsGui]=await Promise.all([source('distribution/dual/bootstrap-linux.mjs'),source('distribution/settings-gui.py')]);
   assert.match(bootstrap,/for\(const \[label,action\].*?\['API Keys','keys'\]/s);
   assert.match(bootstrap,/omniroute-'\+action\+'\.desktop/);
   assert.match(bootstrap,/quote\(join\(root,'Launch\.sh'\)\)\+' '\+action/);
+  assert.match(settingsGui,/parser\.add_argument\('--existing', action='store_true'\)/);
+  assert.match(settingsGui,/if existing_setup:[\s\S]*--existing/);
 });
 
 test('private package version is bumped consistently without overwriting the prior release',async()=>{
@@ -33,9 +39,9 @@ test('private package version is bumped consistently without overwriting the pri
     source('scripts/package-private.mjs'),
     source('scripts/seal-private.mjs'),
     source('scripts/test-family-package.mjs'),
-    source('docs/releases/v0.6.6-private.12.md')
+    source('docs/releases/v0.6.6-private.13.md')
   ]);
-  for(const file of [packager,sealer,packageTest])assert.match(file,/0\.6\.6-private\.12/);
+  for(const file of [packager,sealer,packageTest])assert.match(file,/0\.6\.6-private\.13/);
   assert.match(packager,/Private package folder exists; preserve it before rebuilding/);
   assert.match(sealer,/Archive already exists; never silently overwrite/);
   assert.match(notes,/OmniRoute API Keys/);
