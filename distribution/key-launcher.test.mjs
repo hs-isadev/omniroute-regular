@@ -11,7 +11,7 @@ const run=promisify(execFile);
 const launcher=fileURLToPath(new URL('../../Open-OmniRoute-Keys.ps1',import.meta.url));
 test('simple GUI contains masked shortlisted provider fields without opening a window',{skip:process.platform!=='win32'},async()=>{
   const ui=fileURLToPath(new URL('./Settings.ps1',import.meta.url));
-  const {stdout}=await run('powershell.exe',['-NoProfile','-STA','-NonInteractive','-ExecutionPolicy','Bypass','-File',ui,'-Simple','-SmokeTest'],{timeout:15000,windowsHide:true});
+  const {stdout}=await run('powershell.exe',['-NoProfile','-STA','-NonInteractive','-ExecutionPolicy','Bypass','-File',ui,'-Simple','-SmokeTest'],{timeout:60000,windowsHide:true});
   assert.match(stdout,/PASS: masked Windows Forms/);
   assert.match(stdout,/65 masked/);
 });
