@@ -262,6 +262,13 @@ test('browser-consumer login launchers resolve the active runtime through the st
   assert.match(ps,/ValidateSet\([^)]*'browser-consumers'/);assert.match(ps,/active-version\.txt/);assert.match(ps,/shared-session\.mjs/);assert.match(ps,/Test-Path/);
   assert.match(sh,/browser-consumers/);assert.match(sh,/active-version\.txt/);assert.match(sh,/shared-session\.mjs/);
 });
+test('Windows and Linux launchers forward harness commands to the bundled OmniRoute CLI',async()=>{
+  const ps=await readFile(new URL('./dual/Launch.ps1',import.meta.url),'utf8');
+  const sh=await readFile(new URL('./dual/Launch.sh',import.meta.url),'utf8');
+  assert.match(ps,/ValidateSet\([^)]*'harness'/);
+  assert.match(ps,/\$Action -eq 'harness'[\s\S]*?app\/apps\/cli\/dist\/bin\.js[\s\S]*?\$Extra/);
+  assert.match(sh,/\["\$action" = harness \][\s\S]*?app\/apps\/cli\/dist\/bin\.js[\s\S]*?"harness" "\$@"/);
+});
 test('new setup saves keys before starting Antigravity so its MCP sees the saved profile',async()=>{
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');
   const setup=source.slice(source.indexOf('export async function setupBoth'));

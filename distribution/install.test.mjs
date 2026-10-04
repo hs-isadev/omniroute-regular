@@ -34,6 +34,24 @@ test('versioned installs are idempotent, preserve data and rollback safely',asyn
   await installPackage(next.bundle,f.install);
   assert.equal((await readFile(join(f.install,'active-version.txt'),'utf8')).trim().includes('0.2.1'),true);
 });
+test('updates prune packages older than the single rollback version without touching saved keys',async()=>{
+  const f=await fixture('0.2.0');await installPackage(f.bundle,f.install);
+  const first=(await readFile(join(f.install,'active-version.txt'),'utf8')).trim();
+  await mkdir(join(f.install,'data'),{recursive:true});await writeFile(join(f.install,'data','provider-keys'),'preserve');
+  const second=await fixture('0.2.1');await installPackage(second.bundle,f.install);
+  const secondActive=(await readFile(join(f.install,'active-version.txt'),'utf8')).trim();
+  const third=await fixture('0.2.2');await installPackage(third.bundle,f.install);
+  const active=(await readFile(join(f.install,'active-version.txt'),'utf8')).trim();
+  const marker=JSON.parse(await readFile(join(f.install,'installed.json'),'utf8'));
+  const versions=await readdir(join(f.install,'versions'));
+  assert.ok(active.includes('0.2.2-'));
+  assert.equal(marker.previous,secondActive);
+  assert.deepEqual(new Set(versions),new Set([active.slice('versions/'.length),secondActive.slice('versions/'.length)]));
+  assert.equal(versions.includes(first.slice('versions/'.length)),false);
+  assert.equal(await readFile(join(f.install,'data','provider-keys'),'utf8'),'preserve');
+  await rollbackPackage(f.install);
+  assert.equal((await readFile(join(f.install,'active-version.txt'),'utf8')).trim(),secondActive);
+});
 test('installer rejects unmarked destinations, unsafe manifests and extra files',async()=>{
   const f=await fixture();await mkdir(f.install);
   await assert.rejects(installPackage(f.bundle,f.install),/unmarked|marker/i);
