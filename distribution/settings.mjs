@@ -1,11 +1,118 @@
-import { mkdir } from 'node:fs/promises';
-import { DEFAULT_CONFIG, getRuntimePaths, saveConfig, loadConfig, validateConfig, freeWorkerModel } from '../packages/config/dist/index.js';
+import { mkdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { DEFAULT_CONFIG, atomicWriteFile, getRuntimePaths, saveConfig, loadConfig, validateConfig, freeWorkerModel } from '../packages/config/dist/index.js';
 import { MAX_CREDENTIAL_SLOTS, SecretVault } from '../packages/vault/dist/index.js';
 import { createConfiguredProvider } from '../packages/providers/dist/index.js';
 import { globalRedactor } from '../packages/observability/dist/index.js';
 import { pathToFileURL } from 'node:url';
 import { CREDIT_PROVIDERS, CODING_CANDIDATES } from './regular-policy.mjs';
 export { CODING_CANDIDATES } from './regular-policy.mjs';
+
+const STATUS_FILE='credential-status.json';
+const STATUS_VALUES=new Set(['healthy','unhealthy','expired','unknown']);
+const STATUS_TRANSIENT_REASONS=new Set(['QUOTA_OR_RATE_LIMIT','NETWORK_OR_ENDPOINT_TIMEOUT','NETWORK_OR_ENDPOINT_FAILURE','UNSUPPORTED_MODEL','UNSUPPORTED_MODEL_OR_REQUEST','CANCELLED']);
+const statusKey=(providerId,slot)=>`${providerId}:${slot}`;
+const credentialStatusPath=paths=>join(paths.vaultDir,STATUS_FILE);
+
+async function readCredentialStatusState(paths) {
+  let document;
+  try {document=JSON.parse(await readFile(credentialStatusPath(paths),'utf8'));}
+  catch(error) {if(error?.code==='ENOENT'||error instanceof SyntaxError)return new Map();throw error;}
+  if(document?.version!==1||!Array.isArray(document.statuses))return new Map();
+  const state=new Map();
+  for(const item of document.statuses) {
+    if(!item||!Object.hasOwn(fields,item.providerId)||!Number.isInteger(item.slot)||item.slot<1||item.slot>MAX_CREDENTIAL_SLOTS||typeof item.createdAt!=='string'||!STATUS_VALUES.has(item.status))continue;
+    state.set(statusKey(item.providerId,item.slot),{
+      providerId:item.providerId,slot:item.slot,createdAt:item.createdAt,status:item.status,
+      checkedAt:typeof item.checkedAt==='string'?item.checkedAt:null,
+      lastAttemptAt:typeof item.lastAttemptAt==='string'?item.lastAttemptAt:null,
+      lastAttemptReasonCode:typeof item.lastAttemptReasonCode==='string'?item.lastAttemptReasonCode:null,
+    });
+  }
+  return state;
+}
+
+function currentCredentialStatuses(vault,state) {
+  const statuses=[];
+  for(const providerId of Object.keys(fields)) for(const saved of vault.listCredentialSlots(providerId)) {
+    const previous=state.get(statusKey(providerId,saved.slot));
+    const valid=previous?.createdAt===saved.createdAt?previous:null;
+    statuses.push({providerId,slot:saved.slot,status:valid?.status??'unknown',checkedAt:valid?.checkedAt??null,lastAttemptAt:valid?.lastAttemptAt??null,lastAttemptReasonCode:valid?.lastAttemptReasonCode??null});
+  }
+  return statuses;
+}
+
+async function writeCredentialStatusState(paths,vault,state) {
+  const active=new Set();
+  for(const providerId of Object.keys(fields)) for(const saved of vault.listCredentialSlots(providerId)) {
+    const key=statusKey(providerId,saved.slot),entry=state.get(key);
+    if(!entry||entry.createdAt!==saved.createdAt)continue;
+    active.add(key);
+  }
+  const statuses=[...active].map(key=>state.get(key)).sort((a,b)=>a.providerId.localeCompare(b.providerId)||a.slot-b.slot);
+  await mkdir(paths.vaultDir,{recursive:true});
+  await atomicWriteFile(credentialStatusPath(paths),`${JSON.stringify({version:1,statuses},null,2)}\n`);
+}
+
+export async function getCredentialStatuses(paths,{protector}={}) {
+  const vault=await SecretVault.load(paths.vault,protector);
+  try {return {ready:true,statuses:currentCredentialStatuses(vault,await readCredentialStatusState(paths))};}
+  finally {vault.dispose();}
+}
+
+function trustedProfile(providerId) {
+  const profile=structuredClone(DEFAULT_CONFIG.providers.find(candidate=>candidate.id===providerId));
+  if(!profile)throw new Error('Unknown provider profile.');
+  profile.freeTierConfirmed=true;
+  return profile;
+}
+
+function validationModels(providerId,profile) {
+  const preferred={openrouter:'openrouter/free',groq:'openai/gpt-oss-120b',gemini:'gemini-3.1-flash-lite'}[providerId];
+  const eligible=profile.models.filter(model=>model.enabled&&model.allowed&&model.inputPerMillionUsd===0&&model.outputPerMillionUsd===0);
+  return [...new Set([...(preferred?[preferred]:[]),...(profile.freeModelOrder??eligible.map(model=>model.modelId))])].filter(modelId=>eligible.some(model=>model.modelId===modelId)).slice(0,3);
+}
+
+function statusForReason(reasonCode) {
+  if(reasonCode==='SUCCESS')return 'healthy';
+  if(reasonCode==='INVALID_AUTHENTICATION')return 'expired';
+  if(STATUS_TRANSIENT_REASONS.has(reasonCode))return 'unknown';
+  return 'unhealthy';
+}
+
+export async function checkCredentialStatuses(paths,{protector,factory=createConfiguredProvider}={}) {
+  const vault=await SecretVault.load(paths.vault,protector);
+  try {
+    const state=await readCredentialStatusState(paths),attempts=[];
+    for(const providerId of Object.keys(fields)) for(const slot of vault.getCredentialSlots(providerId)) {
+      const key=statusKey(providerId,slot.slot),summary=vault.listCredentialSlots(providerId).find(item=>item.slot===slot.slot),previous=state.get(key);
+      const prior=previous?.createdAt===summary.createdAt?previous:null,attemptedAt=new Date().toISOString();
+      let adapter,lastError=null,success=false;
+      try {
+        const profile=trustedProfile(providerId);
+        adapter=factory(profile,slot.values);
+        for(const modelId of validationModels(providerId,profile).slice(0,1)) {
+          try {
+            const response=await adapter.generate({modelId,instructions:'Reply briefly.',prompt:'Reply with OK only.',maxOutputTokens:32,reasoningEffort:'none',jsonSchema:null,schemaName:null,safetyIdentifier:null,signal:AbortSignal.timeout(15_000)});
+            if(typeof response.text==='string'&&response.text.trim()){success=true;break;}
+            lastError=new Error('Empty provider response');
+          } catch(error) {
+            lastError=error;
+            const reason=validationReason(adapter,error).reasonCode;
+            if(['INVALID_AUTHENTICATION','QUOTA_OR_RATE_LIMIT'].includes(reason))break;
+          }
+        }
+      } catch(error) {lastError=error;}
+      const resultReason=success?'SUCCESS':validationReason(adapter,lastError??new Error('No eligible free model is available')).reasonCode;
+      const status=statusForReason(resultReason);
+      const entry={providerId,slot:slot.slot,createdAt:summary.createdAt,status:status==='unknown'?(prior?.status??'unknown'):status,
+        checkedAt:status==='unknown'?(prior?.checkedAt??null):attemptedAt,lastAttemptAt:attemptedAt,lastAttemptReasonCode:resultReason};
+      state.set(key,entry);attempts.push({providerId,slot:slot.slot,status:entry.status,checkStatus:status,checkedAt:entry.checkedAt,lastAttemptAt:entry.lastAttemptAt,lastAttemptReasonCode:entry.lastAttemptReasonCode});
+    }
+    await writeCredentialStatusState(paths,vault,state);
+    return {ready:true,statuses:currentCredentialStatuses(vault,state),attempts};
+  } finally {vault.dispose();}
+}
 
 export const fields = {
   openrouter: ['OPENROUTER_API_KEY'], groq: ['GROQ_API_KEY'], gemini: ['GEMINI_API_KEY'],
@@ -78,6 +185,17 @@ function normalizeCredentialSlots(input) {
   return slots;
 }
 
+function normalizeReplacementSlots(input) {
+  const replacements=input.replaceSlots??{};
+  if(!replacements||typeof replacements!=='object'||Array.isArray(replacements)||Object.keys(replacements).some(id=>!Object.hasOwn(fields,id)))throw new Error('Replacement slots must use supported providers.');
+  const normalized={};
+  for(const [providerId,slots] of Object.entries(replacements)) {
+    if(!Array.isArray(slots)||slots.length>MAX_CREDENTIAL_SLOTS||slots.some(slot=>!Number.isInteger(slot)||slot<1||slot>MAX_CREDENTIAL_SLOTS)||new Set(slots).size!==slots.length)throw new Error('Replacement slots must be unique slot numbers from 1 to 5.');
+    normalized[providerId]=new Set(slots);
+  }
+  return normalized;
+}
+
 function findNextFreeSlot(requestedSlot, occupiedSlots, reservedSlots, allocatedSlots) {
   for (let offset = 1; offset < MAX_CREDENTIAL_SLOTS; offset += 1) {
     const slot = ((requestedSlot - 1 + offset) % MAX_CREDENTIAL_SLOTS) + 1;
@@ -89,9 +207,11 @@ function findNextFreeSlot(requestedSlot, occupiedSlots, reservedSlots, allocated
 export async function configure(input, paths, { protector, factory = createConfiguredProvider, existingSetup = false } = {}) {
   if (input.freeOnlyConfirmed !== true) throw new Error('Confirm free-only provider account settings first.');
   const submitted=normalizeCredentialSlots(input);
+  const replacements=normalizeReplacementSlots(input);
   if(!existingSetup&&CREDIT_PROVIDERS.some(id=>(submitted[id]??[]).some(values=>Object.values(values).some(value=>value.trim())))) throw new Error('Credit-based providers are disabled in strict Regular mode.');
   const vault = await SecretVault.load(paths.vault, protector);
   try {
+    const credentialStatuses=await readCredentialStatusState(paths);
     const config = existingSetup ? await loadConfig(paths) : regularConfig();
     if(!existingSetup) {
       let previous;try {previous=await loadConfig(paths);}catch {/* Missing/invalid previous config cannot supply an endpoint. */}
@@ -125,7 +245,8 @@ export async function configure(input, paths, { protector, factory = createConfi
         if(Object.values(values).some(value=>!value)) {failedSet.add(id);slotResults.push({providerId:id,slot:requestedSlot,requestedSlot,status:'FAILED',reasonCode:'INCOMPLETE_CREDENTIALS',httpStatus:null});continue;}
         const secret=values[names[0]],duplicateSlot=savedSecretSlots.get(secret);
         if(duplicateSlot!==undefined) {slotResults.push({providerId:id,slot:requestedSlot,requestedSlot,status:'DUPLICATE',reasonCode:'DUPLICATE_CREDENTIAL',matchedSlot:duplicateSlot});continue;}
-        const slot=occupiedSlots.has(requestedSlot)?findNextFreeSlot(requestedSlot,occupiedSlots,reservedSlots,allocatedSlots):requestedSlot;
+        const replaced=Boolean(replacements[id]?.has(requestedSlot)&&occupiedSlots.has(requestedSlot));
+        const slot=replaced?requestedSlot:occupiedSlots.has(requestedSlot)?findNextFreeSlot(requestedSlot,occupiedSlots,reservedSlots,allocatedSlots):requestedSlot;
         if(slot===null) {failedSet.add(id);slotResults.push({providerId:id,slot:requestedSlot,requestedSlot,status:'FAILED',reasonCode:'NO_EMPTY_SLOT',httpStatus:null});continue;}
         allocatedSlots.add(slot);
         let provider,lastError=null,validated=false;
@@ -154,8 +275,11 @@ export async function configure(input, paths, { protector, factory = createConfi
             }catch {model.enabled=false;model.allowed=false;codingCandidates.push({provider:id,slot,model:candidate.model,status:'not activated'});}
           }
           Object.assign(settings, {baseUrl:trusted.baseUrl,apiPrefix:trusted.apiPrefix,type:trusted.type,credentialField:trusted.credentialField,freeTierConfirmed:true});
-          vault.setCredentialSlot(id,slot,values);occupiedSlots.add(slot);savedSecretSlots.set(secret,slot);settings.enabled=true;acceptedSet.add(id);
-          slotResults.push({providerId:id,slot,requestedSlot,status:'ACCEPTED',reasonCode:'SUCCESS',httpStatus:null});
+          const saved=vault.setCredentialSlot(id,slot,values);
+          if(replaced) for(const [oldSecret,oldSlot] of savedSecretSlots) if(oldSlot===slot)savedSecretSlots.delete(oldSecret);
+          occupiedSlots.add(slot);savedSecretSlots.set(secret,slot);settings.enabled=true;acceptedSet.add(id);
+          const checkedAt=new Date().toISOString();credentialStatuses.set(statusKey(id,slot),{providerId:id,slot,createdAt:saved.createdAt,status:'healthy',checkedAt,lastAttemptAt:checkedAt,lastAttemptReasonCode:'SUCCESS'});
+          slotResults.push({providerId:id,slot,requestedSlot,status:'ACCEPTED',reasonCode:'SUCCESS',httpStatus:null,replaced});
           if (!config.routing.directProviderOrder.includes(id)) config.routing.directProviderOrder.push(id);
         } catch(error) {
           allocatedSlots.delete(slot);
@@ -170,16 +294,21 @@ export async function configure(input, paths, { protector, factory = createConfi
     if (!config.providers.some(provider=>provider.enabled && provider.freeTierOnly && vault.listCredentialSlots(provider.id).length && provider.models.some(model=>model.enabled && model.allowed && model.inputPerMillionUsd===0 && model.outputPerMillionUsd===0))) throw new Error('Worker validation failed. At least one valid free provider is required; check the key and quota.');
     validateConfig(config);
     await mkdir(paths.vaultDir, {recursive:true});
-    await vault.save(paths.vault); await saveConfig(config, paths);
+    await vault.save(paths.vault); await writeCredentialStatusState(paths,vault,credentialStatuses); await saveConfig(config, paths);
     const stored=Object.keys(fields).map(providerId=>({providerId,slots:vault.listCredentialSlots(providerId).map(item=>item.slot)})).filter(item=>item.slots.length);
-    return { accepted:[...acceptedSet], failed:[...failedSet], slotResults, stored, codingCandidates, ready:true };
+    return { accepted:[...acceptedSet], failed:[...failedSet], slotResults, stored, statuses:currentCredentialStatuses(vault,credentialStatuses), codingCandidates, ready:true };
   } finally { vault.dispose(); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    let text = ''; for await (const chunk of process.stdin) { text += chunk; if (text.length > 65536) throw new Error('Input too large'); }
     const paths = getRuntimePaths();
-    const result = await configure(JSON.parse(text), paths, {existingSetup:process.argv.includes('--existing')});
+    let result;
+    if(process.argv.includes('--status')) result=await getCredentialStatuses(paths);
+    else if(process.argv.includes('--check-status')) result=await checkCredentialStatuses(paths);
+    else {
+      let text = ''; for await (const chunk of process.stdin) { text += chunk; if (text.length > 65536) throw new Error('Input too large'); }
+      result=await configure(JSON.parse(text), paths, {existingSetup:process.argv.includes('--existing')});
+    }
     if (process.argv.includes('--existing') && process.argv.includes('--restart') && result.accepted.length) {
       try {
         const {DaemonClient}=await import('../apps/cli/dist/client.js');

@@ -96,15 +96,24 @@ test('saved key status is private metadata and a quota timeout does not falsely 
   await configure({slots:{groq:[{GROQ_API_KEY:'fixture-status-expired'},{GROQ_API_KEY:'fixture-status-quota'}]},freeOnlyConfirmed:true},paths,{protector,factory:success});
   const snapshot=await getCredentialStatuses(paths,{protector});
   assert.deepEqual(snapshot.statuses.map(item=>[item.slot,item.status]),[[1,'healthy'],[2,'healthy']]);
+  const calls=[];
   const checked=await checkCredentialStatuses(paths,{protector,factory:(_settings,values)=>({
-    generate:async()=>{throw values.GROQ_API_KEY==='fixture-status-expired'?{category:'authentication',providerStatus:401}:{category:'rate_limit',providerStatus:429};},
+    generate:async request=>{calls.push([values.GROQ_API_KEY,request.modelId]);throw values.GROQ_API_KEY==='fixture-status-expired'?{category:'authentication',providerStatus:401}:{category:'rate_limit',providerStatus:429};},
     classifyError:error=>error,
   })});
+  assert.equal(calls.length,2,'status refresh sends at most one small provider request per saved slot');
   assert.deepEqual(checked.statuses.map(item=>[item.slot,item.status]),[[1,'expired'],[2,'healthy']]);
   assert.equal(checked.statuses[1].lastAttemptReasonCode,'QUOTA_OR_RATE_LIMIT');
   const statusFile=await readFile(join(paths.vaultDir,'credential-status.json'),'utf8');
   assert.ok(!statusFile.includes('fixture-status-'));
   assert.ok(!JSON.stringify(checked).includes('fixture-status-'));
+});
+test('invalid replacement coordinates are rejected before credential changes',async()=>{
+  const {paths,protector}=await context();
+  await configure({keys:{GROQ_API_KEY:'fixture-safe-key'},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  await assert.rejects(configure({keys:{GROQ_API_KEY:'fixture-attempt'},replaceSlots:{unknown:[1]},freeOnlyConfirmed:true},paths,{protector,existingSetup:true,factory:success}),/supported providers/);
+  await assert.rejects(configure({keys:{GROQ_API_KEY:'fixture-attempt'},replaceSlots:{groq:[6]},freeOnlyConfirmed:true},paths,{protector,existingSetup:true,factory:success}),/slot numbers/);
+  const vault=await SecretVault.load(paths.vault,protector);assert.equal(vault.getCredentialSlots('groq')[0].values.GROQ_API_KEY,'fixture-safe-key');vault.dispose();
 });
 test('a credential already saved in another slot is reported and never validated or duplicated',async()=>{
   const {paths,protector}=await context();
