@@ -20,6 +20,8 @@ test('Windows setup creates API Keys shortcuts that open the stable key editor',
   assert.match(setup,/foreach\(\$location in @\(\$desktop,\$startMenu\)\)/);
   assert.match(dualSetup,/else if\(action==='keys'\)await openKeyForm\(root,\{existingSetup:true\}\)/);
   assert.match(form,/for\(\$slot=1;\$slot -le 5;\$slot\+\+\)/);
+  assert.match(form,/Check saved key statuses/);
+  assert.match(form,/replaceSlots/);
   assert.match(launcher,/ValidateSet\([^\n]*'keys'/);
   assert.match(launcher,/\$guiAction=\$Action -in @\([^\n]*'keys'/);
   assert.match(launcher,/if\(\$guiAction\).*?\$node \$entry \$Action/s);
@@ -27,6 +29,7 @@ test('Windows setup creates API Keys shortcuts that open the stable key editor',
   assert.match(form,/Skipped duplicate keys/);
   assert.match(settings,/DUPLICATE_CREDENTIAL/);
   assert.match(settings,/findNextFreeSlot/);
+  assert.match(settings,/checkCredentialStatuses/);
 });
 
 test('Linux setup creates a clickable API Keys application-menu launcher',async()=>{
@@ -43,10 +46,11 @@ test('private package version is bumped consistently without overwriting the pri
     source('scripts/package-private.mjs'),
     source('scripts/seal-private.mjs'),
     source('scripts/test-family-package.mjs'),
-    source('docs/releases/v0.6.6-private.16.md')
+    source('docs/releases/v0.6.6-private.17.md')
   ]);
-  for(const file of [packager,sealer,packageTest])assert.match(file,/0\.6\.6-private\.16/);
+  for(const file of [packager,sealer,packageTest])assert.match(file,/0\.6\.6-private\.17/);
   assert.match(packager,/Private package folder exists; preserve it before rebuilding/);
   assert.match(sealer,/Archive already exists; never silently overwrite/);
   assert.match(notes,/OmniRoute API Keys/);
+  assert.match(packager,/provider-key-status\.tdd\.md/);
 });
