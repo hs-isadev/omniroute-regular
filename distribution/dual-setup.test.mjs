@@ -175,11 +175,11 @@ test('host registration repair refreshes an existing browser-consumer startup co
   const startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup');await mkdir(startup,{recursive:true});
   const vbs=join(startup,'OmniRoute Browser Consumers.vbs'),old=join(root,'versions/0.6.4-private.1-old');
   await writeFile(vbs,`CreateObject("WScript.Shell").Run """${join(old,'node/node.exe')}"" ""${join(old,'app/packages/browser-consumer-adapter/runtime/shared-session.mjs')}"" --background --profile ""${join(root,'data/browser-consumer-profile')}"" --port 47842", 0, False\r\n`);
-  await mod.repairHostRegistrations({root,home,env:{APPDATA:appData}});
+  await mod.repairHostRegistrations({root,home,env:{APPDATA:appData},platform:'win32'});
   const repaired=await readFile(vbs,'utf8');assert.match(repaired,/Launch\.ps1/);assert.match(repaired,/browser-consumers/);assert.doesNotMatch(repaired,/versions[\\/]|node\.exe|shared-session\.mjs/);
-  await mod.repairHostRegistrations({root,home,env:{APPDATA:appData}});assert.equal(await readFile(vbs,'utf8'),repaired);
+  await mod.repairHostRegistrations({root,home,env:{APPDATA:appData},platform:'win32'});assert.equal(await readFile(vbs,'utf8'),repaired);
   const custom='User-managed startup entry\r\n';await writeFile(vbs,custom);
-  await assert.rejects(mod.repairHostRegistrations({root,home,env:{APPDATA:appData}}),/autostart conflict/i);assert.equal(await readFile(vbs,'utf8'),custom);
+  await assert.rejects(mod.repairHostRegistrations({root,home,env:{APPDATA:appData},platform:'win32'}),/autostart conflict/i);assert.equal(await readFile(vbs,'utf8'),custom);
 });
 test('Windows repair migrates a version-pinned browser-consumer CMD when the stable VBS is missing',async()=>{
   const home=await mkdtemp(join(tmpdir(),'dual-autostart-cmd-')),root=join(home,'OmniRouteRegular'),active='versions/0.6.6-private.10-new',payload=join(root,active);

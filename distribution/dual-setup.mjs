@@ -185,10 +185,10 @@ export async function repairBrowserConsumerAutostart({root,runtime,home=homedir(
   await installSharedBrowserConsumerAutostart({platform,home,root,node:runtime.node,entrypoint,env});
   return {changed:(await optional(file))!==before||(legacyCommandFile!==null&&(await optional(legacyCommandFile))!==beforeLegacyCommand),file};
 }
-export async function repairHostRegistrations({root,home=homedir(),env}){
+export async function repairHostRegistrations({root,home=homedir(),env,platform=process.platform}){
   const runtime=await resolveActiveRuntime(root);
   const browserConsumers=await repairBrowserConsumerRuntime({root,runtime});
-  const browserAutostart=await repairBrowserConsumerAutostart({root,runtime,home,env});
+  const browserAutostart=await repairBrowserConsumerAutostart({root,runtime,home,env,platform});
   const antigravity=await connectAntigravity({home,root,node:runtime.node,entrypoint:runtime.entrypoint});
   const developers=await connectDeveloperHosts({home,root,node:runtime.node,entrypoint:runtime.entrypoint});
   const skills=await installBundledSkills({home});

@@ -16,6 +16,8 @@ export interface SpawnedDaemon {
   killed?: boolean;
   kill(signal?: NodeJS.Signals): boolean;
   unref?(): void;
+  once?(event: "error", listener: (error: Error) => void): unknown;
+  once?(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown;
 }
 
 export interface SpawnDaemonOptions {
@@ -55,13 +57,15 @@ function isUnreachable(error: unknown): boolean {
   return error instanceof SafeError && error.code === "DAEMON_UNREACHABLE";
 }
 
-async function waitForLocalDaemon(client: DaemonHealthClient, maxAttempts: number, sleep: (milliseconds: number) => Promise<void>): Promise<void> {
+async function waitForLocalDaemon(client: DaemonHealthClient, maxAttempts: number, sleep: (milliseconds: number) => Promise<void>, startupFailure?: () => SafeError | null): Promise<void> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       await client.request("/v1/health");
       return;
     } catch (error) {
       if (!isUnreachable(error)) throw error;
+      const failed = startupFailure?.();
+      if (failed) throw failed;
       if (attempt + 1 < maxAttempts) await sleep(100);
     }
   }
@@ -77,7 +81,7 @@ export async function ensureHarnessDaemon({
   environment,
   spawnImpl = spawnChild,
   sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
-  maxAttempts = 100,
+  maxAttempts = 300,
 }: EnsureHarnessDaemonOptions): Promise<LocalDaemonGateway> {
   const baseURL = localGatewayBaseURL(config);
   try {
@@ -97,9 +101,14 @@ export async function ensureHarnessDaemon({
   }
 
   const child = spawnImpl(nodePath, [daemonPath], { cwd, env: environment, shell: false, stdio: "ignore", windowsHide: true });
+  let startupFailure: SafeError | null = null;
+  child.once?.("error", () => { startupFailure = new SafeError("DAEMON_START_FAILED", "The local OmniRoute daemon process could not start for the OpenCode harness", 503); });
+  child.once?.("exit", (code, signal) => {
+    startupFailure = new SafeError("DAEMON_START_FAILED", `The local OmniRoute daemon exited before becoming ready (exit code ${code ?? "none"}, signal ${signal ?? "none"})`, 503);
+  });
   child.unref?.();
   try {
-    await waitForLocalDaemon(client, maxAttempts, sleep);
+    await waitForLocalDaemon(client, maxAttempts, sleep, () => startupFailure);
   } catch (error) {
     if (!child.killed) child.kill("SIGTERM");
     throw error;

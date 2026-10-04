@@ -109,7 +109,7 @@ test("OpenCode harness rejects orchestrator and subscription modes before creden
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test("OpenCode regular harness starts an authenticated local OmniRoute gateway without an upstream key", { timeout: 30_000 }, async () => {
+test("OpenCode regular harness starts an authenticated local OmniRoute gateway without an upstream key", { timeout: 45_000 }, async () => {
   const root = await mkdtemp(join(tmpdir(), "omniroute-cli-opencode-local-"));
   const launcherDirectory = join(root, "trusted-opencode-bin");
   try {

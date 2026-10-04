@@ -60,6 +60,33 @@ test("OpenCode harness starts and cleans up a private local daemon only when it 
   assert.equal(killed, true);
 });
 
+test("OpenCode harness reports an early local daemon process exit instead of waiting for the full startup timeout", async () => {
+  const child = new EventEmitter() as EventEmitter & { killed?: boolean; kill: () => boolean; unref: () => void };
+  child.kill = () => { child.killed = true; return true; };
+  child.unref = () => {};
+  let healthChecks = 0;
+  await assert.rejects(ensureHarnessDaemon({
+    client: { request: async () => { healthChecks++; throw offline(); } },
+    config: { daemon: { host: "127.0.0.1", port: 47831 } },
+    nodePath: "C:\\runtime\\node.exe",
+    daemonPath: "C:\\runtime\\daemon.mjs",
+    cwd: "C:\\workspace",
+    environment: {},
+    spawnImpl: () => {
+      queueMicrotask(() => child.emit("exit", 1, null));
+      return child;
+    },
+    sleep: async () => {},
+  }), error => {
+    assert.ok(error instanceof SafeError);
+    assert.equal(error.code, "DAEMON_START_FAILED");
+    assert.match(error.message, /The local OmniRoute daemon exited before becoming ready/);
+    return true;
+  });
+  assert.equal(healthChecks, 7);
+  assert.equal(child.killed, true);
+});
+
 test("OpenCode harness fails closed for an authenticated daemon error instead of spawning a replacement", async () => {
   let spawnCalls = 0;
   await assert.rejects(ensureHarnessDaemon({
