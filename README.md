@@ -27,8 +27,10 @@ Each provider can use up to five API keys. If you paste a new key into a slot
 that is already filled, OmniRoute keeps the saved key and moves the new key to
 the next available slot. Exact duplicate keys are skipped, and the save message
 identifies the slot used. Requests rotate across available keys for that provider;
-authentication and rate-limit failures try another key, then another eligible
-provider if needed.
+invalid-key authentication failures can move to another saved key. A quota or
+rate-limit response cools the whole provider's keys and models; OmniRoute then
+uses another eligible provider if available. It does not rotate keys or models
+to get around provider limits.
 
 ## What setup does
 

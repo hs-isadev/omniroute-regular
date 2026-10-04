@@ -41,7 +41,8 @@
   bundles and their installation for every host.
 - The masked setup window exposes five independently validated slots per provider,
   preserves legacy credentials as slot 1, and reports accepted/failed slots plus
-  current stored counts. Runtime pools rotate slots and cool down auth/quota failures.
+  current stored counts. Runtime pools may switch slots after authentication
+  failures; provider-wide quota responses cool every model/key for that provider.
 - The packaged OpenCode launcher disables prior-session replay by default while
   preserving explicit launch arguments. This avoids an unstable UI replay path;
   the isolated strict-free configuration and current worker routing are unchanged.

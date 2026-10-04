@@ -983,14 +983,14 @@ export class CredentialPoolProvider implements ProviderAdapter {
   async *stream(request: GenerateRequest): AsyncGenerator<ProviderStreamEvent> {
     let lastError: unknown = null;
     const indexes = this.#availableIndexes();
-    if (indexes.length) this.#cursor = (indexes[0]! + 1) % this.#providers.length;
     for (const index of indexes) {
+      this.#cursor = (index + 1) % this.#providers.length;
       let emitted = false;
       try {
         for await (const event of this.#providers[index]!.stream(request)) { emitted = true; yield event; }
         return;
       } catch (error) {
-        if (emitted || !this.#canTryAnother(index, error)) throw error;
+        if (emitted || !this.#canTryAnother(index, error)) { this.#cursor = index; throw error; }
         lastError = error;
       }
     }
@@ -1008,13 +1008,13 @@ export class CredentialPoolProvider implements ProviderAdapter {
   async #attempt<T>(operation: (provider: ProviderAdapter) => Promise<T>): Promise<T> {
     let lastError: unknown = null;
     const indexes = this.#availableIndexes();
-    if (indexes.length) this.#cursor = (indexes[0]! + 1) % this.#providers.length;
     for (const index of indexes) {
+      this.#cursor = (index + 1) % this.#providers.length;
       try {
         const result = await operation(this.#providers[index]!);
         return result;
       } catch (error) {
-        if (!this.#canTryAnother(index, error)) throw error;
+        if (!this.#canTryAnother(index, error)) { this.#cursor = index; throw error; }
         lastError = error;
       }
     }
@@ -1023,10 +1023,11 @@ export class CredentialPoolProvider implements ProviderAdapter {
 
   #canTryAnother(index: number, error: unknown): boolean {
     const failure = this.#providers[index]!.classifyError(error);
-    if (!["authentication", "rate_limit"].includes(failure.category)) return false;
-    const fallbackMs = failure.category === "authentication" ? 5 * 60_000 : 60_000;
-    this.#cooldownUntil[index] = Date.now() + Math.max(1_000, failure.retryAfterMs ?? fallbackMs);
     this.#lastError = error;
+    // Credential rotation repairs an invalid credential only. Quota exhaustion
+    // is handled by the router's provider-wide cooldown and cross-provider fallback.
+    if (failure.category !== "authentication") return false;
+    this.#cooldownUntil[index] = Date.now() + Math.max(1_000, failure.retryAfterMs ?? 5 * 60_000);
     return true;
   }
 

@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {verifyPackage} from '../distribution/install.mjs';
 import {BUNDLED_SKILLS} from '../distribution/skill-catalog.mjs';
 
-const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-Private-0.6.6-private.17';
+const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-0.6.7';
 const bundledSkills=BUNDLED_SKILLS;
 const archive=resolve(process.argv[2]??join(repo,'release',name+'.zip'));
 const temp=await mkdtemp(join(repo,'test-artifacts/family-smoke-'));
@@ -94,6 +94,10 @@ const pool=new CredentialPoolProvider([createFakeSlotAdapter('slot 1',async()=>{
 await Promise.all([pool.generate({}),pool.generate({})]);assert.deepEqual(concurrentCalls,[1,2]);
 const authCalls=[],authPool=new CredentialPoolProvider([createFakeSlotAdapter('bad',async()=>{authCalls.push(1);throw{category:'authentication'};}),createFakeSlotAdapter('good',async()=>{authCalls.push(2);return{text:'ok'};})]);
 assert.equal((await authPool.generate({})).text,'ok');assert.deepEqual(authCalls,[1,2]);
+const quotaCalls=[],quotaPool=new CredentialPoolProvider([createFakeSlotAdapter('limited',async()=>{quotaCalls.push(1);throw{category:'rate_limit',providerStatus:429};}),createFakeSlotAdapter('unused',async()=>{quotaCalls.push(2);return{text:'must not rotate'};})]);
+await assert.rejects(quotaPool.generate({}),error=>error?.category==='rate_limit');assert.deepEqual(quotaCalls,[1]);
+const streamQuotaCalls=[],streamQuotaPool=new CredentialPoolProvider([{...createFakeSlotAdapter('limited'),stream:async function*(){streamQuotaCalls.push(1);throw{category:'rate_limit',providerStatus:429};}},{...createFakeSlotAdapter('unused'),stream:async function*(){streamQuotaCalls.push(2);yield{type:'delta',text:'must not rotate'};}}]);
+await assert.rejects(async()=>{for await(const _event of streamQuotaPool.stream({})){}},error=>error?.category==='rate_limit');assert.deepEqual(streamQuotaCalls,[1]);
 const {DEFAULT_CONFIG}=await moduleAt('packages/config/dist/index.js');
 const packagedVault=await moduleAt('packages/vault/dist/index.js');
 assert.equal(typeof packagedVault.SecretVault.prototype.getCredentialSlots,'function');

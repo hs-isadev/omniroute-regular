@@ -41,16 +41,16 @@ test('Linux setup creates a clickable API Keys application-menu launcher',async(
   assert.match(settingsGui,/if existing_setup:[\s\S]*--existing[\s\S]*--restart/);
 });
 
-test('private package version is bumped consistently without overwriting the prior release',async()=>{
+test('shareable package version is bumped consistently without overwriting the prior release',async()=>{
   const [packager,sealer,packageTest,notes]=await Promise.all([
     source('scripts/package-private.mjs'),
     source('scripts/seal-private.mjs'),
     source('scripts/test-family-package.mjs'),
-    source('docs/releases/v0.6.6-private.17.md')
+    source('docs/releases/v0.6.7.md')
   ]);
-  for(const file of [packager,sealer,packageTest])assert.match(file,/0\.6\.6-private\.17/);
-  assert.match(packager,/Private package folder exists; preserve it before rebuilding/);
+  for(const file of [packager,sealer,packageTest])assert.match(file,/0\.6\.7/);
+  assert.match(packager,/Package folder exists; preserve it before rebuilding/);
   assert.match(sealer,/Archive already exists; never silently overwrite/);
-  assert.match(notes,/OmniRoute API Keys/);
+  assert.match(notes,/quota|rate.limit/i);
   assert.match(packager,/provider-key-status\.tdd\.md/);
 });

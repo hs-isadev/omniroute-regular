@@ -41,11 +41,23 @@ not. A validated complex, review-required, or higher-risk plan can raise executi
 back to quality-first. Paid/native orchestration is unchanged. The classification
 and preference appear in each route's audit policy decisions.
 
-Lightweight failures try remaining same-provider models lightest-first before
-another provider, so a stronger same-provider fallback is possible after a limit.
-Quality-first requests retain the best-to-smaller ladder below. Turning off intent
-routing restores best-first selection. This policy only affects OmniRoute calls,
-not native Codex subagents or ordinary ChatGPT model responses.
+For a non-quota model or transient failure, eligible same-provider models may be
+tried before another provider. A provider quota/rate limit instead cools the
+whole provider, so its other models and keys are skipped until the cooldown
+expires. Turning off intent routing restores quality-first model preferences.
+This policy only affects OmniRoute calls, not native Codex subagents or ordinary
+ChatGPT model responses.
+
+## OpenCode host selection
+
+The bundled OpenCode host selects the strongest eligible model across the
+configured free providers for each request. Explicit provider priorities still
+win. Eligibility requires healthy discovery, known zero pricing, a sufficient
+context/output limit, and the capabilities/task class the request needs. The
+configured intelligence tiers and model order are routing hints, not an
+independent benchmark. A 429/402 cools the entire provider and its credential
+pool; failover may use another authorized provider, never another key/model to
+avoid that provider's quota.
 
 ## Planner behavior
 
@@ -85,10 +97,12 @@ For regular workers and orchestrator-mode workers, subtasks, reviews, and free
 API planners:
 
 1. Try the selected provider/model exactly. A successful selection is never replaced merely to re-rank it.
-2. On a rate/quota limit, immediately try its next eligible lower-ranked model.
-3. Only after that provider's eligible models are exhausted, try the next
-   enabled provider in `routing.directProviderOrder`, starting at its best model.
-4. If every eligible model fails or is cooling down, stop with an error.
+2. On a 429 rate limit or 402 quota/payment response, cool the entire provider
+   and try another enabled, eligible provider. Do not rotate that provider's
+   key slots or models.
+3. For other eligible transient/model failures, try remaining candidates in
+   deterministic order, subject to ordinary bounded retries.
+4. If every eligible provider/model fails or is cooling down, stop with an error.
 
 `providers[].freeModelOrder` is an editable, curated best-to-lighter preference
 list, not an automatic benchmark or a claim that every model is physically
@@ -96,18 +110,18 @@ smaller. Unlisted configured models use intelligence/latency metadata to break
 ties. Discovery refreshes availability; it never grants permission to unknown
 models, infers quality from their names, or changes the allowlist by itself.
 
-The same-provider preference outranks a different provider's stronger model.
 Capability, context, output, health, credential and zero-price checks still
 apply. Ineligible smaller models are skipped rather than weakening the task's
 requirements. Output caps can decrease to fit a smaller model. A provider with
 only one eligible model has no same-provider downgrade.
 
-HTTP 429 and quota/payment-required HTTP 402 mark that model as cooling down.
+HTTP 429 and quota/payment-required HTTP 402 mark the entire provider as cooling down.
 OmniRoute honors `Retry-After` (bounded to 1 second–24 hours); without it, the
-default cooldown is 60 seconds. Cooldowns are per model, shared by routes in
-the running daemon, and reset on restart. A higher-ranked model becomes eligible
-again when its cooldown expires. Provider-wide quotas may affect every model,
-so switching models does not guarantee more allowance or bypass account limits.
+default cooldown is 60 seconds. Provider cooldowns are shared by routes in the
+running process and reset on restart. All models and credential slots for that
+provider become eligible again when its cooldown expires. A model-specific
+HTTP 413 may still use another eligible model because it is an input-size
+constraint, not a provider-wide quota signal.
 
 Transient availability failures can move down the same ladder after ordinary
 bounded retries. Authentication failures, invalid requests, cancellation and
@@ -119,9 +133,9 @@ Configuration switches: `routing.freeModelFailoverEnabled` (default true) and
 `routing.freeModelCooldownMs` (default 60000). This automatic policy only operates
 under `routing.freeOnly`; it never authorizes paid models or top-ups.
 
-The OpenCode regular wrapper's own model remains pinned to `openrouter/free`.
-This ladder governs its OmniRoute tool calls and standalone OmniRoute requests,
-not model calls made directly by the OpenCode host.
+The OpenCode regular wrapper pins its host model to the local `omniroute/regular`
+endpoint. That endpoint selects among the configured eligible providers as
+described above; the wrapper has no separate upstream provider key.
 
 ## Execution and retries
 

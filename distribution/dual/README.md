@@ -1,4 +1,4 @@
-# OmniRoute 0.6.6 — multi-key providers and verified host runtime
+# OmniRoute 0.6.7 — best eligible host and safe provider failover
 
 This update verifies the installed MCP runtime before host registration, repairs
 registrations after update or rollback, isolates provider health deadlines, and
@@ -46,11 +46,14 @@ open during setup to refresh its skill list.
 
 ## After setup
 
-- **OmniRoute OpenCode:** OmniRoute is the main model. Small questions prefer
-  lightweight workers; coding/complex requests prefer stronger eligible workers.
+- **OmniRoute OpenCode:** OmniRoute is the main model. It chooses the strongest
+  eligible configured model for the request, using free status, health, task
+  class, capabilities, context, and configured model tiers. Those tiers are
+  routing hints, not a universal model-quality benchmark.
   Complex coding and high-risk requests can use two or three substantive API
   workers in parallel, capped by `maxParallelWorkers`, followed by one final
-  synthesis. Same-provider free fallbacks are tried before moving to another provider.
+  synthesis. Same-provider model fallbacks are allowed for non-quota errors;
+  quota errors cool the whole provider and fall back to another provider.
 - **OmniRoute Antigravity, Codex, and Claude Code:** each host's own model is the
   main agent; OmniRoute provides MCP workers. Rules encourage delegation but
   cannot guarantee every host call uses a worker. Each host's own quota applies.
@@ -60,9 +63,11 @@ open during setup to refresh its skill list.
   Add provider keys without rerunning setup; filled slots are never overwritten,
   duplicate keys are skipped, and a new key moves to the next free slot. The
   message shows where it was saved. Routing settings and other saved keys are
-  preserved. Requests rotate across keys and fail over to another authorized
-  provider after authentication or rate-limit failures. OmniRoute restarts after
-  an accepted key change.
+  preserved. Normal requests use the saved key pool; an invalid-key
+  authentication failure may try another saved key. A provider quota/rate limit
+  cools all of that provider's models and keys, then routes to another eligible
+  provider if one is available. It will not rotate same-provider keys or models
+  to work around a limit. OmniRoute restarts after an accepted key change.
 - **OmniRoute Usage:** shows exact provider-reported worker tokens offloaded.
   Actual host tokens saved stays unavailable because a counterfactual host-only
   run cannot be observed.
