@@ -35,11 +35,11 @@ const windowsKeyForm=await readFile(join(family,'Windows','payload/app/distribut
 const packagedSettings=await readFile(join(family,'Windows','payload/app/distribution/settings.mjs'),'utf8');
 const packagedProviderPool=await readFile(join(family,'Windows','payload/app/packages/providers/dist/index.js'),'utf8');
 const packagedOpenCodePool=await readFile(join(family,'Windows','payload/app/distribution/dual-chat.mjs'),'utf8');
+assert.match(packagedSettings,/DUPLICATE_CREDENTIAL/);assert.match(packagedSettings,/NO_EMPTY_SLOT/);assert.match(packagedSettings,/requestedSlot/);
+assert.match(packagedProviderPool,/credentialSlotCount/);
 assert.match(windowsDualSetup,/else if\([A-Za-z_$][\w$]*===['"]keys['"]\)await [A-Za-z_$][\w$]*\([A-Za-z_$][\w$]*,\{existingSetup:(?:true|!0)\}\)/);
 assert.ok(windowsKeyForm.includes('for($slot=1;$slot -le 5;$slot++)'));
-assert.match(packagedSettings,/DUPLICATE_CREDENTIAL/);assert.match(packagedSettings,/findNextFreeSlot/);
-assert.match(packagedProviderPool,/credentialSlotCount/);assert.match(packagedProviderPool,/this\.#[\w]+\s*=\s*\(indexes\[0\]/);
-assert.match(packagedOpenCodePool,/pool\.cursor=\(indexes\[0\]\+1\)/);
+assert.match(packagedOpenCodePool,/\.cursor=\([^)]*\[0\]\+1\)%[^;]*\.entries\.length/);
 const linuxKeyForm=await readFile(join(family,'Linux','payload/app/distribution/settings-gui.py'),'utf8');
 assert.ok(linuxKeyForm.includes("parser.add_argument('--existing', action='store_true')"));
 assert.ok(linuxKeyForm.includes("command.extend(('--existing', '--restart'))"));
@@ -87,6 +87,13 @@ const previousActive=JSON.parse(await readFile(join(install,'installed.json'),'u
 const active=(await readFile(join(install,'active-version.txt'),'utf8')).trim();
 const app=join(install,active,'app'),node=join(install,active,'node',process.platform==='win32'?'node.exe':'node');
 const moduleAt=path=>import(pathToFileURL(join(app,path)).href);
+const {CredentialPoolProvider}=await moduleAt('packages/providers/dist/index.js');
+let releaseConcurrent;const concurrentGate=new Promise(resolvePromise=>{releaseConcurrent=resolvePromise;}),concurrentCalls=[];
+const createFakeSlotAdapter=(slot,generate)=>({id:'fixture',supportsStreaming:false,generate:async()=>generate?generate():{text:slot},stream:async function*(){},listModels:async()=>[],healthCheck:async()=>({status:'healthy',checkedAt:new Date().toISOString(),latencyMs:0,message:null}),cancel:async()=>{},classifyError:error=>error?.category?error:{category:'unknown',message:'fixture',retryable:false,retryAfterMs:null,providerStatus:null}});
+const pool=new CredentialPoolProvider([createFakeSlotAdapter('slot 1',async()=>{concurrentCalls.push(1);if(concurrentCalls.length===2)releaseConcurrent();await concurrentGate;return{text:'ok'};}),createFakeSlotAdapter('slot 2',async()=>{concurrentCalls.push(2);if(concurrentCalls.length===2)releaseConcurrent();await concurrentGate;return{text:'ok'};})]);
+await Promise.all([pool.generate({}),pool.generate({})]);assert.deepEqual(concurrentCalls,[1,2]);
+const authCalls=[],authPool=new CredentialPoolProvider([createFakeSlotAdapter('bad',async()=>{authCalls.push(1);throw{category:'authentication'};}),createFakeSlotAdapter('good',async()=>{authCalls.push(2);return{text:'ok'};})]);
+assert.equal((await authPool.generate({})).text,'ok');assert.deepEqual(authCalls,[1,2]);
 const {DEFAULT_CONFIG}=await moduleAt('packages/config/dist/index.js');
 const packagedVault=await moduleAt('packages/vault/dist/index.js');
 assert.equal(typeof packagedVault.SecretVault.prototype.getCredentialSlots,'function');

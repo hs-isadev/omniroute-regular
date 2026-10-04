@@ -35,6 +35,13 @@
   TypeScript tests passed.
 - `npm run test:regular`: all 173 launcher/packaging tests passed, with 2
   Linux-only tests skipped on this Windows host.
+- `node scripts/test-family-package.mjs release/OmniRoute-Private-0.6.6-private.15.zip`:
+  passed against the extracted package: both manifests verified, 2,779 payload
+  files scanned, Windows install/update rollback and host registration passed,
+  and the installed provider pool rotated concurrent calls across two keys and
+  fell through a fixture 401 to the second key. No live inference was run.
+  Linux payload verification passed, but a native Linux install was not run on
+  this Windows machine.
 
 Provider requests are tested with stubbed transports and fixture credentials;
 no real provider keys or accounts were used. Live provider connectivity is not
