@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import pathlib
 import subprocess
 import unittest
@@ -51,5 +52,27 @@ class KeyFormTests(unittest.TestCase):
         self.assertEqual(result['slotResults'][1]['status'], 'DUPLICATE')
         self.assertEqual(result['slotResults'][2]['reasonCode'], 'INVALID_AUTHENTICATION')
         self.assertEqual(result['stored'], [{'providerId': 'groq', 'slots': [1, 2, 3]}])
+
+    def test_saved_statuses_are_filtered_and_explicit_replacements_are_forwarded(self):
+        response = '{"ready":true,"accepted":["groq"],"failed":[],"slotResults":[],"stored":[],"statuses":[{"providerId":"groq","slot":2,"status":"healthy","checkedAt":"2026-10-04T00:00:00.000Z"},{"providerId":"bogus","slot":1,"status":"healthy"},{"providerId":"groq","slot":8,"status":"expired"}]}'
+        with patch.object(gui.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, response)) as run:
+            result = gui.submit('/node', '/app', '/runtime', {'groq': [{}, {'GROQ_API_KEY': 'fixture-new'}]}, True, True, {'groq': [2]})
+            payload = json.loads(run.call_args.kwargs['input'])
+        self.assertEqual(payload['replaceSlots'], {'groq': [2]})
+        self.assertEqual(result['statuses'], [{'providerId': 'groq', 'slot': 2, 'status': 'healthy', 'checkedAt': '2026-10-04T00:00:00.000Z'}])
+
+    def test_status_command_is_local_and_accepts_only_safe_metadata(self):
+        response = '{"ready":true,"statuses":[{"providerId":"groq","slot":1,"status":"expired","checkedAt":"2026-10-04T00:00:00.000Z","lastAttemptReasonCode":"INVALID_AUTHENTICATION"},{"providerId":"unknown","slot":2,"status":"healthy"}]}'
+        with patch.object(gui.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, response)) as run:
+            result = gui.get_status('/node', '/app', '/runtime', True)
+        self.assertEqual(result['statuses'], [{'providerId': 'groq', 'slot': 1, 'status': 'expired', 'checkedAt': '2026-10-04T00:00:00.000Z', 'lastAttemptReasonCode': 'INVALID_AUTHENTICATION'}])
+        self.assertIn('--check-status', run.call_args.args[0])
+        self.assertNotIn('fixture', str(result))
+
+    def test_existing_setup_window_has_per_slot_status_and_explicit_replace_controls(self):
+        source = path.read_text(encoding='utf-8')
+        self.assertIn('Check saved key statuses', source)
+        self.assertIn('replaceSlots', source)
+        self.assertIn('status_labels', source)
 
 if __name__ == '__main__': unittest.main()

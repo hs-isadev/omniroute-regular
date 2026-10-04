@@ -9,6 +9,18 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 const run=promisify(execFile);
 const launcher=fileURLToPath(new URL('../../Open-OmniRoute-Keys.ps1',import.meta.url));
+test('existing setup key editor exposes saved slot health and explicit replacement controls',async()=>{
+  const [windows,linux]=await Promise.all([
+    readFile(fileURLToPath(new URL('./Settings.ps1',import.meta.url)),'utf8'),
+    readFile(fileURLToPath(new URL('./settings-gui.py',import.meta.url)),'utf8'),
+  ]);
+  for(const source of [windows,linux]) {
+    assert.match(source,/Check saved key statuses/);
+    assert.match(source,/check-status/);
+    assert.match(source,/replaceSlots/);
+    assert.match(source,/healthy/);
+  }
+});
 test('simple GUI contains masked shortlisted provider fields without opening a window',{skip:process.platform!=='win32'},async()=>{
   const ui=fileURLToPath(new URL('./Settings.ps1',import.meta.url));
   const {stdout}=await run('powershell.exe',['-NoProfile','-STA','-NonInteractive','-ExecutionPolicy','Bypass','-File',ui,'-Simple','-SmokeTest'],{timeout:60000,windowsHide:true});
