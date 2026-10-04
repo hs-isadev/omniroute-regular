@@ -1,28 +1,16 @@
 import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { createServer } from "node:net";
+import { createServer as createHttpServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { EXTRA_FREE_PROVIDERS, getRuntimePaths, saveConfig } from "@omniroute/config";
+import { ensureLocalDaemonToken } from "@omniroute/vault";
 import { freeConfigFixture } from "./helpers.js";
 
 const cli = fileURLToPath(new URL("../apps/cli/dist/bin.js", import.meta.url));
-
-async function findAvailableLoopbackPort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address();
-  if (!address || typeof address === "string") throw new Error("Unable to allocate a loopback port for the CLI integration test");
-  const { port } = address;
-  await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
-  return port;
-}
 
 async function runCli(arguments_: string[], home: string, stdinText?: string, environment: NodeJS.ProcessEnv = {}): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
@@ -109,15 +97,30 @@ test("OpenCode harness rejects orchestrator and subscription modes before creden
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test("OpenCode regular harness starts an authenticated local OmniRoute gateway without an upstream key", { timeout: 45_000 }, async () => {
+test("OpenCode regular harness reuses an authenticated local gateway without an upstream key", { timeout: 30_000 }, async () => {
   const root = await mkdtemp(join(tmpdir(), "omniroute-cli-opencode-local-"));
   const launcherDirectory = join(root, "trusted-opencode-bin");
+  let healthServer: Server | null = null;
+  let localToken = "";
   try {
     await mkdir(launcherDirectory, { recursive: true });
+    healthServer = createHttpServer((request, response) => {
+      const authenticated = request.url === "/v1/health" && request.headers.authorization === `Bearer ${localToken}`;
+      response.writeHead(authenticated ? 200 : 401, { "content-type": "application/json" });
+      response.end(JSON.stringify(authenticated ? { status: "ok" } : { error: { code: "AUTH_REQUIRED", message: "Missing local bearer" } }));
+    });
+    await new Promise<void>((resolve, reject) => {
+      healthServer!.once("error", reject);
+      healthServer!.listen(0, "127.0.0.1", resolve);
+    });
+    const address = healthServer.address();
+    if (!address || typeof address === "string") throw new Error("Unable to allocate a loopback port for the CLI integration test");
     const config = freeConfigFixture();
-    config.daemon.port = await findAvailableLoopbackPort();
+    config.daemon.port = address.port;
     config.daemon.allowedOrigins = [`http://127.0.0.1:${config.daemon.port}`];
-    await saveConfig(config, getRuntimePaths(root));
+    const paths = getRuntimePaths(root);
+    await saveConfig(config, paths);
+    localToken = await ensureLocalDaemonToken(paths);
     const executable = join(launcherDirectory, process.platform === "win32" ? "opencode.cmd" : "opencode");
     await writeFile(executable, process.platform === "win32" ? "@exit /b 0\r\n" : "#!/bin/sh\nexit 0\n", "utf8");
     if (process.platform !== "win32") await chmod(executable, 0o755);
@@ -126,7 +129,7 @@ test("OpenCode regular harness starts an authenticated local OmniRoute gateway w
     assert.equal(result.code, 0, result.stderr);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /OPENROUTER_REQUIRED|OPENROUTER_API_KEY/i);
   } finally {
-    await new Promise(resolve => setTimeout(resolve, 250));
+    if (healthServer?.listening) await new Promise<void>((resolve, reject) => healthServer!.close(error => error ? reject(error) : resolve()));
     await rm(root, { recursive: true, force: true });
   }
 });

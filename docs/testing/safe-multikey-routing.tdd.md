@@ -35,7 +35,7 @@
   TypeScript tests passed.
 - `npm run test:regular`: all 173 launcher/packaging tests passed, with 2
   Linux-only tests skipped on this Windows host.
-- `node scripts/test-family-package.mjs release/OmniRoute-Private-0.6.6-private.15.zip`:
+- `node scripts/test-family-package.mjs release/OmniRoute-Private-0.6.6-private.16.zip`:
   passed against the extracted package: both manifests verified, 2,779 payload
   files scanned, Windows install/update rollback and host registration passed,
   and the installed provider pool rotated concurrent calls across two keys and
