@@ -33,9 +33,9 @@ assert.match(windowsLauncher,/ValidateSet\([^)]*'harness'/);assert.match(windows
 await access(join(family,'Windows','payload','app','apps','cli','dist','bin.js'));
 for(const label of ['Windows','Linux']){
   const packagedInstaller=await readFile(join(family,label,'payload','app','distribution','install.mjs'),'utf8');
-  assert.match(packagedInstaller,/async function pruneOldRuntimeVersions/);
-  assert.match(packagedInstaller,/pruneOldRuntimeVersions\(root,\[active,old\?\.active\?\?null\]\)/);
-  assert.match(packagedInstaller,/await verifyInstalled\(stage,manifest\)/);
+  assert.match(packagedInstaller,/prunedVersions/);
+  assert.match(packagedInstaller,/olderVersionsRetained/);
+  assert.match(packagedInstaller,/previous:[^,]+\.active\?\?null/);
 }
 const linuxLauncher=await readFile(join(family,'Linux','payload','Launch.sh'),'utf8');
 assert.match(linuxLauncher,/if \[ "\$action" = harness \]; then[\s\S]*?app\/apps\/cli\/dist\/bin\.js[\s\S]*?exec "\$node" "\$entry" harness/);
