@@ -152,34 +152,25 @@ test('host registration repair follows active-version through update and rollbac
     assert.equal(openCode.environment.OMNIROUTE_ROUTING_MODE,'regular');
   }
 });
-test('host registration repair updates enabled browser consumers to the active runtime without changing policy fields',async()=>{
-  const home=await mkdtemp(join(tmpdir(),'dual-consumer-cycle-')),root=join(home,'Install With Spaces'),active='versions/0.6.5-private.1-new',payload=join(root,active);
-  const node=join(payload,'node',process.platform==='win32'?'node.exe':'node'),mcp=join(payload,'app/distribution/mcp-regular.mjs');
-  const claude=join(payload,'app/packages/claude-consumer-adapter/src/adapter.mjs'),zai=join(payload,'app/packages/zai-consumer-adapter/src/adapter.mjs'),browser=join(payload,'app/packages/browser-consumer-adapter/src/adapter.mjs');
-  for(const file of [node,mcp,claude,zai,browser]){await mkdir(join(file,'..'),{recursive:true});await writeFile(file,'fixture');}
-  await writeFile(join(root,'active-version.txt'),active+'\n');
-  const paths=getRuntimePaths(join(root,'data')),config=regularConfig();for(const provider of config.providers)provider.enabled=false;
-  const enabled=config.providers.find(provider=>provider.id==='qwen-consumer');enabled.enabled=true;enabled.freeTierConfirmed=true;enabled.mcpCommand=join(root,'versions/0.6.4-private.1-old/node/node.exe');enabled.mcpArgs=[join(root,'versions/0.6.4-private.1-old/app/packages/browser-consumer-adapter/src/adapter.mjs'),'--provider','qwen','--endpoint',enabled.baseUrl];enabled.mcpWorkingDirectory=join(root,'versions/0.6.4-private.1-old/app/packages/browser-consumer-adapter/src');
-  const preserved={baseUrl:enabled.baseUrl,maxTaskClass:enabled.maxTaskClass,models:structuredClone(enabled.models)};await saveConfig(config,paths);
-  await mod.repairHostRegistrations({root,home});
-  const repaired=(await loadConfig(paths)).providers.find(provider=>provider.id==='qwen-consumer');
-  assert.equal(repaired.mcpCommand,node);assert.deepEqual(repaired.mcpArgs,[browser,'--provider','qwen','--endpoint',preserved.baseUrl]);assert.equal(repaired.mcpWorkingDirectory,join(browser,'..'));
-  assert.equal(repaired.enabled,true);assert.equal(repaired.baseUrl,preserved.baseUrl);assert.equal(repaired.maxTaskClass,preserved.maxTaskClass);assert.deepEqual(repaired.models,preserved.models);
-});
-test('host registration repair refreshes an existing browser-consumer startup command to the active runtime',async()=>{
-  const home=await mkdtemp(join(tmpdir(),'dual-autostart-cycle-')),root=join(home,'Install With Spaces'),active='versions/0.6.5-private.1-new',payload=join(root,active),appData=join(home,'AppData/Roaming');
-  const node=join(payload,'node',process.platform==='win32'?'node.exe':'node'),mcp=join(payload,'app/distribution/mcp-regular.mjs'),shared=join(payload,'app/packages/browser-consumer-adapter/src/shared-session.mjs');
-  for(const file of [node,mcp,shared]){await mkdir(join(file,'..'),{recursive:true});await writeFile(file,'fixture');}
-  await writeFile(join(root,'active-version.txt'),active+'\n');
-  await writeFile(join(root,'Launch.ps1'),'# stable package launcher\n');
-  const startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup');await mkdir(startup,{recursive:true});
-  const vbs=join(startup,'OmniRoute Browser Consumers.vbs'),old=join(root,'versions/0.6.4-private.1-old');
-  await writeFile(vbs,`CreateObject("WScript.Shell").Run """${join(old,'node/node.exe')}"" ""${join(old,'app/packages/browser-consumer-adapter/runtime/shared-session.mjs')}"" --background --profile ""${join(root,'data/browser-consumer-profile')}"" --port 47842", 0, False\r\n`);
-  await mod.repairHostRegistrations({root,home,env:{APPDATA:appData},platform:'win32'});
-  const repaired=await readFile(vbs,'utf8');assert.match(repaired,/Launch\.ps1/);assert.match(repaired,/browser-consumers/);assert.doesNotMatch(repaired,/versions[\\/]|node\.exe|shared-session\.mjs/);
-  await mod.repairHostRegistrations({root,home,env:{APPDATA:appData},platform:'win32'});assert.equal(await readFile(vbs,'utf8'),repaired);
-  const custom='User-managed startup entry\r\n';await writeFile(vbs,custom);
-  await assert.rejects(mod.repairHostRegistrations({root,home,env:{APPDATA:appData},platform:'win32'}),/autostart conflict/i);assert.equal(await readFile(vbs,'utf8'),custom);
+test('upgrade repair disables browser consumers, removes only OmniRoute startup entries, and preserves profiles',async()=>{
+  assert.equal(typeof mod.disableBrowserConsumers,'function','browser-consumer disable migration missing');
+  const home=await mkdtemp(join(tmpdir(),'dual-disable-consumers-')),root=join(home,'OmniRouteRegular');
+  const paths=getRuntimePaths(join(root,'data')),config=regularConfig();
+  const qwen=config.providers.find(provider=>provider.id==='qwen-consumer');qwen.enabled=true;
+  config.routing.directProviderOrder=['qwen-consumer','openrouter'];await saveConfig(config,paths);
+  const appData=join(home,'AppData/Roaming'),startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup');await mkdir(startup,{recursive:true});
+  const managed=join(startup,'OmniRoute Browser Consumers.vbs');
+  await writeFile(managed,'CreateObject("WScript.Shell").Run "powershell.exe -File C:\\OmniRouteRegular\\Launch.ps1 -Action browser-consumers", 0, False\r\n');
+  const custom=join(startup,'My own startup command.vbs');await writeFile(custom,'user-owned');
+  const profile=join(root,'data/browser-consumer-profile/Default/Cookies');await mkdir(dirname(profile),{recursive:true});await writeFile(profile,'preserve sign-in data');
+  const result=await mod.disableBrowserConsumers({root,home,env:{APPDATA:appData},platform:'win32'});
+  const updated=await loadConfig(paths);
+  assert.equal(updated.providers.find(provider=>provider.id==='qwen-consumer').enabled,false);
+  assert.equal(updated.routing.directProviderOrder.includes('qwen-consumer'),false);
+  await assert.rejects(readFile(managed),{code:'ENOENT'});
+  assert.equal(await readFile(custom,'utf8'),'user-owned');
+  assert.equal(await readFile(profile,'utf8'),'preserve sign-in data');
+  assert.ok(result.removedAutostart.length>=1);
 });
 test('Windows repair migrates a version-pinned browser-consumer CMD when the stable VBS is missing',async()=>{
   const home=await mkdtemp(join(tmpdir(),'dual-autostart-cmd-')),root=join(home,'OmniRouteRegular'),active='versions/0.6.6-private.10-new',payload=join(root,active);
@@ -256,11 +247,11 @@ test('Windows one-click setup installs only the current verified Devin CLI and s
   assert.match(launch,/ValidateSet\([^)]*'devin'/);
   assert.doesNotMatch(launch,/fusion|astra|sol|terra|--model/i);
 });
-test('browser-consumer login launchers resolve the active runtime through the stable installed wrapper',async()=>{
+test('consumer browser launchers are not exposed in installed wrappers',async()=>{
   const ps=await readFile(new URL('./dual/Launch.ps1',import.meta.url),'utf8');
   const sh=await readFile(new URL('./dual/Launch.sh',import.meta.url),'utf8');
-  assert.match(ps,/ValidateSet\([^)]*'browser-consumers'/);assert.match(ps,/active-version\.txt/);assert.match(ps,/shared-session\.mjs/);assert.match(ps,/Test-Path/);
-  assert.match(sh,/browser-consumers/);assert.match(sh,/active-version\.txt/);assert.match(sh,/shared-session\.mjs/);
+  assert.doesNotMatch(ps,/browser-consumers|shared-session\.mjs/);
+  assert.doesNotMatch(sh,/browser-consumers|shared-session\.mjs/);
 });
 test('Windows and Linux launchers forward harness commands to the bundled OmniRoute CLI',async()=>{
   const ps=await readFile(new URL('./dual/Launch.ps1',import.meta.url),'utf8');
@@ -371,22 +362,12 @@ test('browser bootstrap commands disconnect their CDP clients and let one-click 
   }
 });
 
-test('combined setup keeps the original pair helper and starts all browser consumers after BYOK key setup',async()=>{
-  assert.equal(typeof mod.launchConsumerSetups,'function','concurrent browser setup helper missing');
-  const started=[];
-  let release;
-  const gate=new Promise(resolve=>{release=resolve;});
-  const pending=mod.launchConsumerSetups('/install',{
-    launchClaude:async root=>{started.push(['claude',root]);await gate;},
-    launchZai:async root=>{started.push(['zai',root]);await gate;},
-  });
-  await new Promise(resolve=>setImmediate(resolve));
-  assert.deepEqual(started,[['claude','/install'],['zai','/install']]);
-  release();await pending;
+test('one-click setup never opens or autostarts consumer browsers',async()=>{
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');
   const setup=source.slice(source.indexOf('export async function setupBoth'));
-  for(const call of ['configureClaudeConsumer','configureZaiConsumer','configurePrivateBrowserConsumers','installSharedBrowserConsumerAutostart','launchSharedBrowserConsumerSetup']) assert.match(setup,new RegExp(`await ${call}\\(`),call);
-  assert.ok(setup.indexOf('await openKeyForm(root)')<setup.indexOf('await launchSharedBrowserConsumerSetup(root)'));
+  for(const call of ['configureClaudeConsumer','configureZaiConsumer','configurePrivateBrowserConsumers','installSharedBrowserConsumerAutostart','launchSharedBrowserConsumerSetup']) assert.doesNotMatch(setup,new RegExp(`await ${call}\\(`),call);
+  assert.match(setup,/disableBrowserConsumers/);
+  assert.doesNotMatch(setup,/Opening one shared browser|six consumer sign-in tabs/);
 });
 
 test('release package includes both browser adapters and marks six integrated routes',async()=>{

@@ -54,7 +54,8 @@ test('shareable package version is bumped consistently without overwriting the p
   assert.match(sealer,/Archive already exists; never silently overwrite/);
   assert.match(notes,/quota|rate.limit/i);
   assert.match(notes,/harness[\s\S]*?forward it to the\s+bundled OmniRoute CLI/i);
-  assert.match(notes,/active and one rollback/i);
+  assert.match(notes,/only the active runtime/i);
+  assert.match(notes,/rollback.*not available|no rollback/i);
   assert.match(installer,/async function pruneOldRuntimeVersions/);
   assert.match(packager,/provider-key-status\.tdd\.md/);
   assert.match(packager,/harness-launch-and-version-prune\.tdd\.md/);
