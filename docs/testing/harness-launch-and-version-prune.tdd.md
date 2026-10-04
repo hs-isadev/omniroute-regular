@@ -19,8 +19,17 @@ browser action.
 
 ## Green phase
 
-Final focused, full-suite, and package-smoke results will be recorded here after
-the 0.6.8 package has been rebuilt and tested.
+- Focused install/migration checks: installer **6/6**, package-shortcut **3/3**,
+  dual-setup **32/32** passed.
+- `npm run test:regular`: **179 passed, 2 platform-specific skips**.
+- `npm test`: **197/197 passed**.
+- Windows and Linux manifests verified with **1,383** and **1,380** payload files.
+- Extracted package smoke scanned **2,781** files; installed the Windows package
+  in a temporary directory, confirmed only the active runtime remains, confirmed
+  the legacy browser startup entry was removed and its profile preserved, then
+  completed **2 Antigravity and 2 OpenCode MCP handshakes**. Provider invocation
+  used a fake provider; there was no live inference. Native Linux installation
+  was not tested.
 
 The cleanup only removes version directories whose installer manifest, payload
 hashes, exact file inventory, and directory shape all verify. Directories with

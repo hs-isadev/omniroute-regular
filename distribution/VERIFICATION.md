@@ -92,5 +92,11 @@ a successful update it keeps only the active version and removes older verified,
 package-owned runtimes; previous-version rollback is not available. Keys/settings remain in the
 separate data folder. Extra or modified runtime files are left untouched. The TDD
 evidence in `docs/testing/harness-launch-and-version-prune.tdd.md` records the
-new cleanup and browser-disable checks. Final test/package numbers are recorded
-after this build completes.
+new cleanup and browser-disable checks. For 0.6.8, the focused installer,
+shortcut, and setup suites passed (6/6, 3/3, and 32/32); `npm run test:regular`
+passed 179 tests with two platform-specific skips, and `npm test` passed 197/197.
+Both payload manifests verified (1,383 Windows files and 1,380 Linux files).
+The extracted ZIP smoke scanned 2,781 files, installed the Windows package in a
+temporary location, verified pruning and browser-startup migration, and completed
+two registered MCP handshakes each for Antigravity and OpenCode using a fake
+provider. No live inference ran; native Linux installation was not tested.
