@@ -79,19 +79,29 @@ test('casual requests select light models and coding requests select the 120B qu
   const casual=await routedFixture();await casual.backend.complete(request);assert.notEqual(casual.calls[0].model,'openai/gpt-oss-120b');
   const code=await routedFixture();await code.backend.complete({...request,messages:[{role:'user',content:'Write a Python function to add two numbers'}]});assert.equal(code.calls[0].model,'openai/gpt-oss-120b');
 });
-test('a limited model falls back inside the same provider before another provider',async()=>{
+test('a rate-limited host provider falls back to a different provider, not another model in the same quota pool',async()=>{
   const f=await routedFixture(1);await f.backend.complete({...request,messages:[{role:'user',content:'Write a Python function to add two numbers'}]});
-  assert.equal(f.calls.length,2);assert.equal(f.calls[0].provider,'groq');assert.equal(f.calls[1].provider,'groq');assert.notEqual(f.calls[0].model,f.calls[1].model);
+  assert.equal(f.calls.length,2);assert.equal(f.calls[0].provider,'groq');assert.notEqual(f.calls[1].provider,'groq');
 });
-test('OpenCode compatibility retries the same free model with the next credential slot',async()=>{
+test('OpenCode may retry an invalid credential with another saved slot',async()=>{
   const root=await mkdtemp(join(tmpdir(),'dual-credential-pool-')),protector=new InMemoryKeyProtector();
   const config=regularConfig(),provider=config.providers.find(item=>item.id==='groq');provider.enabled=true;
   const vault=await SecretVault.create(protector);vault.setCredentialSlot('groq',1,{GROQ_API_KEY:'fixture-slot-one'});vault.setCredentialSlot('groq',2,{GROQ_API_KEY:'fixture-slot-two'});await vault.save(getRuntimePaths(root).vault);vault.dispose();
   const models=provider.models.filter(model=>model.enabled&&model.allowed).map(model=>({providerId:'groq',modelId:model.modelId,enabled:true,allowed:true,health:{status:'healthy'},contextWindow:131072,maxOutputTokens:8192,reasoningEfforts:['none'],intelligenceTier:model.intelligenceTier,latencyTier:model.latencyTier,pricing:{inputPerMillionUsd:0,outputPerMillionUsd:0},capabilities:{text:true,coding:true,toolCalling:true}}));
   const calls=[];
-  const backend=await mod.createChatBackend(root,{protector,configOverride:config,registryOverride:{models},loggerOverride:{write:async()=>{}},transportFactory:(_settings,keys)=>{const slot=keys.GROQ_API_KEY.endsWith('one')?1:2;return {request:async(_id,_path,options)=>{calls.push({slot,model:JSON.parse(options.body).model});if(slot===1)throw new ProviderHttpError('groq',429,1000,'fixture limit');return Response.json({choices:[{message:{role:'assistant',content:'OK'},finish_reason:'stop'}]});}};}});
+  const backend=await mod.createChatBackend(root,{protector,configOverride:config,registryOverride:{models},loggerOverride:{write:async()=>{}},transportFactory:(_settings,keys)=>{const slot=keys.GROQ_API_KEY.endsWith('one')?1:2;return {request:async(_id,_path,options)=>{calls.push({slot,model:JSON.parse(options.body).model});if(slot===1)throw new ProviderHttpError('groq',401,null,'fixture invalid key');return Response.json({choices:[{message:{role:'assistant',content:'OK'},finish_reason:'stop'}]});}};}});
   await backend.complete({...request,messages:[{role:'user',content:'Write a Python function to add two numbers'}]});
   assert.deepEqual(calls.map(item=>item.slot),[1,2]);assert.equal(calls[0].model,calls[1].model);
+});
+test('OpenCode does not switch credential slots to work around a 429 quota response',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'dual-credential-rate-limit-')),protector=new InMemoryKeyProtector();
+  const config=regularConfig(),provider=config.providers.find(item=>item.id==='groq');provider.enabled=true;
+  const vault=await SecretVault.create(protector);vault.setCredentialSlot('groq',1,{GROQ_API_KEY:'fixture-slot-one'});vault.setCredentialSlot('groq',2,{GROQ_API_KEY:'fixture-slot-two'});await vault.save(getRuntimePaths(root).vault);vault.dispose();
+  const models=provider.models.filter(model=>model.enabled&&model.allowed).map(model=>({providerId:'groq',modelId:model.modelId,enabled:true,allowed:true,health:{status:'healthy'},contextWindow:131072,maxOutputTokens:8192,reasoningEfforts:['none'],intelligenceTier:model.intelligenceTier,latencyTier:model.latencyTier,pricing:{inputPerMillionUsd:0,outputPerMillionUsd:0},capabilities:{text:true,coding:true,toolCalling:true}}));
+  const calls=[];
+  const backend=await mod.createChatBackend(root,{protector,configOverride:config,registryOverride:{models},loggerOverride:{write:async()=>{}},transportFactory:(_settings,keys)=>{const slot=keys.GROQ_API_KEY.endsWith('one')?1:2;return {request:async(_id,_path,options)=>{calls.push({slot,model:JSON.parse(options.body).model});throw new ProviderHttpError('groq',429,60000,'fixture limit');}};}});
+  await assert.rejects(backend.complete({...request,messages:[{role:'user',content:'Write a Python function to add two numbers'}]}));
+  assert.deepEqual(calls.map(item=>item.slot),[1]);
 });
 test('concurrent OpenCode requests reserve different credential slots before sending',async()=>{
   const root=await mkdtemp(join(tmpdir(),'dual-credential-round-robin-')),protector=new InMemoryKeyProtector();

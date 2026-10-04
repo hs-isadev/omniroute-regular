@@ -15,7 +15,7 @@ test('regular policy is free-only, isolated and rejects external configuration',
   assert.equal(config.routing.defaultMode,'regular'); assert.equal(config.routing.freeOnly,true);
   assert.equal(config.daemon.port,47839); assert.equal(config.budgets.monthlyUsd,0);
   assert.equal(config.providers.find(x=>x.id==='openrouter').baseUrl,'https://openrouter.ai/api/');
-  assert.deepEqual(config.providers.find(x=>x.id==='openrouter').freeModelOrder,['openrouter/free']);
+  assert.deepEqual(config.providers.find(x=>x.id==='openrouter').freeModelOrder,['openai/gpt-oss-120b:free','openai/gpt-oss-20b:free','openrouter/free']);
   assert.deepEqual(config.routing.directProviderOrder.slice(0,6),['claude-consumer','zai-consumer','qwen-consumer','kimi-consumer','deepseek-consumer','perplexity-consumer']);
   assert.ok(config.providers.every(x=>!x.enabled));
 });
@@ -35,7 +35,7 @@ test('valid keys are encrypted; optional failures never activate',async()=>{
   assert.equal(vault.get('openrouter').OPENROUTER_API_KEY,fixture); assert.equal(vault.get('groq'),null); vault.dispose();
   const config=JSON.parse(await readFile(paths.config,'utf8'));
   assert.deepEqual(config.providers.filter(x=>x.enabled).map(x=>x.id),['openrouter']);
-  assert.deepEqual((await loadConfig(paths)).providers.find(x=>x.id==='openrouter').models.filter(x=>x.enabled&&x.allowed).map(x=>x.modelId),['openrouter/free']);
+  assert.deepEqual((await loadConfig(paths)).providers.find(x=>x.id==='openrouter').models.filter(x=>x.enabled&&x.allowed).map(x=>x.modelId),['openai/gpt-oss-120b:free','openai/gpt-oss-20b:free','openrouter/free']);
 });
 test('setup accepts any supported free provider credentials and counts Cloudflare once',async()=>{
   const {paths,protector}=await context();

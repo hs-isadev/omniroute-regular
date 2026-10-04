@@ -43,7 +43,7 @@ test('Antigravity retains the tier floor while balancing eligible providers',asy
   assert.equal(result.attribution.routingDiagnostics?.[0]?.reason,'BALANCED_LEAST_DISPATCHED');
 });
 
-test("model ladder tries the selected model first and changes only after failures", async () => {
+test("a 429 cools the whole provider instead of trying its other models", async () => {
   const f = fixture(), calls: string[] = [];
   const ladder = new FreeModelFailover(f.config, f.providers);
   const result = await ladder.run(primary, f.snapshot, ["text"], 20, AbortSignal.timeout(5000), f.audit, "worker", async (selection) => {
@@ -51,18 +51,28 @@ test("model ladder tries the selected model first and changes only after failure
     if (selection.providerId === "groq") throw limited();
     return "ok";
   });
-  assert.deepEqual(calls, ["groq/small", "groq/big", "gemini/big"]);
+  assert.deepEqual(calls, ["groq/small", "gemini/big"]);
   assert.equal(result.selection.providerId, "gemini");
-  assert.equal(f.audit.fallbackAttempts.length, 3);
+  assert.equal(f.audit.fallbackAttempts.length, 2);
 });
 
-test("429 cooldown is model-specific, persists between routes and expires using Retry-After", async () => {
+test("429 cooldown is provider-wide, persists between routes and expires using Retry-After", async () => {
   const f = fixture(); let now = 10000;
   const ladder = new FreeModelFailover(f.config, f.providers, () => now);
   await ladder.run({...primary, modelId: "big"}, f.snapshot, ["text"], 20, AbortSignal.timeout(5000), f.audit, "worker", async (selection) => { if (selection.modelId === "big") throw limited("groq", 2000); return "small"; });
-  assert.equal(ladder.candidates(primary, f.snapshot, ["text"], 20)[0]?.modelId, "small");
+  assert.ok(ladder.candidates(primary, f.snapshot, ["text"], 20).every(selection => selection.providerId !== "groq"));
   now += 2001;
-  assert.equal(ladder.candidates(primary, f.snapshot, ["text"], 20)[0]?.modelId, "big");
+  assert.ok(ladder.candidates(primary, f.snapshot, ["text"], 20).some(selection => selection.providerId === "groq" && selection.modelId === "big"));
+});
+
+test("best-model host selection prefers the strongest eligible model over provider balancing", () => {
+  const f = fixture(), ladder = new FreeModelFailover(f.config, f.providers);
+  for (const model of f.models) if (model.providerId !== "groq" && model.modelId !== "small") model.intelligenceTier = 4;
+  f.config.routing.providerPriorities = { groq: 0, gemini: 0, openrouter: 0 };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const result = ladder.select(primary, f.snapshot, ["text"], 20, "quality", { bestModelFirst: true });
+    assert.deepEqual([result.selection?.providerId, result.selection?.modelId], ["groq", "big"]);
+  }
 });
 
 test("HTTP 413 token quota tries the smaller same-provider model next", async () => {
