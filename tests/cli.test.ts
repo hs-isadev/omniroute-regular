@@ -1,14 +1,28 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { EXTRA_FREE_PROVIDERS, getRuntimePaths, saveConfig } from "@omniroute/config";
 import { freeConfigFixture } from "./helpers.js";
 
 const cli = fileURLToPath(new URL("../apps/cli/dist/bin.js", import.meta.url));
+
+async function findAvailableLoopbackPort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Unable to allocate a loopback port for the CLI integration test");
+  const { port } = address;
+  await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  return port;
+}
 
 async function runCli(arguments_: string[], home: string, stdinText?: string, environment: NodeJS.ProcessEnv = {}): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
@@ -101,11 +115,14 @@ test("OpenCode regular harness starts an authenticated local OmniRoute gateway w
   try {
     await mkdir(launcherDirectory, { recursive: true });
     const config = freeConfigFixture();
-    config.daemon.port = 49_881;
-    config.daemon.allowedOrigins = ["http://127.0.0.1:49881"];
+    config.daemon.port = await findAvailableLoopbackPort();
+    config.daemon.allowedOrigins = [`http://127.0.0.1:${config.daemon.port}`];
     await saveConfig(config, getRuntimePaths(root));
-    await writeFile(join(launcherDirectory, "opencode.cmd"), "@exit /b 0\r\n", "utf8");
-    const result = await runCli(["harness", "opencode", "--mode", "regular"], root, undefined, { PATH: `${launcherDirectory};${process.env.PATH ?? ""}`, PATHEXT: ".CMD" });
+    const executable = join(launcherDirectory, process.platform === "win32" ? "opencode.cmd" : "opencode");
+    await writeFile(executable, process.platform === "win32" ? "@exit /b 0\r\n" : "#!/bin/sh\nexit 0\n", "utf8");
+    if (process.platform !== "win32") await chmod(executable, 0o755);
+    const launcherEnvironment = { PATH: `${launcherDirectory}${delimiter}${process.env.PATH ?? ""}`, ...(process.platform === "win32" ? { PATHEXT: ".CMD" } : {}) };
+    const result = await runCli(["harness", "opencode", "--mode", "regular"], root, undefined, launcherEnvironment);
     assert.equal(result.code, 0, result.stderr);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /OPENROUTER_REQUIRED|OPENROUTER_API_KEY/i);
   } finally {
