@@ -18,7 +18,6 @@ import {BUNDLED_SKILLS} from './skill-catalog.mjs';
 const CLAUDE_CONSUMER_PORT=47842;
 const CLAUDE_CONSUMER_ENDPOINT=`http://127.0.0.1:${CLAUDE_CONSUMER_PORT}`;
 const ZAI_CONSUMER_PORT=47843;
-const ZAI_CONSUMER_ENDPOINT=`http://127.0.0.1:${ZAI_CONSUMER_PORT}`;
 const SHARED_BROWSER_SESSION=getSharedSessionDefinition();
 const SHARED_BROWSER_ENDPOINT=`http://127.0.0.1:${SHARED_BROWSER_SESSION.port}`;
 const ROUTING_RULE_START='<!-- BEGIN OMNIROUTE REGULAR GLOBAL ROUTING -->';
@@ -187,12 +186,40 @@ export async function repairBrowserConsumerAutostart({root,runtime,home=homedir(
 }
 export async function repairHostRegistrations({root,home=homedir(),env,platform=process.platform}){
   const runtime=await resolveActiveRuntime(root);
-  const browserConsumers=await repairBrowserConsumerRuntime({root,runtime});
-  const browserAutostart=await repairBrowserConsumerAutostart({root,runtime,home,env,platform});
+  const browserConsumers=await disableBrowserConsumers({root,home,env,platform});
   const antigravity=await connectAntigravity({home,root,node:runtime.node,entrypoint:runtime.entrypoint});
   const developers=await connectDeveloperHosts({home,root,node:runtime.node,entrypoint:runtime.entrypoint});
   const skills=await installBundledSkills({home});
-  return {...runtime,browserConsumers,browserAutostart,antigravity,developers,skills};
+  return {...runtime,browserConsumers,antigravity,developers,skills};
+}
+const consumerStartupNames=['OmniRoute Browser Consumers.vbs','OmniRoute Browser Consumers.cmd','OmniRoute Claude Consumer.vbs','OmniRoute Z.AI Consumer.vbs',...['Qwen','Kimi','DeepSeek','Perplexity'].map(name=>`OmniRoute ${name} Consumer Private.vbs`)];
+const consumerAutostartNames=['omniroute-browser-consumers.desktop','omniroute-claude-consumer.desktop','omniroute-zai-consumer.desktop',...['qwen','kimi','deepseek','perplexity'].map(name=>`omniroute-${name}-consumer.desktop`)];
+function isOwnedConsumerAutostart(name,content,platform){
+  if(platform==='win32'){
+    if(name==='OmniRoute Browser Consumers.vbs')return content.includes('-Action browser-consumers')||isLegacyBrowserConsumerAutostart(content);
+    if(name==='OmniRoute Browser Consumers.cmd')return isLegacyVersionPinnedBrowserConsumerCommand(content);
+    return /OmniRoute (?:Claude|Z\.AI|Qwen|Kimi|DeepSeek|Perplexity) Consumer(?: Private)?\.vbs/.test(name)&&content.includes('credential-server.mjs')&&content.includes('--background')&&content.includes('--profile')&&/--port\s+\d+/.test(content);
+  }
+  return consumerAutostartNames.includes(name)&&content.includes('[Desktop Entry]')&&content.includes('Exec=')&&(content.includes('browser-consumer')||content.includes('credential-server.mjs')||content.includes('shared-session.mjs'));
+}
+export async function disableBrowserConsumers({root,home=homedir(),env,platform=process.platform}={}){
+  const paths=getRuntimePaths(join(root,'data'));let changed=false,disabledProviders=[];
+  if(await optional(paths.config)!==null){
+    const config=await loadConfig(paths),consumerIds=new Set(config.providers.filter(provider=>provider.id.endsWith('-consumer')).map(provider=>provider.id));
+    for(const provider of config.providers)if(consumerIds.has(provider.id)&&provider.enabled){provider.enabled=false;disabledProviders.push(provider.id);changed=true;}
+    if(config.routing.directProviderOrder.some(id=>consumerIds.has(id))){config.routing.directProviderOrder=config.routing.directProviderOrder.filter(id=>!consumerIds.has(id));changed=true;}
+    if(changed)await saveConfig(config,paths);
+  }
+  let startupRoot=null,candidateNames=[];
+  if(platform==='win32'&&env?.APPDATA&&isAbsolute(env.APPDATA)){startupRoot=join(env.APPDATA,'Microsoft/Windows/Start Menu/Programs/Startup');candidateNames=consumerStartupNames;}
+  else if(platform==='linux'){startupRoot=join(home,'.config/autostart');candidateNames=consumerAutostartNames;}
+  const removedAutostart=[],preservedConflicts=[];
+  if(startupRoot)for(const name of candidateNames){
+    const path=join(startupRoot,name),content=await optional(path);if(content===null)continue;
+    if(!isOwnedConsumerAutostart(name,content,platform)){preservedConflicts.push(name);continue;}
+    await unlink(path);removedAutostart.push(name);changed=true;
+  }
+  return {changed,disabledProviders,removedAutostart,preservedConflicts,profilesPreserved:true};
 }
 async function requireVerifiedDevinCli(executable){
   if(!isAbsolute(executable)||/[\r\n\0]/.test(executable))throw new Error('Invalid verified Devin executable path.');
@@ -433,13 +460,10 @@ export async function setupBoth(root,{noKeys=false,noLaunch=false,home=homedir()
   if(registrations.developers.rules.preservedConflicts.length)console.log(`Kept ${registrations.developers.rules.preservedConflicts.length} existing global routing rule file(s) unchanged; review Codex/OpenCode OmniRoute instructions if delegation is not automatic.`);
   console.log(devin.status==='configured'?'Devin CLI has a local regular-mode OmniRoute MCP entry.':'Devin CLI is optional and was not changed; use the OmniRoute Devin CLI shortcut after its official installation.');
   if(!noKeys)await openKeyForm(root);
-  await configureClaudeConsumer({root});
-  await configureZaiConsumer({root});
-  await configurePrivateBrowserConsumers({root});
-  await installSharedBrowserConsumerAutostart({root,home});
-  console.log('Opening one shared browser with six consumer sign-in tabs. It will minimize automatically when all are ready.');
-  await launchSharedBrowserConsumerSetup(root);
-  console.log('Claude, Z.AI, Qwen, Kimi, DeepSeek, and Perplexity are configured in one background browser session.');
+  if(registrations.browserConsumers.disabledProviders.length)console.log(`Disabled browser-consumer routes: ${registrations.browserConsumers.disabledProviders.join(', ')}.`);
+  if(registrations.browserConsumers.removedAutostart.length)console.log('Removed old OmniRoute consumer-browser startup entries. Existing browser profiles were preserved.');
+  if(registrations.browserConsumers.preservedConflicts.length)console.log(`Kept unrelated startup entries with OmniRoute consumer names: ${registrations.browserConsumers.preservedConflicts.join(', ')}.`);
+  console.log('Consumer-browser providers are disabled; saved sign-in profiles are left untouched.');
   if(!noLaunch)await launchAntigravity(root).catch(e=>console.log(e.message));
   console.log('Setup complete. Use OpenCode or open Antigravity, Codex, Claude Code, or Devin normally. Restart open hosts after changing keys.');
 }

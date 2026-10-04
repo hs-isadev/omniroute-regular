@@ -1,7 +1,7 @@
 [CmdletBinding()]
-param([ValidateSet('opencode','antigravity','devin','keys','usage','setup','browser-consumers','harness')][string]$Action='opencode',[Parameter(ValueFromRemainingArguments=$true)][string[]]$Extra)
+param([ValidateSet('opencode','antigravity','devin','keys','usage','setup','harness')][string]$Action='opencode',[Parameter(ValueFromRemainingArguments=$true)][string[]]$Extra)
 $ErrorActionPreference='Stop'
-$guiAction=$Action -in @('antigravity','keys','browser-consumers')
+$guiAction=$Action -in @('antigravity','keys')
 try {
   $active=(Get-Content -LiteralPath (Join-Path $PSScriptRoot 'active-version.txt') -Raw).Trim()
   if($active -notmatch '^versions/[a-zA-Z0-9.-]+$'){throw 'Invalid active version'}
@@ -21,11 +21,6 @@ try {
     if(-not(Test-Path -LiteralPath $entry -PathType Leaf)){throw 'The bundled OmniRoute CLI is missing. Rerun Install-Windows.cmd to repair the package.'}
     if(-not $Extra -or $Extra.Count -eq 0){$Extra=@('opencode','--mode','regular')}
     & $node $entry 'harness' @Extra
-  }elseif($Action -eq 'browser-consumers'){
-    $entry=Join-Path $PSScriptRoot ($active+'/app/packages/browser-consumer-adapter/runtime/shared-session.mjs')
-    if(-not(Test-Path -LiteralPath $entry -PathType Leaf)){throw 'The active browser-consumer adapter is missing. Rerun Install-Windows.cmd to repair the package.'}
-    $profile=Join-Path $PSScriptRoot 'data/browser-consumer-profile'
-    & $node $entry --background --profile $profile --port 47842 @Extra *> $null
   }else{
     $entry=Join-Path $PSScriptRoot ($active+'/app/distribution/dual-setup.mjs')
     if(-not(Test-Path -LiteralPath $entry -PathType Leaf)){throw 'The active OmniRoute launcher is missing. Rerun Install-Windows.cmd to repair the package.'}

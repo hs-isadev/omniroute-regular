@@ -23,14 +23,6 @@ if [ "$action" = harness ]; then
   if [ "$#" -eq 0 ]; then set -- opencode --mode regular; fi
   exec "$node" "$entry" harness "$@"
 fi
-if [ "$action" = browser-consumers ]; then
-  entry="$OMNIROUTE_REGULAR_ROOT/$active/app/packages/browser-consumer-adapter/runtime/shared-session.mjs"
-  if [ ! -f "$entry" ]; then
-    printf '%s\n' 'The active browser-consumer adapter is missing. Rerun Install-Linux.sh to repair the package.' >&2
-    exit 1
-  fi
-  exec "$node" "$entry" --background --profile "$OMNIROUTE_REGULAR_ROOT/data/browser-consumer-profile" --port 47842 "$@"
-fi
 entry="$OMNIROUTE_REGULAR_ROOT/$active/app/distribution/dual-setup.mjs"
 if [ ! -f "$entry" ]; then
   printf '%s\n' 'The active OmniRoute launcher is missing. Rerun Install-Linux.sh to repair the package.' >&2

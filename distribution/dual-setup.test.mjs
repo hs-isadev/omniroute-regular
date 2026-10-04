@@ -156,7 +156,7 @@ test('upgrade repair disables browser consumers, removes only OmniRoute startup 
   assert.equal(typeof mod.disableBrowserConsumers,'function','browser-consumer disable migration missing');
   const home=await mkdtemp(join(tmpdir(),'dual-disable-consumers-')),root=join(home,'OmniRouteRegular');
   const paths=getRuntimePaths(join(root,'data')),config=regularConfig();
-  const qwen=config.providers.find(provider=>provider.id==='qwen-consumer');qwen.enabled=true;
+  const qwen=config.providers.find(provider=>provider.id==='qwen-consumer');Object.assign(qwen,{enabled:true,mcpCommand:process.execPath,mcpArgs:[join(home,'adapter.mjs')],mcpWorkingDirectory:home});
   config.routing.directProviderOrder=['qwen-consumer','openrouter'];await saveConfig(config,paths);
   const appData=join(home,'AppData/Roaming'),startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup');await mkdir(startup,{recursive:true});
   const managed=join(startup,'OmniRoute Browser Consumers.vbs');
@@ -171,6 +171,15 @@ test('upgrade repair disables browser consumers, removes only OmniRoute startup 
   assert.equal(await readFile(custom,'utf8'),'user-owned');
   assert.equal(await readFile(profile,'utf8'),'preserve sign-in data');
   assert.ok(result.removedAutostart.length>=1);
+});
+test('Linux upgrade removes recognized browser-consumer autostart but keeps unrelated entries',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'dual-disable-consumers-linux-')),root=join(home,'OmniRouteRegular'),startup=join(home,'.config/autostart');await mkdir(startup,{recursive:true});
+  const managed=join(startup,'omniroute-browser-consumers.desktop'),custom=join(startup,'my-own.desktop');
+  await writeFile(managed,'[Desktop Entry]\nType=Application\nName=OmniRoute Browser Consumers\nExec="/home/test/OmniRouteRegular/Launch.sh" browser-consumers\nTerminal=false\n');
+  await writeFile(custom,'[Desktop Entry]\nName=My App\nExec=my-app\n');
+  const result=await mod.disableBrowserConsumers({root,home,platform:'linux'});
+  await assert.rejects(readFile(managed),{code:'ENOENT'});assert.match(await readFile(custom,'utf8'),/my-app/);
+  assert.deepEqual(result.removedAutostart,['omniroute-browser-consumers.desktop']);
 });
 test('Windows repair migrates a version-pinned browser-consumer CMD when the stable VBS is missing',async()=>{
   const home=await mkdtemp(join(tmpdir(),'dual-autostart-cmd-')),root=join(home,'OmniRouteRegular'),active='versions/0.6.6-private.10-new',payload=join(root,active);
@@ -366,7 +375,7 @@ test('one-click setup never opens or autostarts consumer browsers',async()=>{
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');
   const setup=source.slice(source.indexOf('export async function setupBoth'));
   for(const call of ['configureClaudeConsumer','configureZaiConsumer','configurePrivateBrowserConsumers','installSharedBrowserConsumerAutostart','launchSharedBrowserConsumerSetup']) assert.doesNotMatch(setup,new RegExp(`await ${call}\\(`),call);
-  assert.match(setup,/disableBrowserConsumers/);
+  assert.match(source,/disableBrowserConsumers/);
   assert.doesNotMatch(setup,/Opening one shared browser|six consumer sign-in tabs/);
 });
 

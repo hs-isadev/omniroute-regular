@@ -1,10 +1,11 @@
-# OmniRoute 0.6.7 — best eligible host and safe provider failover
+# OmniRoute 0.6.8 — browser consumers off, old runtimes cleaned up
 
 This update verifies the installed MCP runtime before host registration, repairs
-registrations after update or rollback, isolates provider health deadlines, and
+registrations after updates, isolates provider health deadlines, and
 adds content-free live provider diagnostics.
 See ROUTING-POLICY.md for diagnostics/pins and HOST-ORCHESTRATION.md for bounded
-worker context budgets. API and browser availability still determine eligibility.
+worker context budgets. API availability still determines eligibility. Browser-
+consumer providers are disabled in this package and never receive routed tasks.
 
 One download for Windows 10/11 x64 and Linux x64 desktops. No Codex subscription
 needed. No API keys, accounts, vaults or personal projects are included.
@@ -17,10 +18,7 @@ needed. No API keys, accounts, vaults or personal projects are included.
 3. In the **API Keys** window, click **Get key**, get your own provider key, and
    paste it beside that provider. Tick the free-account confirmation and click
    **Save and test**. Configure any supported providers; blank fields keep saved keys.
-4. One dedicated Chromium-family window opens with six tabs: Claude, Z.AI, Qwen,
-   Kimi, DeepSeek, and Perplexity. Sign in manually to any service you want to use.
-   The window minimizes after all six tabs are ready and starts minimized at future
-   OS logins. Then sign in to Antigravity when its official app opens. On Windows
+4. Sign in to Antigravity when its official app opens. On Windows
    x64, the package also verifies and opens the official Devin CLI login when it
    is available. Existing
    Codex and Claude Code installations are connected automatically; the package
@@ -50,11 +48,12 @@ open during setup to refresh its skill list.
   `omni harness opencode --mode regular`. If you run it from the install folder,
   `Launch.cmd harness opencode --mode regular` (Windows) and
   `./Launch.sh harness opencode --mode regular` (Linux) use the bundled CLI.
-- **Update cleanup:** when you run a newer setup in the same install folder,
-  OmniRoute keeps the new active version and one previous version for rollback.
-  It removes older intact OmniRoute runtime copies. Your API keys, settings and
-  other user data stay in place. If an old folder contains extra or changed
-  files, setup leaves it alone rather than risk deleting your files.
+- **Update cleanup:** after a new version installs successfully, OmniRoute keeps
+  only that active runtime and removes every older verified OmniRoute runtime
+  copy. This saves disk space, but a previous-version rollback is not available.
+  Your API keys, settings and other user data stay in place. If an old runtime
+  folder contains extra or changed files, setup leaves it alone rather than risk
+  deleting your files.
 
 - **OmniRoute OpenCode:** OmniRoute is the main model. It chooses the strongest
   eligible configured model for the request, using free status, health, task
@@ -89,15 +88,11 @@ open during setup to refresh its skill list.
 
 Windows launchers appear on the Desktop; Linux launchers appear in the app menu.
 Restart a host after changing keys. Developer hosts are not registered for
-autostart. One shared consumer browser starts minimized in the background at user
-login. Its startup entry calls the stable installed launcher, which re-reads the
-active version each time instead of saving a version-specific Node path. It uses
-the persistent profile `browser-consumer-profile`, the loopback-only endpoint
-`127.0.0.1:47842`, and six provider tabs; it does not reuse the user's
-normal browser profile. Chrome, Edge, Opera, Opera GX, Brave, Vivaldi and Chromium
-are detected on Windows and Linux (Opera GX itself is Windows-only). Override
-detection with `OMNIROUTE_BROWSER`. Firefox and Safari do not expose the Chromium
-CDP transport this adapter requires.
+autostart. Browser-consumer providers are disabled and are not used for routing.
+On upgrade, setup removes only recognized OmniRoute browser-consumer startup
+entries; it leaves browser profiles and sign-in data untouched, and preserves
+unrelated startup entries. Any already-open browser window is left alone and can
+be closed normally.
 OpenCode starts in a starter workspace; open your project from there or pass a
 project path to the installed launcher (`Launch.ps1 -Action opencode C:\Projects\Example`
 or `sh Launch.sh opencode /path/to/project`). Normal tool approval prompts remain.
@@ -124,32 +119,12 @@ providers retain prompts or restrict evaluation/commercial/confidential usage.
 Do not send private repository secrets to hosted workers. No billing settings
 are changed by setup. HF/Vercel credit-based inference and LongCat's paid API
 are excluded. The provider list is not a promise that every model is available.
-The six web consumers are not BYOK: they use the accounts you explicitly sign into
-and are limited by OmniRoute to small text/coding requests. Provider quotas and
-terms still apply. Browser credentials remain only in the one dedicated local
-profile created after installation and are never included in the package. Setup
-does not copy or merge cookies, login databases, passwords, OAuth tokens, local
-storage, or any other authentication material from another profile.
-
-Browser consumers remain single-call routes. Swarm fan-out uses healthy eligible
-API workers only and is skipped for casual/light work or when the original input,
+Browser consumers are disabled in this package; only configured API providers are
+eligible. Swarm fan-out uses healthy eligible API workers only and is skipped for casual/light work or when the original input,
 bounded worker drafts, and requested final output would exceed the synthesis
 model's context window. Groq can participate when healthy, but provider rotation
 and failover may select other configured free providers. Every parallel worker
 outcome and the final synthesis worker are recorded in route attribution.
-
-Each browser consumer exposes `none` and `high` reasoning, and normal browser-consumer
-routing defaults to `high`. The adapter activates the site's visible Thinking, Extended Thinking,
-DeepThink, or Reasoning control before it submits the prompt. Availability depends
-on the signed-in account and selected web model; if the control is unavailable,
-the adapter reports a retryable failure and routing continues to the next provider.
-Before inserting a browser prompt, each adapter focuses the input and waits 150 ms.
-This small deterministic UI-settle delay is not represented as stealth or bot-evasion.
-Browser-consumer requests are serialized, spaced by at least 20 seconds plus up
-to 5 seconds of jitter, and limited to 30 starts per hour per adapter process.
-Rate-limit, verification, unusual-traffic, and access-block notices stop automated
-submission and open an escalating cooldown. These safeguards reduce burst risk;
-they cannot guarantee service permission or prevent an account restriction.
 
 ## Failed provider? You can still finish
 

@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {verifyPackage} from '../distribution/install.mjs';
 import {BUNDLED_SKILLS} from '../distribution/skill-catalog.mjs';
 
-const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-0.6.7';
+const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-0.6.8';
 const bundledSkills=BUNDLED_SKILLS;
 const archive=resolve(process.argv[2]??join(repo,'release',name+'.zip'));
 const temp=await mkdtemp(join(repo,'test-artifacts/family-smoke-'));
@@ -35,10 +35,12 @@ for(const label of ['Windows','Linux']){
   const packagedInstaller=await readFile(join(family,label,'payload','app','distribution','install.mjs'),'utf8');
   assert.match(packagedInstaller,/prunedVersions/);
   assert.match(packagedInstaller,/olderVersionsRetained/);
-  assert.match(packagedInstaller,/previous:[^,]+\.active\?\?null/);
+  assert.match(packagedInstaller,/previous:null/);
 }
 const linuxLauncher=await readFile(join(family,'Linux','payload','Launch.sh'),'utf8');
 assert.match(linuxLauncher,/if \[ "\$action" = harness \]; then[\s\S]*?app\/apps\/cli\/dist\/bin\.js[\s\S]*?exec "\$node" "\$entry" harness/);
+assert.doesNotMatch(linuxLauncher,/browser-consumers|shared-session\.mjs/);
+assert.doesNotMatch(windowsLauncher,/browser-consumers|shared-session\.mjs/);
 await access(join(family,'Linux','payload','app','apps','cli','dist','bin.js'));
 const linuxBootstrap=await readFile(join(family,'Linux','payload/app/distribution/dual/bootstrap-linux.mjs'),'utf8');
 assert.match(linuxBootstrap,/["']API Keys["],["']keys["']/);
@@ -95,8 +97,10 @@ if(process.platform==='win32'){
   await run(join(previousBundle,'payload/node/node'),[join(previousBundle,'payload/app/distribution/install.mjs'),'install',previousBundle,install]);
   await run(join(bundle,'payload/node/node'),[join(bundle,'payload/app/distribution/install.mjs'),'install',bundle,install]);
 }
-const previousActive=JSON.parse(await readFile(join(install,'installed.json'),'utf8')).previous;
 const active=(await readFile(join(install,'active-version.txt'),'utf8')).trim();
+const installedMarker=JSON.parse(await readFile(join(install,'installed.json'),'utf8'));
+assert.equal(installedMarker.previous,null);
+assert.deepEqual(await readdir(join(install,'versions')),[active.slice('versions/'.length)]);
 const app=join(install,active,'app'),node=join(install,active,'node',process.platform==='win32'?'node.exe':'node');
 const moduleAt=path=>import(pathToFileURL(join(app,path)).href);
 const {CredentialPoolProvider}=await moduleAt('packages/providers/dist/index.js');
@@ -136,15 +140,16 @@ if(process.platform==='win32'){
   const hostHome=join(temp,'Antigravity Home With Spaces');await mkdir(hostHome,{recursive:true});
   const runtimePaths=(await moduleAt('packages/config/dist/index.js')).getRuntimePaths(join(install,'data'));
   const runtimeConfig=(await moduleAt('distribution/settings.mjs')).regularConfig();for(const provider of runtimeConfig.providers)provider.enabled=false;
+  runtimeConfig.providers.find(provider=>provider.id==='qwen-consumer').enabled=true;
   await (await moduleAt('packages/config/dist/index.js')).saveConfig(runtimeConfig,runtimePaths);
   const runtimeVault=await (await moduleAt('packages/vault/dist/index.js')).SecretVault.load(runtimePaths.vault);try{await runtimeVault.save(runtimePaths.vault);}finally{runtimeVault.dispose();}
   const cleanEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/KEY|TOKEN|SECRET|PASSWORD|NODE_OPTIONS|OMNIROUTE|OPENCODE/i.test(key)));
   Object.assign(cleanEnv,{HOME:hostHome,USERPROFILE:hostHome,APPDATA:join(hostHome,'AppData/Roaming'),OMNIROUTE_REGULAR_ROOT:install,OMNIROUTE_HOME:join(install,'data')});
   const hostConfig=join(hostHome,'.gemini/config/mcp_config.json');
   const startup=join(cleanEnv.APPDATA,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.vbs');await mkdir(dirname(startup),{recursive:true});
-  await writeFile(startup,`CreateObject("WScript.Shell").Run """${join(install,previousActive,'node/node.exe')}"" ""${join(install,previousActive,'app/packages/browser-consumer-adapter/runtime/shared-session.mjs')}"" --background --profile ""${join(install,'data/browser-consumer-profile')}"" --port 47842", 0, False\r\n`);
+  await writeFile(startup,`CreateObject("WScript.Shell").Run "powershell.exe -File ${join(install,'Launch.ps1')} -Action browser-consumers", 0, False\r\n`);
+  const browserProfile=join(install,'data/browser-consumer-profile/preserve.txt');await mkdir(dirname(browserProfile),{recursive:true});await writeFile(browserProfile,'keep profile data');
   const repair=async()=>await (await import(pathToFileURL(join(install,(await readFile(join(install,'active-version.txt'),'utf8')).trim(),'app/distribution/dual-setup.mjs')).href)).repairHostRegistrations({root:install,home:hostHome,env:cleanEnv});
-  const assertStartup=async expectedActive=>{const text=await readFile(startup,'utf8');assert.match(text,/Launch\.ps1/);assert.match(text,/browser-consumers/);assert.doesNotMatch(text,/versions[\\/]|node\.exe|shared-session\.mjs/);await access(join(install,'Launch.ps1'));await access(join(install,expectedActive,'app/packages/browser-consumer-adapter/runtime/shared-session.mjs'));};
   const handshake=async(expectedActive,host='antigravity')=>{
     const expectedNode=join(install,expectedActive,'node/node.exe'),expectedEntrypoint=join(install,expectedActive,'app/distribution/mcp-regular.mjs');
     const entry=host==='antigravity'?JSON.parse(await readFile(hostConfig,'utf8')).mcpServers.omniroute_regular:JSON.parse(await readFile(join(hostHome,'.config/opencode/opencode.json'),'utf8')).mcp.omniroute;
@@ -164,11 +169,15 @@ if(process.platform==='win32'){
     const instructions=await readFile(join(hostHome,path),'utf8');
     assert.match(instructions,/OmniRoute.*first/i);assert.match(instructions,/routingMode=["']regular["']/);
   }
-  await assertStartup(active);await handshake(active);await handshake(active,'opencode');
-  await run('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(install,'Manage.ps1'),'-Action','rollback'],{env:cleanEnv});
-  assert.equal((await readFile(join(install,'active-version.txt'),'utf8')).trim(),previousActive);await assertStartup(previousActive);await handshake(previousActive);await handshake(previousActive,'opencode');
+  await assert.rejects(readFile(startup),{code:'ENOENT'});
+  assert.equal(await readFile(browserProfile,'utf8'),'keep profile data');
+  const disabledConfig=await moduleAt('packages/config/dist/index.js').then(async configModule=>configModule.loadConfig(runtimePaths));
+  assert.equal(disabledConfig.providers.find(provider=>provider.id==='qwen-consumer').enabled,false);
+  await handshake(active);await handshake(active,'opencode');
   await run('powershell.exe',['-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',join(bundle,'Setup.ps1'),'-InstallRoot',install,'-InstallOnly'],{env:cleanEnv});
-  await repair();assert.equal((await readFile(join(install,'active-version.txt'),'utf8')).trim(),active);await assertStartup(active);await handshake(active);await handshake(active,'opencode');
+  await repair();assert.equal((await readFile(join(install,'active-version.txt'),'utf8')).trim(),active);
+  assert.deepEqual(await readdir(join(install,'versions')),[active.slice('versions/'.length)]);
+  await handshake(active);await handshake(active,'opencode');
 }
 
 const child=spawn(node,[join(repo,'scripts/package-protocol-fixture.mjs'),app,temp],{windowsHide:true,stdio:['pipe','pipe','pipe']});

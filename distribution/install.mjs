@@ -122,7 +122,7 @@ export async function installPackage(bundle,root) {
     await checkLaunchers(root,old);
     if(old?.active===active) {
       await verifyInstalled(stage,manifest);
-      const cleanup=await pruneOldRuntimeVersions(root,[old.active,old.previous]);
+      const cleanup=await pruneOldRuntimeVersions(root,[old.active]);
       return {root,version:manifest.version,changed:false,prunedVersions:cleanup.removed,olderVersionsRetained:cleanup.retained.length};
     }
     let staged=false;try{await access(stage);staged=true;}catch(error){if(error.code!=='ENOENT')throw error;}
@@ -149,12 +149,12 @@ export async function installPackage(bundle,root) {
       if(process.platform!=='win32'&&name.endsWith('.sh')) await chmod(dest,0o700);
     }
     if(old) await writeFile(join(backup,'installed.json'),JSON.stringify(old),{mode:0o600});
-    const marker={version:manifest.version,platform:manifest.platform,host:'antigravity',active,previous:old?.active??null,launcherHashes,backup};
+    const marker={version:manifest.version,platform:manifest.platform,host:'antigravity',active,previous:null,launcherHashes,backup};
     for(const [name,text] of [['active-version.txt',active+'\n'],['installed.json',JSON.stringify(marker,null,2)+'\n']]) {
       const dest=join(root,name);let previous=null;try {previous=await readFile(dest);}catch(e){if(e.code!=='ENOENT')throw e;}
       const written=Buffer.from(text);await atomic(dest,written);undo.push({dest,previous,written});
     }
-    const cleanup=await pruneOldRuntimeVersions(root,[active,old?.active??null]);
+    const cleanup=await pruneOldRuntimeVersions(root,[active]);
     return {root,version:manifest.version,changed:true,backup,prunedVersions:cleanup.removed,olderVersionsRetained:cleanup.retained.length};
     } catch(error) {
       for(const item of undo.reverse()) {

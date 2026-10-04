@@ -1,4 +1,4 @@
-# OmniRoute 0.6.6-private.12 verification
+# OmniRoute package verification notes
 
 - TypeScript build/typecheck passes.
 - Core, routing, integration and security tests pass, including least-dispatched
@@ -8,8 +8,8 @@
   exact boundaries, response/instruction/synthesis reserves, host-owned synthesis,
   and suppression of coupled or oversized work.
 - The installed Windows MCP server completes initialize/tools-list and advertises
-  omni_route, omni_models, omni_routes and omni_usage. Browser registration policy
-  accepts supported local adapters and rejects arbitrary paths/expanded limits.
+  omni_route, omni_models, omni_routes and omni_usage. The shareable 0.6.8 setup
+  keeps consumer-browser providers disabled.
 - The family archive is inspected against its manifest and checksums. It contains
   generated runtime code and required launch assets, no repository checkout,
   development tests/plans, source maps, user credentials or browser sessions.
@@ -18,19 +18,9 @@
   entrypoint, repair the exact Antigravity and OpenCode registrations, complete
   initialize/tools-list using each registered command, roll back and repeat both
   handshakes, then roll forward and repeat them again.
-- Enabled browser-consumer runtime paths are repaired to the active version before
-  host registration without changing their enablement, endpoint, models or limits.
-- Existing package-owned browser-consumer startup entries are migrated to the
-  stable installed `Launch.ps1`/`Launch.sh` wrapper. The wrapper resolves the
-  current `active-version.txt`, validates its bundled Node and adapter files,
-  and emits an actionable repair message instead of a missing-executable dialog.
-  The regression suite covers the Windows VBS migration, Linux desktop entry,
-  repeat repair, active-version changes, and preservation of unknown startup data.
-- A Windows startup command left by an older release (`OmniRoute Browser
-  Consumers.cmd`) is now recognized only when it contains the legacy browser
-  session signature and a version-pinned Node path. Setup migrates that exact
-  command to the stable VBS launcher and removes it; unknown same-name commands
-  are preserved and reported as conflicts.
+- Setup disables all browser-consumer providers and removes recognized OmniRoute
+  consumer-browser autostart entries on Windows/Linux. It preserves unknown
+  same-name startup files and every browser profile/sign-in file.
 - The package includes eleven compact, portable skills: focused implementation,
   focused code review, root-cause debugging, verify change, TDD workflow, coding
   standards, search first, security review, context budget, OmniRoute-first
@@ -71,15 +61,14 @@
   recorded.
 - Linux payload integrity is checked. Native Linux desktop/keyring/onboarding and
   live Antigravity account interactions are not claimed as verified on Windows.
-- The 0.6.6-private.12 extracted-family smoke scanned 2,779 archive entries,
+- The historical 0.6.6-private.12 extracted-family smoke scanned 2,779 archive entries,
   verified both OS manifests, and completed three registered Antigravity plus
   three OpenCode MCP initialize/tools-list handshakes on Windows. Its provider
   request used a fake provider; no live inference ran. Native Linux installation
   was not tested. The smoke also verified update/rollback, the source archive,
   setup UI fields, and safe optional-Devin failure handling.
-- Browser account sessions, provider availability and host model choice are user-
-  dependent. Browser consumers were not used for the API validation and retain
-  their existing task-class, capability, context, serialization and pacing limits.
+- Provider availability and host model choice are user-dependent. Browser
+  consumers are disabled in the 0.6.8 shareable package.
 
 Local source gates on 2026-09-29: `npm run test:regular` passed 160 tests with
 two skips. The Windows/Linux release archive is also validated against its
@@ -87,7 +76,7 @@ per-platform SHA-256 manifests before the extracted family-package smoke test.
 
 GUI shortcuts for API Keys and Antigravity hide only the package-owned PowerShell
 console. Errors still produce an attention dialog. OpenCode and usage terminals,
-security prompts, browser sign-in and Antigravity onboarding remain interactive.
+security prompts and Antigravity onboarding remain interactive.
 
 The .12 setup repairs blank OmniRoute and Antigravity JSON configuration files
 by backing up the empty file and writing a safe default. Malformed non-empty JSON
@@ -98,16 +87,10 @@ remains a warning and does not cause this config failure. The regression suite
 passed 165 distribution tests (two platform-specific skips), including empty
 and malformed config recovery. The main `npm test` suite passed 193 tests.
 
-The 0.6.7 setup forwards `harness` from both OS launchers to the bundled OmniRoute
-CLI. On upgrade it keeps the active and one rollback runtime and removes older
-verified managed copies; provider keys/settings are outside the pruned version
-folders. Extra or modified runtime files are left untouched. The TDD evidence in
-`docs/testing/harness-launch-and-version-prune.tdd.md` records launcher, pruning,
-package, and update/rollback checks for this release.
-
-Release 0.6.7 verification: `npm test` passed 197/197; `npm run test:regular`
-passed 179 tests with two platform-specific skips. The extracted family ZIP smoke
-scanned 2,781 entries, verified Windows and Linux manifests, repaired the install
-and registrations through update/rollback, and completed three registered MCP
-handshakes each for Antigravity and OpenCode using a fake provider. No live
-inference ran. Native Linux installation remains unverified.
+OmniRoute 0.6.8 forwards `harness` from both OS launchers to the bundled CLI. After
+a successful update it keeps only the active version and removes older verified,
+package-owned runtimes; previous-version rollback is not available. Keys/settings remain in the
+separate data folder. Extra or modified runtime files are left untouched. The TDD
+evidence in `docs/testing/harness-launch-and-version-prune.tdd.md` records the
+new cleanup and browser-disable checks. Final test/package numbers are recorded
+after this build completes.
