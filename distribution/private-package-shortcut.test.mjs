@@ -42,15 +42,20 @@ test('Linux setup creates a clickable API Keys application-menu launcher',async(
 });
 
 test('shareable package version is bumped consistently without overwriting the prior release',async()=>{
-  const [packager,sealer,packageTest,notes]=await Promise.all([
+  const [packager,sealer,packageTest,notes,installer]=await Promise.all([
     source('scripts/package-private.mjs'),
     source('scripts/seal-private.mjs'),
     source('scripts/test-family-package.mjs'),
-    source('docs/releases/v0.6.7.md')
+    source('docs/releases/v0.6.7.md'),
+    source('distribution/install.mjs')
   ]);
   for(const file of [packager,sealer,packageTest])assert.match(file,/0\.6\.7/);
   assert.match(packager,/Package folder exists; preserve it before rebuilding/);
   assert.match(sealer,/Archive already exists; never silently overwrite/);
   assert.match(notes,/quota|rate.limit/i);
+  assert.match(notes,/harness[\s\S]*?forward it to the\s+bundled OmniRoute CLI/i);
+  assert.match(notes,/active and one rollback/i);
+  assert.match(installer,/async function pruneOldRuntimeVersions/);
   assert.match(packager,/provider-key-status\.tdd\.md/);
+  assert.match(packager,/harness-launch-and-version-prune\.tdd\.md/);
 });

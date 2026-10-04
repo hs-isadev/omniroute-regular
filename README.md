@@ -19,6 +19,14 @@ sign in to your own accounts.
 5. Sign in yourself when an app or the optional separate browser opens. Restart
    any coding app that was already open.
 
+When you run a newer setup in the same install folder, it keeps the new version
+and one older version so you can roll back. It removes older intact OmniRoute
+runtime copies, but preserves your API keys and settings. If a folder contains
+extra or changed files, setup leaves it alone to protect your data.
+
+To open OmniRoute's regular OpenCode harness from a terminal, run:
+`omni harness opencode --mode regular`.
+
 To add more keys later, click **OmniRoute API Keys** on the Windows Desktop
 or in the Start Menu. On Linux, find **OmniRoute API Keys** in your applications
 menu.

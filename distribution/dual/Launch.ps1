@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('opencode','antigravity','devin','keys','usage','setup','browser-consumers')][string]$Action='opencode',[Parameter(ValueFromRemainingArguments=$true)][string[]]$Extra)
+param([ValidateSet('opencode','antigravity','devin','keys','usage','setup','browser-consumers','harness')][string]$Action='opencode',[Parameter(ValueFromRemainingArguments=$true)][string[]]$Extra)
 $ErrorActionPreference='Stop'
 $guiAction=$Action -in @('antigravity','keys','browser-consumers')
 try {
@@ -16,7 +16,12 @@ try {
   }
   $node=Join-Path $PSScriptRoot ($active+'/node/node.exe')
   if(-not(Test-Path -LiteralPath $node -PathType Leaf)){throw 'The active OmniRoute Node runtime is missing. Rerun Install-Windows.cmd to repair the package.'}
-  if($Action -eq 'browser-consumers'){
+  if($Action -eq 'harness'){
+    $entry=Join-Path $PSScriptRoot ($active+'/app/apps/cli/dist/bin.js')
+    if(-not(Test-Path -LiteralPath $entry -PathType Leaf)){throw 'The bundled OmniRoute CLI is missing. Rerun Install-Windows.cmd to repair the package.'}
+    if(-not $Extra -or $Extra.Count -eq 0){$Extra=@('opencode','--mode','regular')}
+    & $node $entry 'harness' @Extra
+  }elseif($Action -eq 'browser-consumers'){
     $entry=Join-Path $PSScriptRoot ($active+'/app/packages/browser-consumer-adapter/runtime/shared-session.mjs')
     if(-not(Test-Path -LiteralPath $entry -PathType Leaf)){throw 'The active browser-consumer adapter is missing. Rerun Install-Windows.cmd to repair the package.'}
     $profile=Join-Path $PSScriptRoot 'data/browser-consumer-profile'

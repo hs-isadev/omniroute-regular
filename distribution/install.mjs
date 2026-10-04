@@ -1,4 +1,4 @@
-import { access, chmod, copyFile, lstat, mkdir, readFile, readdir, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
+import { access, chmod, copyFile, lstat, mkdir, readFile, readdir, rename, rm, rmdir, unlink, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -61,6 +61,45 @@ async function verifyInstalled(stage,manifest) {
     if(hash(await readFile(path))!==entry.sha256) throw new Error('Installed payload checksum failed: '+entry.path);
   }
 }
+async function isManagedRuntimeVersion(stage,name) {
+  try {
+    const manifest=await json(join(stage,'package-manifest.json'));
+    if(manifest.platform!==platform()||!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(manifest.version)||!Array.isArray(manifest.files))return false;
+    if(name!==manifest.version+'-'+hash(JSON.stringify(manifest)).slice(0,12))return false;
+    await verifyInstalled(stage,manifest);
+    const expected=new Set([...manifest.files.map(file=>file.path.toLowerCase()),'package-manifest.json']);
+    const seen=new Set();
+    async function walk(directory,prefix='') {
+      await noLinks(directory);
+      for(const item of await readdir(directory,{withFileTypes:true})) {
+        if(item.isSymbolicLink())return false;
+        const path=prefix?prefix+'/'+item.name:item.name;
+        if(item.isDirectory()) {
+          const key=path.toLowerCase()+'/';
+          if(![...expected].some(file=>file.startsWith(key))||!await walk(join(directory,item.name),path))return false;
+        } else if(item.isFile()) {
+          if(!expected.has(path.toLowerCase()))return false;
+          seen.add(path.toLowerCase());
+        } else return false;
+      }
+      return true;
+    }
+    return await walk(stage)&&seen.size===expected.size;
+  } catch { return false; }
+}
+async function pruneOldRuntimeVersions(root,keepPaths) {
+  const versions=join(root,'versions'),keep=new Set(keepPaths.filter(path=>/^versions\/[a-zA-Z0-9.-]+$/.test(path)).map(path=>path.slice('versions/'.length)));
+  const removed=[],retained=[];
+  await noLinks(versions);
+  for(const item of await readdir(versions,{withFileTypes:true})) {
+    if(!item.isDirectory()||item.isSymbolicLink()||keep.has(item.name)||!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?-[a-f0-9]{12}$/.test(item.name))continue;
+    const stage=join(versions,item.name);
+    if(!await isManagedRuntimeVersion(stage,item.name))continue;
+    try { await rm(stage,{recursive:true,force:false});removed.push(item.name); }
+    catch { retained.push(item.name); }
+  }
+  return {removed,retained};
+}
 async function checkLaunchers(root,marker) {
   for(const [name,digest] of Object.entries(marker?.launcherHashes??{})) {
     if(!wrappers.includes(name)) throw new Error('Invalid launcher ownership record.');
@@ -81,7 +120,11 @@ export async function installPackage(bundle,root) {
     const versions=join(root,'versions');await noLinks(versions);await mkdir(versions,{recursive:true,mode:0o700});
     const stage=join(versions,id);
     await checkLaunchers(root,old);
-    if(old?.active===active) {await verifyInstalled(stage,manifest);return {root,version:manifest.version,changed:false};}
+    if(old?.active===active) {
+      await verifyInstalled(stage,manifest);
+      const cleanup=await pruneOldRuntimeVersions(root,[old.active,old.previous]);
+      return {root,version:manifest.version,changed:false,prunedVersions:cleanup.removed,olderVersionsRetained:cleanup.retained.length};
+    }
     let staged=false;try{await access(stage);staged=true;}catch(error){if(error.code!=='ENOENT')throw error;}
     if(staged)await verifyInstalled(stage,manifest);
     else{
@@ -111,7 +154,8 @@ export async function installPackage(bundle,root) {
       const dest=join(root,name);let previous=null;try {previous=await readFile(dest);}catch(e){if(e.code!=='ENOENT')throw e;}
       const written=Buffer.from(text);await atomic(dest,written);undo.push({dest,previous,written});
     }
-    return {root,version:manifest.version,changed:true,backup};
+    const cleanup=await pruneOldRuntimeVersions(root,[active,old?.active??null]);
+    return {root,version:manifest.version,changed:true,backup,prunedVersions:cleanup.removed,olderVersionsRetained:cleanup.retained.length};
     } catch(error) {
       for(const item of undo.reverse()) {
         if(hash(await readFile(item.dest))!==hash(item.written)) continue;

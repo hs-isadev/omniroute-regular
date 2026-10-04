@@ -267,7 +267,7 @@ test('Windows and Linux launchers forward harness commands to the bundled OmniRo
   const sh=await readFile(new URL('./dual/Launch.sh',import.meta.url),'utf8');
   assert.match(ps,/ValidateSet\([^)]*'harness'/);
   assert.match(ps,/\$Action -eq 'harness'[\s\S]*?app\/apps\/cli\/dist\/bin\.js[\s\S]*?\$Extra/);
-  assert.match(sh,/\["\$action" = harness \][\s\S]*?app\/apps\/cli\/dist\/bin\.js[\s\S]*?"harness" "\$@"/);
+  assert.match(sh,/if\s*\[\s*"\$action"\s*=\s*harness\s*\][\s\S]*?app\/apps\/cli\/dist\/bin\.js[\s\S]*?\bharness "\$@"/);
 });
 test('new setup saves keys before starting Antigravity so its MCP sees the saved profile',async()=>{
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');

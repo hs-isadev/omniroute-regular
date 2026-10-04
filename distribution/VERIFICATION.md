@@ -97,3 +97,10 @@ prevents a partial/empty host config from aborting setup with an unhelpful
 remains a warning and does not cause this config failure. The regression suite
 passed 165 distribution tests (two platform-specific skips), including empty
 and malformed config recovery. The main `npm test` suite passed 193 tests.
+
+The 0.6.7 setup forwards `harness` from both OS launchers to the bundled OmniRoute
+CLI. On upgrade it keeps the active and one rollback runtime and removes older
+verified managed copies; provider keys/settings are outside the pruned version
+folders. Extra or modified runtime files are left untouched. The TDD evidence in
+`docs/testing/harness-launch-and-version-prune.tdd.md` records launcher, pruning,
+package, and update/rollback checks for this release.

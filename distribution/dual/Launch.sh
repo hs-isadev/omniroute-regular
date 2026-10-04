@@ -14,6 +14,15 @@ if [ ! -f "$node" ]; then
   printf '%s\n' 'The active OmniRoute Node runtime is missing. Rerun Install-Linux.sh to repair the package.' >&2
   exit 1
 fi
+if [ "$action" = harness ]; then
+  entry="$OMNIROUTE_REGULAR_ROOT/$active/app/apps/cli/dist/bin.js"
+  if [ ! -f "$entry" ]; then
+    printf '%s\n' 'The bundled OmniRoute CLI is missing. Rerun Install-Linux.sh to repair the package.' >&2
+    exit 1
+  fi
+  if [ "$#" -eq 0 ]; then set -- opencode --mode regular; fi
+  exec "$node" "$entry" harness "$@"
+fi
 if [ "$action" = browser-consumers ]; then
   entry="$OMNIROUTE_REGULAR_ROOT/$active/app/packages/browser-consumer-adapter/runtime/shared-session.mjs"
   if [ ! -f "$entry" ]; then

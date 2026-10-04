@@ -46,6 +46,16 @@ open during setup to refresh its skill list.
 
 ## After setup
 
+- **Open the regular harness:** in a terminal, run
+  `omni harness opencode --mode regular`. If you run it from the install folder,
+  `Launch.cmd harness opencode --mode regular` (Windows) and
+  `./Launch.sh harness opencode --mode regular` (Linux) use the bundled CLI.
+- **Update cleanup:** when you run a newer setup in the same install folder,
+  OmniRoute keeps the new active version and one previous version for rollback.
+  It removes older intact OmniRoute runtime copies. Your API keys, settings and
+  other user data stay in place. If an old folder contains extra or changed
+  files, setup leaves it alone rather than risk deleting your files.
+
 - **OmniRoute OpenCode:** OmniRoute is the main model. It chooses the strongest
   eligible configured model for the request, using free status, health, task
   class, capabilities, context, and configured model tiers. Those tiers are

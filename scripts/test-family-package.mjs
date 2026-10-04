@@ -31,6 +31,15 @@ assert.match(windowsSetup,/Launch\.ps1.*-Action '\+\$item\[1\]/);
 const windowsLauncher=await readFile(join(family,'Windows','payload','Launch.ps1'),'utf8');
 assert.match(windowsLauncher,/ValidateSet\([^)]*'harness'/);assert.match(windowsLauncher,/app\/apps\/cli\/dist\/bin\.js/);
 await access(join(family,'Windows','payload','app','apps','cli','dist','bin.js'));
+for(const label of ['Windows','Linux']){
+  const packagedInstaller=await readFile(join(family,label,'payload','app','distribution','install.mjs'),'utf8');
+  assert.match(packagedInstaller,/async function pruneOldRuntimeVersions/);
+  assert.match(packagedInstaller,/pruneOldRuntimeVersions\(root,\[active,old\?\.active\?\?null\]\)/);
+  assert.match(packagedInstaller,/await verifyInstalled\(stage,manifest\)/);
+}
+const linuxLauncher=await readFile(join(family,'Linux','payload','Launch.sh'),'utf8');
+assert.match(linuxLauncher,/if \[ "\$action" = harness \]; then[\s\S]*?app\/apps\/cli\/dist\/bin\.js[\s\S]*?exec "\$node" "\$entry" harness/);
+await access(join(family,'Linux','payload','app','apps','cli','dist','bin.js'));
 const linuxBootstrap=await readFile(join(family,'Linux','payload/app/distribution/dual/bootstrap-linux.mjs'),'utf8');
 assert.match(linuxBootstrap,/["']API Keys["],["']keys["']/);
 const windowsDualSetup=await readFile(join(family,'Windows','payload/app/distribution/dual-setup.mjs'),'utf8');
