@@ -140,7 +140,8 @@ if(process.platform==='win32'){
   const hostHome=join(temp,'Antigravity Home With Spaces');await mkdir(hostHome,{recursive:true});
   const runtimePaths=(await moduleAt('packages/config/dist/index.js')).getRuntimePaths(join(install,'data'));
   const runtimeConfig=(await moduleAt('distribution/settings.mjs')).regularConfig();for(const provider of runtimeConfig.providers)provider.enabled=false;
-  runtimeConfig.providers.find(provider=>provider.id==='qwen-consumer').enabled=true;
+  const legacyConsumer=runtimeConfig.providers.find(provider=>provider.id==='qwen-consumer'),legacyAdapter=join(app,'packages/browser-consumer-adapter/runtime/adapter.mjs');
+  Object.assign(legacyConsumer,{enabled:true,mcpCommand:node,mcpArgs:[legacyAdapter,'--provider','qwen','--endpoint',legacyConsumer.baseUrl],mcpWorkingDirectory:dirname(legacyAdapter)});
   await (await moduleAt('packages/config/dist/index.js')).saveConfig(runtimeConfig,runtimePaths);
   const runtimeVault=await (await moduleAt('packages/vault/dist/index.js')).SecretVault.load(runtimePaths.vault);try{await runtimeVault.save(runtimePaths.vault);}finally{runtimeVault.dispose();}
   const cleanEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/KEY|TOKEN|SECRET|PASSWORD|NODE_OPTIONS|OMNIROUTE|OPENCODE/i.test(key)));
