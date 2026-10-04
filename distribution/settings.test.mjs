@@ -3,7 +3,7 @@ import test from 'node:test';
 import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { configure, regularConfig, fields } from './settings.mjs';
+import { configure, regularConfig, fields, getCredentialStatuses, checkCredentialStatuses } from './settings.mjs';
 import { getRuntimePaths, loadConfig, saveConfig, EXTRA_FREE_PROVIDERS } from '../packages/config/dist/index.js';
 import { InMemoryKeyProtector, SecretVault } from '../packages/vault/dist/index.js';
 
@@ -72,6 +72,39 @@ test('a new key submitted to a filled slot moves to the next free slot without r
   assert.deepEqual(result.slotResults.map(item=>[item.requestedSlot,item.slot,item.status]),[[1,3,'ACCEPTED']]);
   const vault=await SecretVault.load(paths.vault,protector);const saved=vault.getCredentialSlots('groq');
   assert.deepEqual(saved.map(item=>item.values.GROQ_API_KEY),['fixture-existing-one','fixture-existing-two','fixture-new-key']);vault.dispose();
+});
+test('an explicit accepted replacement updates only its selected slot and reports healthy status',async()=>{
+  const {paths,protector}=await context();
+  await configure({slots:{groq:[{GROQ_API_KEY:'fixture-old-slot-one'},{GROQ_API_KEY:'fixture-old-slot-two'}]},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  const result=await configure({slots:{groq:[{GROQ_API_KEY:'fixture-replacement'}]},replaceSlots:{groq:[1]},freeOnlyConfirmed:true},paths,{protector,existingSetup:true,factory:success});
+  assert.deepEqual(result.slotResults.map(item=>[item.requestedSlot,item.slot,item.status,item.replaced]),[[1,1,'ACCEPTED',true]]);
+  const vault=await SecretVault.load(paths.vault,protector);
+  assert.deepEqual(vault.getCredentialSlots('groq').map(item=>item.values.GROQ_API_KEY),['fixture-replacement','fixture-old-slot-two']);vault.dispose();
+  assert.deepEqual((await getCredentialStatuses(paths,{protector})).statuses.map(item=>[item.slot,item.status]),[[1,'healthy'],[2,'healthy']]);
+});
+test('a failed explicit replacement retains the old key and its saved status',async()=>{
+  const {paths,protector}=await context();
+  await configure({keys:{GROQ_API_KEY:'fixture-old-key'},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  const before=await getCredentialStatuses(paths,{protector});
+  const result=await configure({slots:{groq:[{GROQ_API_KEY:'fixture-rejected-replacement'}]},replaceSlots:{groq:[1]},freeOnlyConfirmed:true},paths,{protector,existingSetup:true,factory:()=>({generate:async()=>{throw {category:'authentication',providerStatus:401};},classifyError:error=>error})});
+  assert.equal(result.slotResults[0].status,'FAILED');
+  const vault=await SecretVault.load(paths.vault,protector);assert.equal(vault.getCredentialSlots('groq')[0].values.GROQ_API_KEY,'fixture-old-key');vault.dispose();
+  assert.deepEqual((await getCredentialStatuses(paths,{protector})).statuses,before.statuses);
+});
+test('saved key status is private metadata and a quota timeout does not falsely mark a healthy key expired',async()=>{
+  const {paths,protector}=await context();
+  await configure({slots:{groq:[{GROQ_API_KEY:'fixture-status-expired'},{GROQ_API_KEY:'fixture-status-quota'}]},freeOnlyConfirmed:true},paths,{protector,factory:success});
+  const snapshot=await getCredentialStatuses(paths,{protector});
+  assert.deepEqual(snapshot.statuses.map(item=>[item.slot,item.status]),[[1,'healthy'],[2,'healthy']]);
+  const checked=await checkCredentialStatuses(paths,{protector,factory:(_settings,values)=>({
+    generate:async()=>{throw values.GROQ_API_KEY==='fixture-status-expired'?{category:'authentication',providerStatus:401}:{category:'rate_limit',providerStatus:429};},
+    classifyError:error=>error,
+  })});
+  assert.deepEqual(checked.statuses.map(item=>[item.slot,item.status]),[[1,'expired'],[2,'healthy']]);
+  assert.equal(checked.statuses[1].lastAttemptReasonCode,'QUOTA_OR_RATE_LIMIT');
+  const statusFile=await readFile(join(paths.vaultDir,'credential-status.json'),'utf8');
+  assert.ok(!statusFile.includes('fixture-status-'));
+  assert.ok(!JSON.stringify(checked).includes('fixture-status-'));
 });
 test('a credential already saved in another slot is reported and never validated or duplicated',async()=>{
   const {paths,protector}=await context();
