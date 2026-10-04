@@ -18,6 +18,8 @@ export interface SelectionPolicy {
   minimumTier?: number;
   minimumOutputTokens?: number;
   reserveTokens?: number;
+  /** Choose the strongest eligible model globally instead of balancing providers. */
+  bestModelFirst?: boolean;
   pin?: { providerId: string; modelId?: string };
 }
 
@@ -29,6 +31,7 @@ export class FreeModelFailover {
   private readonly modelSelections = new Map<string, number>();
   private readonly active = new Map<string, number>();
   private readonly limitedUntil = new Map<string, number>();
+  private readonly limitedProvidersUntil = new Map<string, number>();
   constructor(private readonly config: OmniConfig, private readonly providers: Map<string, ProviderAdapter>, private readonly now: () => number = Date.now) {}
 
   enabled(selection: ModelSelection, snapshot: RegistrySnapshot): boolean {
@@ -48,6 +51,12 @@ export class FreeModelFailover {
     if (until <= this.now()) { this.limitedUntil.delete(key); return false; }
     return true;
   }
+  private providerCooling(providerId: string): boolean {
+    const until = this.limitedProvidersUntil.get(providerId);
+    if (until === undefined) return false;
+    if (until <= this.now()) { this.limitedProvidersUntil.delete(providerId); return false; }
+    return true;
+  }
 
   diagnostics(initial: ModelSelection, snapshot: RegistrySnapshot, required: Capability[], inputTokens: number, policy: SelectionPolicy = {}): RoutingDiagnostic {
     const classes = ["micro", "small", "medium", "large", "critical"];
@@ -62,6 +71,7 @@ export class FreeModelFailover {
       if (model.health.status !== "healthy") reasons.push("HEALTH_" + model.health.status.toUpperCase());
       if (model.rateLimitState === "limited") reasons.push("QUOTA_LIMITED");
       if (this.cooling(model)) reasons.push("COOLDOWN");
+      if (this.providerCooling(model.providerId)) reasons.push("PROVIDER_COOLDOWN");
       const maximum = settings?.maxTaskClass ?? (model.providerId.endsWith("-consumer") ? "small" : undefined);
       if (maximum && (!policy.taskClass || classes.indexOf(policy.taskClass) > classes.indexOf(maximum))) reasons.push("TASK_CLASS_LIMIT");
       if (policy.minimumTier && (model.intelligenceTier ?? 0) < policy.minimumTier) reasons.push("QUALITY_FLOOR");
@@ -87,6 +97,17 @@ export class FreeModelFailover {
     const priority = (id: string) => this.config.routing.providerPriorities?.[id] ?? 0;
     const providerIds = [...new Set(candidates.map(item => item.providerId))];
     const explicitPriority = Math.max(...providerIds.map(priority));
+    if (policy.bestModelFirst) {
+      candidates.sort(this.bestModelComparator(snapshot, required, preference, initial.providerId));
+      const selection = candidates[0];
+      if (selection) {
+        this.providerSelections.set(selection.providerId, (this.providerSelections.get(selection.providerId) ?? 0) + 1);
+        this.modelSelections.set(this.key(selection), (this.modelSelections.get(this.key(selection)) ?? 0) + 1);
+        diagnostic.selected = {providerId: selection.providerId, modelId: selection.modelId};
+        diagnostic.reason = policy.pin ? "EXPLICIT_PIN" : "BEST_ELIGIBLE_MODEL";
+      }
+      return {selection, diagnostic};
+    }
     const preferred = providerIds.filter(id => priority(id) === explicitPriority);
     const ordered = this.config.routing.selectionPolicy === "priority";
     preferred.sort((a, b) => ordered ? providerIds.indexOf(a) - providerIds.indexOf(b) : (this.providerSelections.get(a) ?? 0) - (this.providerSelections.get(b) ?? 0) || providerIds.indexOf(a) - providerIds.indexOf(b));
@@ -108,6 +129,27 @@ export class FreeModelFailover {
       diagnostic.reason = policy.pin ? "EXPLICIT_PIN" : providerIds.length === 1 ? "ONLY_ELIGIBLE_PROVIDER" : explicitPriority !== 0 ? "EXPLICIT_PROVIDER_PRIORITY" : ordered ? "PROVIDER_ORDER_PRIORITY" : "BALANCED_LEAST_DISPATCHED";
     }
     return {selection, diagnostic};
+  }
+
+  private bestModelComparator(snapshot: RegistrySnapshot, required: Capability[], preference: ModelPreference, initialProviderId: string): (a: ModelSelection, b: ModelSelection) => number {
+    const providerOrder = [initialProviderId, ...this.config.routing.directProviderOrder.filter(id => id !== initialProviderId)];
+    const modelFor = (selection: ModelSelection) => snapshot.models.find(model => this.key(model) === this.key(selection))!;
+    const modelOrder = (selection: ModelSelection): number => {
+      const model = modelFor(selection);
+      const order = this.config.providers.find(item => item.id === model.providerId)?.freeModelOrder ?? [];
+      const rank = order.indexOf(model.modelId);
+      return rank < 0 ? 999 : rank;
+    };
+    const tier = (selection: ModelSelection) => modelFor(selection).intelligenceTier ?? 0;
+    const priority = (selection: ModelSelection) => this.config.routing.providerPriorities?.[selection.providerId] ?? 0;
+    return (a, b) => priority(b) - priority(a)
+      || (preference === "lightweight" ? tier(a) - tier(b) : tier(b) - tier(a))
+      || modelOrder(a) - modelOrder(b)
+      || Number(modelFor(a).capabilities.web === true && !required.includes("web")) - Number(modelFor(b).capabilities.web === true && !required.includes("web"))
+      || (modelFor(a).latencyTier ?? 9) - (modelFor(b).latencyTier ?? 9)
+      || (providerOrder.indexOf(a.providerId) < 0 ? 999 : providerOrder.indexOf(a.providerId)) - (providerOrder.indexOf(b.providerId) < 0 ? 999 : providerOrder.indexOf(b.providerId))
+      || a.providerId.localeCompare(b.providerId)
+      || a.modelId.localeCompare(b.modelId);
   }
 
   candidates(initial: ModelSelection, snapshot: RegistrySnapshot, required: Capability[], inputTokens: number, preference: ModelPreference = "quality", policy: SelectionPolicy = {}): ModelSelection[] {
@@ -134,7 +176,10 @@ export class FreeModelFailover {
     const eligible = this.config.routing.freeOnly ? this.candidates(initial, snapshot, required, inputTokens, preference, policy) : [initial];
     const candidates = automatic ? eligible : eligible.filter(item => this.key(item) === this.key(initial));
     // A selected model is a decision, not a hint to silently upgrade/downgrade.
-    candidates.sort((a, b) => Number(this.key(b) === this.key(initial)) - Number(this.key(a) === this.key(initial)));
+    if (policy.bestModelFirst) {
+      const compareBest = this.bestModelComparator(snapshot, required, preference, initial.providerId);
+      candidates.sort((a, b) => Number(this.key(b) === this.key(initial)) - Number(this.key(a) === this.key(initial)) || compareBest(a, b));
+    } else candidates.sort((a, b) => Number(this.key(b) === this.key(initial)) - Number(this.key(a) === this.key(initial)));
     const diagnostic = this.diagnostics(initial, snapshot, required, inputTokens, policy);
     diagnostic.phase = "execution";
     diagnostic.reason = candidates.some(item => this.key(item) === this.key(initial)) ? "SELECTED_CANDIDATE_FIRST" : "SELECTED_CANDIDATE_INELIGIBLE";
@@ -164,9 +209,13 @@ export class FreeModelFailover {
         lastError = error;
         failures += 1;
         const delay = failure.retryAfterMs ?? this.config.routing.freeModelCooldownMs;
-        this.limitedUntil.set(this.key(selection), this.now() + Math.max(1000, Math.min(86_400_000, Number.isFinite(delay) ? delay : this.config.routing.freeModelCooldownMs)));
+        const cooldownUntil = this.now() + Math.max(1000, Math.min(86_400_000, Number.isFinite(delay) ? delay : this.config.routing.freeModelCooldownMs));
+        if (failure.category === "rate_limit" && (failure.providerStatus === 429 || failure.providerStatus === 402)) this.limitedProvidersUntil.set(selection.providerId, cooldownUntil);
+        else this.limitedUntil.set(this.key(selection), cooldownUntil);
         audit.fallbackAttempts.push({ providerId: selection.providerId, modelId: selection.modelId, outcome: `${label}: ${failure.category}` });
-        audit.policyDecisions.push(`${label}: ${selection.providerId}/${selection.modelId} ${failure.category}; trying remaining eligible same-provider models before another provider`);
+        audit.policyDecisions.push(failure.category === "rate_limit"
+          ? `${label}: ${selection.providerId}/${selection.modelId} rate limited; cooling the provider and trying another eligible provider`
+          : `${label}: ${selection.providerId}/${selection.modelId} ${failure.category}; trying remaining eligible models`);
       } finally {
         this.active.set(selection.providerId, Math.max(0, (this.active.get(selection.providerId) ?? 1) - 1));
       }

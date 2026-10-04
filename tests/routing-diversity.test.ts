@@ -98,13 +98,13 @@ test("rate-limited candidates fall back with reason codes, cool down, then recov
     if (selection.providerId === "groq") throw Error("CONTENT_MUST_NOT_ENTER_DIAGNOSTICS");
     return "ok";
   }, "quality", {taskClass: "small"});
-  assert.deepEqual(calls, ["groq", "groq", "qwen-consumer"]);
+  assert.deepEqual(calls, ["groq", "qwen-consumer"]);
   assert.equal(result.selection.providerId, "qwen-consumer");
   assert.equal(audit.routingDiagnostics[0]?.reason, "FALLBACK_AFTER_FAILURE");
   assert.ok(audit.fallbackAttempts.some(a => a.outcome === "worker: rate_limit"));
   const next = f.ladder.select(seed, f.snapshot, ["text"], 20, "quality", {taskClass: "small"});
   assert.notEqual(next.selection?.providerId, "groq");
-  assert.ok(next.diagnostic.candidates.filter(c => c.providerId === "groq").every(c => c.reasons.includes("COOLDOWN")));
+  assert.ok(next.diagnostic.candidates.filter(c => c.providerId === "groq").every(c => c.reasons.includes("PROVIDER_COOLDOWN")));
   assert.doesNotMatch(JSON.stringify(audit), /CONTENT_MUST_NOT_ENTER_DIAGNOSTICS/);
   f.advance();
   assert.ok(f.ladder.diagnostics(seed, f.snapshot, ["text"], 20, {taskClass: "small"}).candidates.find(c => c.providerId === "groq")?.eligible);

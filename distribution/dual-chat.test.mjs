@@ -65,9 +65,9 @@ test('live-verified Kilo and Zen tool models are eligible, untested variants rem
   for(const [provider,id] of [['kilo','openrouter/free'],['opencode-zen','big-pickle']])assert.equal(config.providers.find(p=>p.id===provider).models.find(m=>m.modelId===id).capabilities.tool_calling,true);
   assert.equal(config.providers.find(p=>p.id==='kilo').models.find(m=>m.modelId==='kilo-auto/free').capabilities.tool_calling,undefined);
 });
-async function routedFixture(failureCount=0){
+async function routedFixture(failureCount=0,preferredProvider='groq'){
   const root=await mkdtemp(join(tmpdir(),'dual-routing-')),protector=new InMemoryKeyProtector();
-  const config=regularConfig();const vault=await SecretVault.create(protector);
+  const config=regularConfig();config.routing.providerPriorities={[preferredProvider]:1};const vault=await SecretVault.create(protector);
   for(const id of ['groq','openrouter']){const p=config.providers.find(p=>p.id===id);p.enabled=true;vault.set(id,{[p.credentialField]:'fixture-'+id});}
   await vault.save(getRuntimePaths(root).vault);vault.dispose();
   const models=config.providers.filter(p=>p.enabled).flatMap(p=>p.models.filter(m=>m.enabled&&m.allowed).map(m=>({providerId:p.id,modelId:m.modelId,enabled:true,allowed:true,health:{status:'healthy'},contextWindow:131072,maxOutputTokens:8192,reasoningEfforts:['none'],intelligenceTier:m.intelligenceTier,latencyTier:m.latencyTier,pricing:{inputPerMillionUsd:0,outputPerMillionUsd:0},capabilities:{text:true,coding:true,toolCalling:true}})));
@@ -79,9 +79,9 @@ test('casual requests select light models and coding requests select the 120B qu
   const casual=await routedFixture();await casual.backend.complete(request);assert.notEqual(casual.calls[0].model,'openai/gpt-oss-120b');
   const code=await routedFixture();await code.backend.complete({...request,messages:[{role:'user',content:'Write a Python function to add two numbers'}]});assert.equal(code.calls[0].model,'openai/gpt-oss-120b');
 });
-test('a rate-limited host provider falls back to a different provider, not another model in the same quota pool',async()=>{
-  const f=await routedFixture(1);await f.backend.complete({...request,messages:[{role:'user',content:'Write a Python function to add two numbers'}]});
-  assert.equal(f.calls.length,2);assert.equal(f.calls[0].provider,'groq');assert.notEqual(f.calls[1].provider,'groq');
+test('a rate-limited OpenRouter host falls back to a different provider, not another OpenRouter model',async()=>{
+  const f=await routedFixture(1,'openrouter');await f.backend.complete({...request,messages:[{role:'user',content:'Write a Python function to add two numbers'}]});
+  assert.equal(f.calls.length,2);assert.equal(f.calls[0].provider,'openrouter');assert.notEqual(f.calls[1].provider,'openrouter');
 });
 test('OpenCode may retry an invalid credential with another saved slot',async()=>{
   const root=await mkdtemp(join(tmpdir(),'dual-credential-pool-')),protector=new InMemoryKeyProtector();

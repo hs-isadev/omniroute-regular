@@ -59,14 +59,18 @@ async function requestWithCredentialPool(provider,pool,options){
     const index=(pool.cursor+offset)%pool.entries.length;
     if(pool.entries[index].cooldownUntil<=now)indexes.push(index);
   }
-  if(indexes.length)pool.cursor=(indexes[0]+1)%pool.entries.length;
   for(const index of indexes){
     const entry=pool.entries[index];
-    try{const response=await entry.transport.request(provider.id,entry.path,options);return response;}
+    // Reserve per request so concurrent valid requests don't race onto the
+    // same key; a non-auth failure restores the cursor to avoid key rotation.
+    pool.cursor=(index+1)%pool.entries.length;
+    try{const response=await entry.transport.request(provider.id,entry.path,options);pool.cursor=(index+1)%pool.entries.length;return response;}
     catch(error){
       const failure=provider.classifyError(error);lastError=error;pool.lastError=error;
-      if(pool.entries.length===1||!['authentication','rate_limit'].includes(failure.category))throw error;
-      entry.cooldownUntil=Date.now()+Math.max(1000,failure.retryAfterMs??(failure.category==='authentication'?300000:60000));
+      // A second key is valid only for invalid/revoked credentials. Never use
+      // credential rotation to evade a provider's quota or rate limit.
+      if(pool.entries.length===1||failure.category!=='authentication'){pool.cursor=index;throw error;}
+      entry.cooldownUntil=Date.now()+Math.max(1000,failure.retryAfterMs??300000);
     }
   }
   throw lastError??pool.lastError??new SafeError('PROVIDER_CREDENTIAL_POOL_COOLDOWN',provider.id+' credential slots are cooling down',503);
@@ -108,7 +112,7 @@ export async function createChatBackend(root,{protector,providerOptions={},trans
     const required=['text',...(input.tools?.length?['tool_calling']:[]),...(intent.requiredCapabilities.includes('coding')?['coding']:[])];
     const audit={fallbackAttempts:[],policyDecisions:[]},routeId=randomUUID();
     // The registry must contain the seed; candidates will be filtered and ordered deterministically.
-    const policy={taskClass:intent.suggestedClass};
+    const policy={taskClass:intent.suggestedClass,bestModelFirst:true};
     const chosen=failover.select(initial,snapshot,required,estimateTokens(JSON.stringify(input)),intent.modelPreference,policy);
     audit.routingDiagnostics=[chosen.diagnostic];
     if(!chosen.selection)throw new SafeError('FREE_MODELS_UNAVAILABLE','No free model supports this conversation size and tools',503);

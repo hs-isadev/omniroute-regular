@@ -35,7 +35,7 @@ test('valid keys are encrypted; optional failures never activate',async()=>{
   assert.equal(vault.get('openrouter').OPENROUTER_API_KEY,fixture); assert.equal(vault.get('groq'),null); vault.dispose();
   const config=JSON.parse(await readFile(paths.config,'utf8'));
   assert.deepEqual(config.providers.filter(x=>x.enabled).map(x=>x.id),['openrouter']);
-  assert.deepEqual((await loadConfig(paths)).providers.find(x=>x.id==='openrouter').models.filter(x=>x.enabled&&x.allowed).map(x=>x.modelId),['openai/gpt-oss-120b:free','openai/gpt-oss-20b:free','openrouter/free']);
+  assert.deepEqual((await loadConfig(paths)).providers.find(x=>x.id==='openrouter').models.filter(x=>x.enabled&&x.allowed).map(x=>x.modelId),['openrouter/free','openai/gpt-oss-120b:free','openai/gpt-oss-20b:free']);
 });
 test('setup accepts any supported free provider credentials and counts Cloudflare once',async()=>{
   const {paths,protector}=await context();

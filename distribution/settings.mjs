@@ -134,13 +134,13 @@ export function regularConfig() {
     provider.enabled = false;
     if (provider.id in fields) provider.freeTierConfirmed = true;
     if (provider.id === 'openrouter') {
-      // Retain explicit disabled records: config migration otherwise re-adds
-      // omitted default models, including unavailable legacy free slugs.
+      // Keep the curated zero-price OpenRouter hosts available. Runtime health
+      // discovery excludes any model that the current account cannot access.
       for (const model of provider.models) {
-        model.enabled = model.modelId === 'openrouter/free';
+        model.enabled = ['openai/gpt-oss-120b:free','openai/gpt-oss-20b:free','openrouter/free'].includes(model.modelId);
         model.allowed = model.enabled;
       }
-      provider.freeModelOrder = ['openrouter/free'];
+      provider.freeModelOrder = ['openai/gpt-oss-120b:free','openai/gpt-oss-20b:free','openrouter/free'];
     }
   }
   for(const candidate of CODING_CANDIDATES) existing.providers.find(p=>p.id===candidate.provider).models.push({...freeWorkerModel(candidate.model,candidate.context),enabled:false,allowed:false,intelligenceTier:5});

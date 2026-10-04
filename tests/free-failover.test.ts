@@ -15,6 +15,7 @@ class LimitProvider extends MockProvider {
   override classifyError(error: unknown): ProviderErrorShape { return new OpenAICompatibleProvider({ id: this.id, baseUrl: "https://example.com" }).classifyError(error); }
 }
 const limited = (id = "groq", delay = 1000) => new ProviderHttpError(id, 429, delay, "rate limited");
+const temporary = (id = "groq") => new ProviderHttpError(id, 503, null, "temporarily unavailable");
 const primary: ModelSelection = { providerId: "groq", modelId: "small", reasoningEffort: "none", maxOutputTokens: 100 };
 function fixture() {
   const config = freeConfigFixture();
@@ -140,33 +141,36 @@ for (const mode of ["regular", "orchestrator"] as const) test(`${mode} routes do
   try {
     const router = new OmniRouter({ config: f.config, providers: f.providers, registry: async () => f.snapshot, audit: new AuditStore(join(root, "audit.jsonl")), logger: new JsonlLogger(join(root, "log.jsonl")) });
     const result = await router.route({ prompt: "Explain this design.", routingMode: mode, sourceClient: "test", hostApplication: "test", hostModel: null, hostModelAuthoritative: false, attachments: [], requestedCapabilities: [], maxOutputTokens: 100, privacyMode: null, metadata: {} }, AbortSignal.timeout(5000));
-    assert.deepEqual(f.providers.get("groq")!.calls.map((call) => call.modelId), mode === "regular" ? ["big", "small"] : ["small", "big"]);
+    assert.deepEqual(f.providers.get("groq")!.calls.map((call) => call.modelId), mode === "regular" ? ["big"] : ["small"]);
     assert.equal(result.attribution.worker.providerId, "gemini");
     assert.equal(result.attribution.worker.modelId, "big");
-    assert.equal(result.attribution.fallbacksAttempted.length, 3);
+    assert.equal(result.attribution.fallbacksAttempted.length, 2);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test("free planner itself downgrades and records its actual model", async () => {
   const f = fixture(), root = await mkdtemp(join(tmpdir(), "omni-planner-ladder-"));
   f.config.routing.intentRoutingEnabled = false;
-  f.providers.get("openrouter")!.responses.push({ text: "", error: limited("openrouter") }, { text: JSON.stringify(planFixture({ primary })) });
+  f.models.find(model => model.providerId === "gemini" && model.modelId === "big")!.capabilities.structuredOutput = true;
+  f.providers.get("openrouter")!.responses.push({ text: "", error: limited("openrouter") });
+  f.providers.get("gemini")!.responses.push({ text: JSON.stringify(planFixture({ primary })) });
   f.providers.get("groq")!.responses.push({ text: "answer" });
   try {
     const router = new OmniRouter({ config: f.config, providers: f.providers, registry: async () => f.snapshot, audit: new AuditStore(join(root, "audit.jsonl")), logger: new JsonlLogger(join(root, "log.jsonl")) });
     const result = await router.route({ prompt: "Explain this design.", routingMode: "orchestrator", sourceClient: "test", hostApplication: "test", hostModel: null, hostModelAuthoritative: false, attachments: [], requestedCapabilities: [], maxOutputTokens: 100, privacyMode: null, metadata: {} }, AbortSignal.timeout(5000));
-    assert.deepEqual(f.providers.get("openrouter")!.calls.map((call) => call.modelId), ["openrouter/free", "small"]);
-    assert.equal(result.attribution.orchestrator.modelId, "small");
+    assert.deepEqual(f.providers.get("openrouter")!.calls.map((call) => call.modelId), ["openrouter/free"]);
+    assert.equal(result.attribution.orchestrator.providerId, "gemini");
+    assert.equal(result.attribution.orchestrator.modelId, "big");
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test("subtasks, reviewer and revision share cooldowns and preserve final attribution", async () => {
+test("subtasks, reviewer and revision use model-level transient fallbacks and preserve attribution", async () => {
   const f = fixture(), root = await mkdtemp(join(tmpdir(), "omni-review-ladder-"));
   f.config.routing.intentRoutingEnabled = false;
   const plan = planFixture({ primary: { ...primary, modelId: "big" }, executionMode: "decomposed", subtasks: [{ id: "analysis", goal: "Explain one tradeoff", dependencies: [], providerId: "groq", modelId: "big", reasoningEffort: "none" }], review: { required: true, providerId: "gemini", modelId: "big", criteria: ["Check accuracy"] } });
   f.providers.get("openrouter")!.responses.push({ text: JSON.stringify(plan) });
-  f.providers.get("groq")!.responses.push({ text: "", error: limited("groq", 60000) }, { text: "subtask answer" }, { text: "draft answer" }, { text: "final answer" });
-  f.providers.get("gemini")!.responses.push({ text: "", error: limited("gemini", 60000) }, { text: "No material issues" });
+  f.providers.get("groq")!.responses.push({ text: "", error: temporary("groq") }, { text: "subtask answer" }, { text: "draft answer" }, { text: "final answer" });
+  f.providers.get("gemini")!.responses.push({ text: "", error: temporary("gemini") }, { text: "No material issues" });
   try {
     const router = new OmniRouter({ config: f.config, providers: f.providers, registry: async () => f.snapshot, audit: new AuditStore(join(root, "audit.jsonl")), logger: new JsonlLogger(join(root, "log.jsonl")) });
     const result = await router.route({ prompt: "Explain this design.", routingMode: "orchestrator", sourceClient: "test", hostApplication: "test", hostModel: null, hostModelAuthoritative: false, attachments: [], requestedCapabilities: [], maxOutputTokens: 100, privacyMode: null, metadata: {} }, AbortSignal.timeout(5000));
@@ -195,14 +199,14 @@ for (const mode of ["regular", "orchestrator"] as const) test(`${mode}: executio
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test("lightweight fallback stays within the provider before changing providers", async () => {
+test("lightweight fallback cools a rate-limited provider before choosing another", async () => {
   const f = fixture(), calls: string[] = [];
   const result = await new FreeModelFailover(f.config, f.providers).run(primary, f.snapshot, ["text"], 20, AbortSignal.timeout(5000), f.audit, "worker", async selection => {
     calls.push(`${selection.providerId}/${selection.modelId}`);
     if (selection.providerId === "groq") throw limited();
     return "ok";
   }, "lightweight");
-  assert.deepEqual(calls, ["groq/small", "groq/big", "gemini/small"]);
+  assert.deepEqual(calls, ["groq/small", "gemini/small"]);
   assert.equal(result.selection.modelId, "small");
 });
 
