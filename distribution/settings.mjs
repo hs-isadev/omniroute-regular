@@ -78,6 +78,14 @@ function normalizeCredentialSlots(input) {
   return slots;
 }
 
+function findNextFreeSlot(requestedSlot, occupiedSlots, reservedSlots, allocatedSlots) {
+  for (let offset = 1; offset < MAX_CREDENTIAL_SLOTS; offset += 1) {
+    const slot = ((requestedSlot - 1 + offset) % MAX_CREDENTIAL_SLOTS) + 1;
+    if (!occupiedSlots.has(slot) && !reservedSlots.has(slot) && !allocatedSlots.has(slot)) return slot;
+  }
+  return null;
+}
+
 export async function configure(input, paths, { protector, factory = createConfiguredProvider, existingSetup = false } = {}) {
   if (input.freeOnlyConfirmed !== true) throw new Error('Confirm free-only provider account settings first.');
   const submitted=normalizeCredentialSlots(input);
@@ -103,10 +111,23 @@ export async function configure(input, paths, { protector, factory = createConfi
       if(!existingSetup&&CREDIT_PROVIDERS.includes(id)) {config.providers.find(p=>p.id===id).enabled=false;continue;}
       const settings = config.providers.find(provider => provider.id === id);
       const retainedEnabled = existingSetup ? settings.enabled : vault.listCredentialSlots(id).length>0;
+      const storedSlots=vault.getCredentialSlots(id),occupiedSlots=new Set(storedSlots.map(item=>item.slot));
+      const savedSecretSlots=new Map(storedSlots.map(item=>[item.values[names[0]],item.slot]));
+      const reservedSlots=new Set(),reservedSecrets=new Set(savedSecretSlots.keys());
+      for(const [index,values] of (submitted[id]??[]).entries()) {
+        const secret=values[names[0]]?.trim()??'';
+        if(secret&&names.every(name=>values[name]?.trim())&&!reservedSecrets.has(secret)) {reservedSlots.add(index+1);reservedSecrets.add(secret);}
+      }
+      const allocatedSlots=new Set();
       for(const [index,rawValues] of (submitted[id]??[]).entries()) {
-        const slot=index+1,values=Object.fromEntries(names.map(name=>[name,rawValues[name]?.trim()??'']));
+        const requestedSlot=index+1,values=Object.fromEntries(names.map(name=>[name,rawValues[name]?.trim()??'']));
         if(!Object.values(values).some(Boolean))continue;
-        if(Object.values(values).some(value=>!value)) {failedSet.add(id);slotResults.push({providerId:id,slot,status:'FAILED',reasonCode:'INCOMPLETE_CREDENTIALS',httpStatus:null});continue;}
+        if(Object.values(values).some(value=>!value)) {failedSet.add(id);slotResults.push({providerId:id,slot:requestedSlot,requestedSlot,status:'FAILED',reasonCode:'INCOMPLETE_CREDENTIALS',httpStatus:null});continue;}
+        const secret=values[names[0]],duplicateSlot=savedSecretSlots.get(secret);
+        if(duplicateSlot!==undefined) {slotResults.push({providerId:id,slot:requestedSlot,requestedSlot,status:'DUPLICATE',reasonCode:'DUPLICATE_CREDENTIAL',matchedSlot:duplicateSlot});continue;}
+        const slot=occupiedSlots.has(requestedSlot)?findNextFreeSlot(requestedSlot,occupiedSlots,reservedSlots,allocatedSlots):requestedSlot;
+        if(slot===null) {failedSet.add(id);slotResults.push({providerId:id,slot:requestedSlot,requestedSlot,status:'FAILED',reasonCode:'NO_EMPTY_SLOT',httpStatus:null});continue;}
+        allocatedSlots.add(slot);
         let provider,lastError=null,validated=false;
         try {
           const trusted = structuredClone(DEFAULT_CONFIG.providers.find(candidate => candidate.id === id));
@@ -133,11 +154,13 @@ export async function configure(input, paths, { protector, factory = createConfi
             }catch {model.enabled=false;model.allowed=false;codingCandidates.push({provider:id,slot,model:candidate.model,status:'not activated'});}
           }
           Object.assign(settings, {baseUrl:trusted.baseUrl,apiPrefix:trusted.apiPrefix,type:trusted.type,credentialField:trusted.credentialField,freeTierConfirmed:true});
-          vault.setCredentialSlot(id,slot,values);settings.enabled=true;acceptedSet.add(id);
-          slotResults.push({providerId:id,slot,status:'ACCEPTED',reasonCode:'SUCCESS',httpStatus:null});
+          vault.setCredentialSlot(id,slot,values);occupiedSlots.add(slot);savedSecretSlots.set(secret,slot);settings.enabled=true;acceptedSet.add(id);
+          slotResults.push({providerId:id,slot,requestedSlot,status:'ACCEPTED',reasonCode:'SUCCESS',httpStatus:null});
           if (!config.routing.directProviderOrder.includes(id)) config.routing.directProviderOrder.push(id);
         } catch(error) {
-          failedSet.add(id);const failure=validationReason(provider,error);slotResults.push({providerId:id,slot,status:'FAILED',...failure});
+          allocatedSlots.delete(slot);
+          if(!occupiedSlots.has(requestedSlot))reservedSlots.delete(requestedSlot);
+          failedSet.add(id);const failure=validationReason(provider,error);slotResults.push({providerId:id,slot,requestedSlot,status:'FAILED',...failure});
           settings.enabled=settings.enabled||retainedEnabled;
         }
       }

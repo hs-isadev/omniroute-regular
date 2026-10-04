@@ -160,13 +160,11 @@ export class FreeModelFailover {
       } catch (error) {
         if (!automatic || signal.aborted || (error instanceof SafeError && error.code === "STREAM_PARTIAL")) throw error;
         const failure = this.providers.get(selection.providerId)!.classifyError(error);
-        if (!["rate_limit", "transient", "timeout", "unavailable"].includes(failure.category)) throw error;
+        if (!["authentication", "rate_limit", "transient", "timeout", "unavailable"].includes(failure.category)) throw error;
         lastError = error;
         failures += 1;
-        if (["rate_limit", "transient", "timeout", "unavailable"].includes(failure.category)) {
-          const delay = failure.retryAfterMs ?? this.config.routing.freeModelCooldownMs;
-          this.limitedUntil.set(this.key(selection), this.now() + Math.max(1000, Math.min(86_400_000, Number.isFinite(delay) ? delay : this.config.routing.freeModelCooldownMs)));
-        }
+        const delay = failure.retryAfterMs ?? this.config.routing.freeModelCooldownMs;
+        this.limitedUntil.set(this.key(selection), this.now() + Math.max(1000, Math.min(86_400_000, Number.isFinite(delay) ? delay : this.config.routing.freeModelCooldownMs)));
         audit.fallbackAttempts.push({ providerId: selection.providerId, modelId: selection.modelId, outcome: `${label}: ${failure.category}` });
         audit.policyDecisions.push(`${label}: ${selection.providerId}/${selection.modelId} ${failure.category}; trying remaining eligible same-provider models before another provider`);
       } finally {

@@ -43,7 +43,10 @@ if (process.argv[1] && new URL(import.meta.url).pathname.endsWith('/settings-lin
     const validateCodingCandidates=(await hiddenPrompt('Test Kimi K2.6 / Qwen3 Coder free candidates? Up to one extra call per supplied key. Type yes: ')).trim().toLowerCase()==='yes';
     console.log('Validating supplied keys with small API requests (uses free quota)…');
     const result=await configure({keys,freeOnlyConfirmed:true,validateCodingCandidates},getRuntimePaths());
-    console.log(`Saved: ${result.accepted.join(', ') || 'existing keys retained'}.`);
+    const savedSlots=result.slotResults.filter(item=>item.status==='ACCEPTED').map(item=>item.requestedSlot!==item.slot?`${item.providerId} slot ${item.requestedSlot} was filled; saved to slot ${item.slot}`:`${item.providerId} slot ${item.slot}`);
+    console.log(`Saved: ${savedSlots.join(', ') || 'existing keys retained'}.`);
+    const duplicates=result.slotResults.filter(item=>item.status==='DUPLICATE').map(item=>`${item.providerId} matches saved slot ${item.matchedSlot}`);
+    if(duplicates.length)console.log(`Skipped duplicate keys: ${duplicates.join(', ')}.`);
     if(result.failed.length) console.log(`Not updated: ${result.failed.join(', ')}. Check keys, eligibility and free quota; saved working keys were preserved.`);
     for(const candidate of result.codingCandidates) console.log(`${candidate.provider}/${candidate.model}: ${candidate.status}`);
     console.log('Ready. Close any running OmniRoute Regular window, then run Launch.sh.');

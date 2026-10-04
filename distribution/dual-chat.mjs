@@ -54,11 +54,15 @@ export function applyVerifiedToolCapabilities(config){
   for(const provider of config.providers)for(const model of provider.models)if(verified.has(provider.id+'/'+model.modelId))model.capabilities.tool_calling=true;
 }
 async function requestWithCredentialPool(provider,pool,options){
-  const now=Date.now();let lastError=null;
+  const now=Date.now();let lastError=null;const indexes=[];
   for(let offset=0;offset<pool.entries.length;offset++){
-    const index=(pool.cursor+offset)%pool.entries.length,entry=pool.entries[index];
-    if(entry.cooldownUntil>now)continue;
-    try{const response=await entry.transport.request(provider.id,entry.path,options);pool.cursor=(index+1)%pool.entries.length;return response;}
+    const index=(pool.cursor+offset)%pool.entries.length;
+    if(pool.entries[index].cooldownUntil<=now)indexes.push(index);
+  }
+  if(indexes.length)pool.cursor=(indexes[0]+1)%pool.entries.length;
+  for(const index of indexes){
+    const entry=pool.entries[index];
+    try{const response=await entry.transport.request(provider.id,entry.path,options);return response;}
     catch(error){
       const failure=provider.classifyError(error);lastError=error;pool.lastError=error;
       if(pool.entries.length===1||!['authentication','rate_limit'].includes(failure.category))throw error;

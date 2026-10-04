@@ -7,12 +7,13 @@ const root=resolve(import.meta.dirname,'..');
 async function source(path){return readFile(resolve(root,path),'utf8');}
 
 test('Windows setup creates API Keys shortcuts that open the stable key editor',async()=>{
-  const [setup,launcher,readme,dualSetup,form]=await Promise.all([
+  const [setup,launcher,readme,dualSetup,form,settings]=await Promise.all([
     source('distribution/dual/Setup.ps1'),
     source('distribution/dual/Launch.ps1'),
     source('distribution/dual/README.md'),
     source('distribution/dual-setup.mjs'),
-    source('distribution/Settings.ps1')
+    source('distribution/Settings.ps1'),
+    source('distribution/settings.mjs')
   ]);
   assert.match(setup,/@\('OmniRoute API Keys','keys'\)/);
   assert.match(setup,/Launch\.ps1.*-Action '\+\$item\[1\]/);
@@ -22,7 +23,10 @@ test('Windows setup creates API Keys shortcuts that open the stable key editor',
   assert.match(launcher,/ValidateSet\([^\n]*'keys'/);
   assert.match(launcher,/\$guiAction=\$Action -in @\([^\n]*'keys'/);
   assert.match(launcher,/if\(\$guiAction\).*?\$node \$entry \$Action/s);
-  assert.match(readme,/click \*\*OmniRoute API Keys\*\*[\s\S]*five slots per provider[\s\S]*add or\s+replace provider keys/i);
+  assert.match(readme,/click \*\*OmniRoute API Keys\*\*[\s\S]*five slots per provider[\s\S]*filled slots are never overwritten[\s\S]*duplicate keys are skipped/i);
+  assert.match(form,/Skipped duplicate keys/);
+  assert.match(settings,/DUPLICATE_CREDENTIAL/);
+  assert.match(settings,/findNextFreeSlot/);
 });
 
 test('Linux setup creates a clickable API Keys application-menu launcher',async()=>{
@@ -39,9 +43,9 @@ test('private package version is bumped consistently without overwriting the pri
     source('scripts/package-private.mjs'),
     source('scripts/seal-private.mjs'),
     source('scripts/test-family-package.mjs'),
-    source('docs/releases/v0.6.6-private.14.md')
+    source('docs/releases/v0.6.6-private.15.md')
   ]);
-  for(const file of [packager,sealer,packageTest])assert.match(file,/0\.6\.6-private\.14/);
+  for(const file of [packager,sealer,packageTest])assert.match(file,/0\.6\.6-private\.15/);
   assert.match(packager,/Private package folder exists; preserve it before rebuilding/);
   assert.match(sealer,/Archive already exists; never silently overwrite/);
   assert.match(notes,/OmniRoute API Keys/);

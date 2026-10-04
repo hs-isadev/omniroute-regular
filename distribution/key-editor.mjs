@@ -152,7 +152,10 @@ export async function runEditorSetup({paths=getRuntimePaths(),prompt=ask,launch=
   const validateCodingCandidates=(await prompt('Also test Kimi/Qwen candidates (extra free quota)? Type yes, or Enter to skip: ')).trim().toLowerCase()==='yes';
   tell('Validating small requests against trusted free-provider profiles...');
   const result=await importKeyFile({file,paths,freeOnlyConfirmed:true,validateCodingCandidates,protector,factory});
-  tell('Ready. Saved: '+(result.accepted.join(', ')||'existing keys retained')+'. Successful plaintext values removed.');
+  const savedSlots=result.slotResults.filter(item=>item.status==='ACCEPTED').map(item=>item.requestedSlot!==item.slot?`${item.providerId} slot ${item.requestedSlot} was filled; saved to slot ${item.slot}`:`${item.providerId} slot ${item.slot}`);
+  tell('Ready. Saved: '+(savedSlots.join(', ')||'existing keys retained')+'. Successful plaintext values removed.');
+  const duplicates=result.slotResults.filter(item=>item.status==='DUPLICATE').map(item=>`${item.providerId} matches saved slot ${item.matchedSlot}`);
+  if(duplicates.length)tell('Skipped duplicate keys: '+duplicates.join(', ')+'.');
   if(result.failed.length)tell('Not updated: '+result.failed.join(', ')+'. These values remain in the file for retry; existing saved keys were kept.');
   tell('Editor backups, clipboard history and storage snapshots are outside this cleanup.');
   return result;

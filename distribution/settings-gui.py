@@ -61,7 +61,15 @@ def submit(node, app, runtime, credentials, consent, existing_setup=False):
         if result.returncode != 0 or data.get('ready') is not True:
             raise ValueError('Validation failed')
         ids = {row[0] for row in PROVIDERS}
-        slot_results = [item for item in data.get('slotResults', []) if isinstance(item, dict) and item.get('providerId') in ids and item.get('slot') in range(1, 6) and item.get('status') in ('ACCEPTED', 'FAILED')]
+        slot_results = []
+        for item in data.get('slotResults', []):
+            if not isinstance(item, dict) or item.get('providerId') not in ids or item.get('slot') not in range(1, 6) or item.get('status') not in ('ACCEPTED', 'FAILED', 'DUPLICATE'):
+                continue
+            safe_item = {key: item[key] for key in ('providerId', 'slot', 'status')}
+            if isinstance(item.get('reasonCode'), str): safe_item['reasonCode'] = item['reasonCode']
+            for key in ('requestedSlot', 'matchedSlot'):
+                if item.get(key) in range(1, 6): safe_item[key] = item[key]
+            slot_results.append(safe_item)
         stored = [{'providerId': item['providerId'], 'slots': [slot for slot in item.get('slots', []) if slot in range(1, 6)]} for item in data.get('stored', []) if isinstance(item, dict) and item.get('providerId') in ids]
         return {'ready': True, 'accepted': [p for p in data.get('accepted', []) if p in ids], 'failed': [p for p in data.get('failed', []) if p in ids], 'slotResults': slot_results, 'stored': stored}
     except (OSError, ValueError, TypeError, AttributeError, subprocess.SubprocessError):
@@ -130,11 +138,13 @@ def main():
             state['ready'] = True
             for box in boxes.values(): box.delete(0, 'end')
             message = 'Your existing OmniRoute setup was updated; its routing settings and other saved keys were kept.' if args.existing else 'Validation finished. Both host launchers are ready.'
-            accepted = [f"{item['providerId']} slot {item['slot']}" for item in result['slotResults'] if item['status'] == 'ACCEPTED']
-            failed = [f"{item['providerId']} slot {item['slot']} ({item.get('reasonCode', 'PROVIDER_ERROR')})" for item in result['slotResults'] if item['status'] == 'FAILED']
+            accepted = [f"{item['providerId']} slot {item.get('requestedSlot')} was filled; saved to slot {item['slot']}" if item.get('requestedSlot') in range(1, 6) and item.get('requestedSlot') != item['slot'] else f"{item['providerId']} slot {item['slot']}" for item in result['slotResults'] if item['status'] == 'ACCEPTED']
+            failed = [f"{item['providerId']} slot {item.get('requestedSlot')} was filled; slot {item['slot']} could not be saved ({item.get('reasonCode', 'PROVIDER_ERROR')})" if item.get('requestedSlot') in range(1, 6) and item.get('requestedSlot') != item['slot'] else f"{item['providerId']} slot {item['slot']} ({item.get('reasonCode', 'PROVIDER_ERROR')})" for item in result['slotResults'] if item['status'] == 'FAILED']
+            duplicates = [f"{item['providerId']} slot {item['slot']} duplicates saved slot {item.get('matchedSlot')}" if item.get('matchedSlot') in range(1, 6) else f"{item['providerId']} slot {item['slot']} was already saved" for item in result['slotResults'] if item['status'] == 'DUPLICATE']
             stored = [f"{item['providerId']} ({len(item['slots'])} stored)" for item in result['stored']]
             if accepted: message += '\nAccepted and stored: ' + ', '.join(accepted) + '.'
             if failed: message += '\nNot stored: ' + ', '.join(failed) + '. Existing saved slots were kept.'
+            if duplicates: message += '\nSkipped duplicate keys: ' + ', '.join(duplicates) + '.'
             if stored: message += '\nCurrently available: ' + ', '.join(stored) + '.'
             messagebox.showinfo('Saved', message); window.destroy(); return
         status.set(result['error']); window.after(100, poll)

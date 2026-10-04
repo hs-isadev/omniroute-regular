@@ -57,8 +57,12 @@ open during setup to refresh its skill list.
 - **Add keys later:** click **OmniRoute API Keys** on the Windows Desktop or in
   the Start Menu. On Linux, open your applications menu and choose **OmniRoute
   API Keys**. Both shortcuts open the masked key form with five slots per provider.
-  Add or replace provider keys without rerunning setup; routing settings and
-  other saved keys are preserved. OmniRoute restarts after an accepted key change.
+  Add provider keys without rerunning setup; filled slots are never overwritten,
+  duplicate keys are skipped, and a new key moves to the next free slot. The
+  message shows where it was saved. Routing settings and other saved keys are
+  preserved. Requests rotate across keys and fail over to another authorized
+  provider after authentication or rate-limit failures. OmniRoute restarts after
+  an accepted key change.
 - **OmniRoute Usage:** shows exact provider-reported worker tokens offloaded.
   Actual host tokens saved stays unavailable because a counterfactual host-only
   run cannot be observed.

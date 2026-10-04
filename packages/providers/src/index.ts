@@ -982,11 +982,12 @@ export class CredentialPoolProvider implements ProviderAdapter {
 
   async *stream(request: GenerateRequest): AsyncGenerator<ProviderStreamEvent> {
     let lastError: unknown = null;
-    for (const index of this.#availableIndexes()) {
+    const indexes = this.#availableIndexes();
+    if (indexes.length) this.#cursor = (indexes[0]! + 1) % this.#providers.length;
+    for (const index of indexes) {
       let emitted = false;
       try {
         for await (const event of this.#providers[index]!.stream(request)) { emitted = true; yield event; }
-        this.#cursor = (index + 1) % this.#providers.length;
         return;
       } catch (error) {
         if (emitted || !this.#canTryAnother(index, error)) throw error;
@@ -1006,10 +1007,11 @@ export class CredentialPoolProvider implements ProviderAdapter {
 
   async #attempt<T>(operation: (provider: ProviderAdapter) => Promise<T>): Promise<T> {
     let lastError: unknown = null;
-    for (const index of this.#availableIndexes()) {
+    const indexes = this.#availableIndexes();
+    if (indexes.length) this.#cursor = (indexes[0]! + 1) % this.#providers.length;
+    for (const index of indexes) {
       try {
         const result = await operation(this.#providers[index]!);
-        this.#cursor = (index + 1) % this.#providers.length;
         return result;
       } catch (error) {
         if (!this.#canTryAnother(index, error)) throw error;

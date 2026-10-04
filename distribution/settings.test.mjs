@@ -60,7 +60,7 @@ test('a failed credential slot is identified and does not overwrite that saved s
   const {paths,protector}=await context();
   await configure({slots:{groq:[{GROQ_API_KEY:'fixture-old-one'},{GROQ_API_KEY:'fixture-old-two'}]},freeOnlyConfirmed:true},paths,{protector,factory:success});
   const result=await configure({slots:{groq:[{}, {GROQ_API_KEY:'fixture-bad-two'}, {GROQ_API_KEY:'fixture-good-three'}]},freeOnlyConfirmed:true},paths,{protector,factory:(_settings,values)=>({generate:async()=>{if(values.GROQ_API_KEY.includes('bad'))throw {category:'authentication',providerStatus:401};return {text:'OK'};},classifyError:error=>error})});
-  assert.deepEqual(result.slotResults.map(item=>[item.slot,item.status,item.reasonCode]),[[2,'FAILED','INVALID_AUTHENTICATION'],[3,'ACCEPTED','SUCCESS']]);
+  assert.deepEqual(result.slotResults.map(item=>[item.requestedSlot,item.slot,item.status,item.reasonCode]),[[2,4,'FAILED','INVALID_AUTHENTICATION'],[3,3,'ACCEPTED','SUCCESS']]);
   const vault=await SecretVault.load(paths.vault,protector);const saved=vault.getCredentialSlots('groq');
   assert.equal(saved.find(item=>item.slot===2).values.GROQ_API_KEY,'fixture-old-two');
   assert.equal(saved.find(item=>item.slot===3).values.GROQ_API_KEY,'fixture-good-three');vault.dispose();

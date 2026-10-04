@@ -212,6 +212,26 @@ test("concurrent provider requests reserve different API-key slots before sendin
   assert.deepEqual(calls, ["Bearer fake-concurrent-first", "Bearer fake-concurrent-second"]);
 });
 
+test("an invalid provider key falls through to the next saved key", async () => {
+  const config = configFixture();
+  config.providers.find((provider) => provider.id === "openai")!.enabled = true;
+  const calls: string[] = [];
+  const providers = createProviders(config, {
+    credentials: { openai: [{ OPENAI_API_KEY: "fake-invalid-first" }, { OPENAI_API_KEY: "fake-valid-second" }] },
+    skipDnsValidationForTests: true,
+    fetchImpl: async (_url, init) => {
+      const authorization = String((init?.headers as Record<string, string>)?.authorization ?? "");
+      calls.push(authorization);
+      return authorization.endsWith("fake-invalid-first")
+        ? new Response("invalid key", { status: 401 })
+        : Response.json({ id: "response", output_text: "ok" });
+    },
+  });
+  const request = { modelId: "gpt-5.6-sol", prompt: "synthetic", instructions: "reply", reasoningEffort: "low" as const, maxOutputTokens: 16, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null };
+  assert.equal((await providers.get("openai")!.generate(request)).text, "ok");
+  assert.deepEqual(calls, ["Bearer fake-invalid-first", "Bearer fake-valid-second"]);
+});
+
 test("model registry isolates a slow provider from later provider health checks", async () => {
   const config = configFixture();
   const slowSettings = config.providers.find((provider) => provider.id === "openai")!;

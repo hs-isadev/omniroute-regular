@@ -19,9 +19,16 @@ sign in to your own accounts.
 5. Sign in yourself when an app or the optional separate browser opens. Restart
    any coding app that was already open.
 
-To add or change keys later, click **OmniRoute API Keys** on the Windows Desktop
+To add more keys later, click **OmniRoute API Keys** on the Windows Desktop
 or in the Start Menu. On Linux, find **OmniRoute API Keys** in your applications
 menu.
+
+Each provider can use up to five API keys. If you paste a new key into a slot
+that is already filled, OmniRoute keeps the saved key and moves the new key to
+the next available slot. Exact duplicate keys are skipped, and the save message
+identifies the slot used. Requests rotate across available keys for that provider;
+authentication and rate-limit failures try another key, then another eligible
+provider if needed.
 
 ## What setup does
 

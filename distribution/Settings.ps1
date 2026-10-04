@@ -118,11 +118,13 @@ $save.Add_Click({
     if($RequireReady -and -not $Simple) {$message='Saved. Next, return to the setup terminal to choose your project folder.'}
     if($ExistingSetup) {$message='Saved for your existing OmniRoute setup. Modes, port and existing keys were preserved.'}
     if($result.restartNeeded) {$message+=' Restart OmniRoute with omni service stop, then omni service start.'}
-    $acceptedSlots=@($result.slotResults | Where-Object {$_.status -eq 'ACCEPTED'} | ForEach-Object {$_.providerId+' slot '+$_.slot})
-    $failedSlots=@($result.slotResults | Where-Object {$_.status -eq 'FAILED'} | ForEach-Object {$_.providerId+' slot '+$_.slot+' ('+$_.reasonCode+')'})
+    $acceptedSlots=@($result.slotResults | Where-Object {$_.status -eq 'ACCEPTED'} | ForEach-Object {if($_.requestedSlot -and $_.requestedSlot -ne $_.slot){$_.providerId+' slot '+$_.requestedSlot+' was filled; saved to slot '+$_.slot}else{$_.providerId+' slot '+$_.slot}})
+    $failedSlots=@($result.slotResults | Where-Object {$_.status -eq 'FAILED'} | ForEach-Object {if($_.requestedSlot -and $_.requestedSlot -ne $_.slot){$_.providerId+' slot '+$_.requestedSlot+' was filled; slot '+$_.slot+' could not be saved ('+$_.reasonCode+')'}else{$_.providerId+' slot '+$_.slot+' ('+$_.reasonCode+')'}})
+    $duplicateSlots=@($result.slotResults | Where-Object {$_.status -eq 'DUPLICATE'} | ForEach-Object {if($_.matchedSlot){$_.providerId+' slot '+$_.slot+' duplicates saved slot '+$_.matchedSlot}else{$_.providerId+' slot '+$_.slot+' was already saved'}})
     $storedProviders=@($result.stored | ForEach-Object {$_.providerId+' ('+@($_.slots).Count+' stored)'})
     if($acceptedSlots.Count -gt 0) {$message+=[Environment]::NewLine+'Accepted and stored: '+($acceptedSlots -join ', ')+'.'}
     if($failedSlots.Count -gt 0) {$message+=[Environment]::NewLine+'Not stored: '+($failedSlots -join ', ')+'. Existing saved slots were kept.'}
+    if($duplicateSlots.Count -gt 0) {$message+=[Environment]::NewLine+'Skipped duplicate keys: '+($duplicateSlots -join ', ')+'.'}
     if($storedProviders.Count -gt 0) {$message+=[Environment]::NewLine+'Currently available: '+($storedProviders -join ', ')+'.'}
     foreach($candidate in $result.codingCandidates) {$message+=[Environment]::NewLine+$candidate.provider+'/'+$candidate.model+': '+$candidate.status}
     [Windows.Forms.MessageBox]::Show($message,'Ready'); $script:setupReady=$true; $form.Close()

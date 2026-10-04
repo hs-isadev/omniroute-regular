@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {verifyPackage} from '../distribution/install.mjs';
 import {BUNDLED_SKILLS} from '../distribution/skill-catalog.mjs';
 
-const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-Private-0.6.6-private.14';
+const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-Private-0.6.6-private.15';
 const bundledSkills=BUNDLED_SKILLS;
 const archive=resolve(process.argv[2]??join(repo,'release',name+'.zip'));
 const temp=await mkdtemp(join(repo,'test-artifacts/family-smoke-'));
@@ -32,8 +32,14 @@ const linuxBootstrap=await readFile(join(family,'Linux','payload/app/distributio
 assert.match(linuxBootstrap,/["']API Keys["],["']keys["']/);
 const windowsDualSetup=await readFile(join(family,'Windows','payload/app/distribution/dual-setup.mjs'),'utf8');
 const windowsKeyForm=await readFile(join(family,'Windows','payload/app/distribution/Settings.ps1'),'utf8');
+const packagedSettings=await readFile(join(family,'Windows','payload/app/distribution/settings.mjs'),'utf8');
+const packagedProviderPool=await readFile(join(family,'Windows','payload/app/packages/providers/dist/index.js'),'utf8');
+const packagedOpenCodePool=await readFile(join(family,'Windows','payload/app/distribution/dual-chat.mjs'),'utf8');
 assert.match(windowsDualSetup,/else if\([A-Za-z_$][\w$]*===['"]keys['"]\)await [A-Za-z_$][\w$]*\([A-Za-z_$][\w$]*,\{existingSetup:(?:true|!0)\}\)/);
 assert.ok(windowsKeyForm.includes('for($slot=1;$slot -le 5;$slot++)'));
+assert.match(packagedSettings,/DUPLICATE_CREDENTIAL/);assert.match(packagedSettings,/findNextFreeSlot/);
+assert.match(packagedProviderPool,/credentialSlotCount/);assert.match(packagedProviderPool,/this\.#[\w]+\s*=\s*\(indexes\[0\]/);
+assert.match(packagedOpenCodePool,/pool\.cursor=\(indexes\[0\]\+1\)/);
 const linuxKeyForm=await readFile(join(family,'Linux','payload/app/distribution/settings-gui.py'),'utf8');
 assert.ok(linuxKeyForm.includes("parser.add_argument('--existing', action='store_true')"));
 assert.ok(linuxKeyForm.includes("command.extend(('--existing', '--restart'))"));
