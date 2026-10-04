@@ -22,9 +22,10 @@ the key file survives and rollback selects the immediately previous version.
 - `node --test distribution/install.test.mjs distribution/dual-setup.test.mjs`:
   **38/38 passed**.
 - `npm run test:regular`: **179 passed, 2 platform-specific skips**, no failures.
-- The family-package smoke adds checks that both packaged OS installers include
-  the pruning implementation and both launchers include the harness dispatch.
-  Its final result is recorded alongside the release validation.
+- The final 0.6.7 family ZIP smoke scanned **2,781 archive entries**, verified
+  both OS manifests, completed **3 Antigravity and 3 OpenCode registered MCP
+  handshakes**, and exercised update/rollback. The provider was a fixture; no
+  live inference ran. Native Linux installation was not tested.
 
 The cleanup only removes version directories whose installer manifest, payload
 hashes, exact file inventory, and directory shape all verify. Directories with

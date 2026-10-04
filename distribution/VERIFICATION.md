@@ -104,3 +104,10 @@ verified managed copies; provider keys/settings are outside the pruned version
 folders. Extra or modified runtime files are left untouched. The TDD evidence in
 `docs/testing/harness-launch-and-version-prune.tdd.md` records launcher, pruning,
 package, and update/rollback checks for this release.
+
+Release 0.6.7 verification: `npm test` passed 197/197; `npm run test:regular`
+passed 179 tests with two platform-specific skips. The extracted family ZIP smoke
+scanned 2,781 entries, verified Windows and Linux manifests, repaired the install
+and registrations through update/rollback, and completed three registered MCP
+handshakes each for Antigravity and OpenCode using a fake provider. No live
+inference ran. Native Linux installation remains unverified.
