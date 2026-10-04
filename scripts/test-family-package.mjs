@@ -39,7 +39,7 @@ assert.match(packagedSettings,/DUPLICATE_CREDENTIAL/);assert.match(packagedSetti
 assert.match(packagedProviderPool,/credentialSlotCount/);
 assert.match(windowsDualSetup,/else if\([A-Za-z_$][\w$]*===['"]keys['"]\)await [A-Za-z_$][\w$]*\([A-Za-z_$][\w$]*,\{existingSetup:(?:true|!0)\}\)/);
 assert.ok(windowsKeyForm.includes('for($slot=1;$slot -le 5;$slot++)'));
-assert.match(packagedOpenCodePool,/\.cursor=\([^)]*\[0\]\+1\)%[^;]*\.entries\.length/);
+assert.match(packagedOpenCodePool,/\.cursor=\(index\+1\)%pool\.entries\.length/);
 const linuxKeyForm=await readFile(join(family,'Linux','payload/app/distribution/settings-gui.py'),'utf8');
 assert.ok(linuxKeyForm.includes("parser.add_argument('--existing', action='store_true')"));
 assert.ok(linuxKeyForm.includes("command.extend(('--existing', '--restart'))"));
