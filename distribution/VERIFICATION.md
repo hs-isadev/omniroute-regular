@@ -8,7 +8,7 @@
   exact boundaries, response/instruction/synthesis reserves, host-owned synthesis,
   and suppression of coupled or oversized work.
 - The installed MCP server completes initialize/tools-list and advertises
-  omni_route, omni_models, omni_routes and omni_usage. The 0.6.9 payload omits
+  omni_route, omni_models, omni_routes and omni_usage. The 0.6.10 payload omits
   all browser-consumer adapters and their Playwright runtime dependency.
 - The family archive is inspected against its manifest and checksums. It contains
   generated runtime code and required launch assets, no repository checkout,

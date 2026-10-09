@@ -9,7 +9,7 @@ test('default packages bundle MCP but not OpenCode and include provenance',async
 });
 test('private family package preserves attribution and excludes browser-consumer adapters',async()=>{
   const build=await source('../scripts/package-private.mjs');
-  assert.match(build,/version='0\.6\.9'/);
+  assert.match(build,/version='0\.6\.10'/);
   for(const component of ['contracts','core','integrations','mcp-server','observability','providers']) assert.ok(build.includes(component),`updated ${component} dist is not overlaid`);
   assert.match(build,/hosts=\['opencode','antigravity','codex','claude-code'\]/);
   assert.doesNotMatch(build,/consumer-adapter|web-consumer|playwright-core/);

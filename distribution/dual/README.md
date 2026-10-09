@@ -1,4 +1,4 @@
-# OmniRoute 0.6.9 — browser-consumer adapters removed
+# OmniRoute 0.6.10 — browser-consumer adapters removed
 
 This update verifies the installed MCP runtime before host registration, repairs
 registrations after updates, isolates provider health deadlines, and

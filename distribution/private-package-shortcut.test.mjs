@@ -46,15 +46,15 @@ test('shareable package version is bumped consistently without overwriting the p
     source('scripts/package-private.mjs'),
     source('scripts/seal-private.mjs'),
     source('scripts/test-family-package.mjs'),
-    source('docs/releases/v0.6.9.md'),
+    source('docs/releases/v0.6.10.md'),
     source('distribution/install.mjs')
   ]);
-  for(const file of [packager,sealer,packageTest])assert.match(file,/0\.6\.9/);
+  for(const file of [packager,sealer,packageTest])assert.match(file,/0\.6\.10/);
   assert.match(packager,/Package folder exists; preserve it before rebuilding/);
   assert.match(sealer,/Archive already exists; never silently overwrite/);
-  assert.match(notes,/Browser-consumer adapters have been removed/);
-  assert.match(notes,/preserves unrelated/);
+  assert.match(notes,/This package completes browser-consumer removal/);
+  assert.match(notes,/orphaned Playwright lockfile records/);
   assert.match(notes,/Devin\s+CLI integration remains optional/);
-  assert.match(sealer,/OmniRoute-0\.6\.9/);
+  assert.match(sealer,/OmniRoute-0\.6\.10/);
   assert.match(installer,/async function pruneOldRuntimeVersions/);
 });

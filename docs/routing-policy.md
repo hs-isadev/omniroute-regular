@@ -175,13 +175,11 @@ status, confirmed zero input/output price, known limits, sufficient context and
 all required capabilities. Known quota limits and model cooldowns exclude a
 candidate. Classified transient/unavailable/timeout failures also cool down the
 failed model, avoiding immediate reselection from a stale health snapshot.
-`providers[].maxConcurrentRequests` controls per-provider in-flight calls (browser
-default one, API default daemon route concurrency). Browser adapters retain their
-own spacing, rolling budgets and blocking cooldowns; the selector cannot override
-them. Small-only consumers are excluded for medium/large/critical work, even when
-pinned. Unknown task class excludes a class-limited consumer. The Regular MCP
-coding quality floor remains tier four for demanding coding; ordinary eligible
-text/code requests may use Qwen, Kimi or any other supported browser provider.
+`providers[].maxConcurrentRequests` controls per-provider in-flight API calls.
+Known quota limits and model cooldowns exclude a candidate; the selector does not
+rotate keys or models to bypass provider limits. The Regular MCP coding quality
+floor remains tier four for demanding coding, while ordinary eligible text/code
+requests may use any configured API provider that meets the request's constraints.
 
 The selected candidate is attempted first. Only a failure or current eligibility
 loss permits fallback. Fallback tries remaining eligible models on that provider
