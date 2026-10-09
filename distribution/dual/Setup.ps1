@@ -2,13 +2,17 @@
 param([string]$InstallRoot=(Join-Path $env:LOCALAPPDATA 'OmniRouteRegular'),[switch]$InstallOnly)
 $ErrorActionPreference='Stop'
 $InstallRoot=[IO.Path]::GetFullPath($InstallRoot)
+function Test-DevinPublisher($signature) {
+  $certificate=$signature.SignerCertificate
+  return $signature.Status -eq 'Valid' -and $null -ne $certificate -and $certificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName,$false) -ieq 'Exafunction, Inc.' -and $certificate.Subject -match '(?i)(?:^|,\s*)O\s*=\s*"?Exafunction,\s*Inc\.?"?(?:\s*,|$)'
+}
 function Get-VerifiedDevinCli {
   $segments=@([Environment]::GetEnvironmentVariable('Path','Machine'),[Environment]::GetEnvironmentVariable('Path','User'),$env:Path) | Where-Object { $_ }
   $env:Path=($segments -join ';')
   $command=Get-Command devin -CommandType Application -ErrorAction SilentlyContinue
   if($null -eq $command){return $null}
   $signature=Get-AuthenticodeSignature -LiteralPath $command.Source
-  if($signature.Status -cne 'Valid' -or $signature.SignerCertificate.Subject -cne 'CN="Exafunction, Inc.", O="Exafunction, Inc.", L=Mountain View, S=California, C=US'){return $null}
+  if(-not(Test-DevinPublisher $signature)){return $null}
   return $command.Source
 }
 $node=Join-Path $PSScriptRoot 'payload/node/node.exe'

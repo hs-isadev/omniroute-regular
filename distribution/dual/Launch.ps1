@@ -2,6 +2,10 @@
 param([ValidateSet('opencode','antigravity','devin','keys','usage','setup','harness')][string]$Action='opencode',[Parameter(ValueFromRemainingArguments=$true)][string[]]$Extra)
 $ErrorActionPreference='Stop'
 $guiAction=$Action -in @('antigravity','keys')
+function Test-DevinPublisher($signature) {
+  $certificate=$signature.SignerCertificate
+  return $signature.Status -eq 'Valid' -and $null -ne $certificate -and $certificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName,$false) -ieq 'Exafunction, Inc.' -and $certificate.Subject -match '(?i)(?:^|,\s*)O\s*=\s*"?Exafunction,\s*Inc\.?"?(?:\s*,|$)'
+}
 try {
   $active=(Get-Content -LiteralPath (Join-Path $PSScriptRoot 'active-version.txt') -Raw).Trim()
   if($active -notmatch '^versions/[a-zA-Z0-9.-]+$'){throw 'Invalid active version'}
@@ -11,7 +15,7 @@ try {
     $env:Path=($segments -join ';')
     $devin=Get-Command devin -CommandType Application -ErrorAction Stop
     $signature=Get-AuthenticodeSignature -LiteralPath $devin.Source
-    if($signature.Status -cne 'Valid' -or $signature.SignerCertificate.Subject -cne 'CN="Exafunction, Inc.", O="Exafunction, Inc.", L=Mountain View, S=California, C=US'){throw 'The installed Devin CLI signature could not be verified.'}
+    if(-not(Test-DevinPublisher $signature)){throw 'The installed Devin CLI signature could not be verified.'}
     $env:OMNIROUTE_DEVIN_EXECUTABLE=$devin.Source
   }
   $node=Join-Path $PSScriptRoot ($active+'/node/node.exe')

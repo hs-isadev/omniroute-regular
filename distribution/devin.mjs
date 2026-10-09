@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process';
 import { isAbsolute, join } from 'node:path';
 
 const SAFE_ENVIRONMENT=['PATH','PATHEXT','SYSTEMROOT','WINDIR','COMSPEC','TEMP','TMP','USERPROFILE','HOMEDRIVE','HOMEPATH','APPDATA','LOCALAPPDATA','PROGRAMDATA','USERNAME','USERDOMAIN','OS','HOME','USER','SHELL','TMPDIR','TERM','TERM_PROGRAM','COLORTERM','LANG','LC_ALL','NO_COLOR','FORCE_COLOR','WT_SESSION','WT_PROFILE_ID'];
-const DEVIN_SIGNER_SUBJECT='CN="Exafunction, Inc.", O="Exafunction, Inc.", L=Mountain View, S=California, C=US';
 
 function validatePath(path,label){
   if(typeof path!=='string'||!isAbsolute(path)||/[\r\n\0]/.test(path))throw new Error(`Invalid ${label} path.`);
@@ -44,9 +43,11 @@ export function devinMcpArguments({root,node,entrypoint}){
 
 async function verifyWindowsSignature(executable){
   if(process.platform!=='win32')return false;
-  const script=`$signature=Get-AuthenticodeSignature -LiteralPath $args[0]; if($signature.Status -ceq 'Valid' -and $signature.SignerCertificate.Subject -ceq '${DEVIN_SIGNER_SUBJECT}') { exit 0 }; exit 1`;
+  const encodedPath=Buffer.from(executable,'utf16le').toString('base64');
+  const script=`$path=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${encodedPath}')); $signature=Get-AuthenticodeSignature -LiteralPath $path; $certificate=$signature.SignerCertificate; if($signature.Status -eq 'Valid' -and $null -ne $certificate -and $certificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName,$false) -ieq 'Exafunction, Inc.' -and $certificate.Subject -match '(?i)(?:^|,\\s*)O\\s*=\\s*"?Exafunction,\\s*Inc\\.?"?(?:\\s*,|$)') { exit 0 }; exit 1`;
+  const encodedCommand=Buffer.from(script,'utf16le').toString('base64');
   return new Promise(resolvePromise=>{
-    const child=spawn('powershell.exe',['-NoLogo','-NoProfile','-NonInteractive','-Command',script,executable],{stdio:'ignore',shell:false,windowsHide:true});
+    const child=spawn('powershell.exe',['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',encodedCommand],{stdio:'ignore',shell:false,windowsHide:true});
     child.once('error',()=>resolvePromise(false));child.once('exit',code=>resolvePromise(code===0));
   });
 }
