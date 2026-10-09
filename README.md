@@ -6,7 +6,7 @@ sign in to your own accounts.
 
 ## Install it
 
-1. [Download the latest setup ZIP](https://github.com/hs-isadev/omniroute-regular/releases/latest).
+1. [Download the latest setup ZIP](https://github.com/hs-isadev/omniroute-regular/releases/download/v0.6.10/OmniRoute-0.6.10.zip).
 2. Extract the **whole ZIP**. Keep its files together; do not run setup from
    inside the compressed ZIP.
 3. Start setup:
