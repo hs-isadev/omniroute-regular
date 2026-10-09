@@ -18,8 +18,7 @@ independent work, estimate input and output tokens, obtain trustworthy context a
 output limits from omni_models, and reserve room for instructions, response and
 host synthesis. Unknown or insufficient limits mean shorten the packet or keep
 the work with the host. Do not upload full transcripts, credentials, cookies or
-unrelated private data. Browser consumers remain paced, small-only and excluded
-from parallel implementation swarms.
+unrelated private data.
 
 The optional omni_route taskPacket field contains objective, excerpts (path/text),
 constraints, acceptanceCriteria, requestedOutput, independent, worthwhile,

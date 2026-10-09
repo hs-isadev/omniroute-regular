@@ -7,9 +7,9 @@
 - Bounded delegation tests cover packet minimization, known/unknown context limits,
   exact boundaries, response/instruction/synthesis reserves, host-owned synthesis,
   and suppression of coupled or oversized work.
-- The installed Windows MCP server completes initialize/tools-list and advertises
-  omni_route, omni_models, omni_routes and omni_usage. The shareable 0.6.8 setup
-  keeps consumer-browser providers disabled.
+- The installed MCP server completes initialize/tools-list and advertises
+  omni_route, omni_models, omni_routes and omni_usage. The 0.6.9 payload omits
+  all browser-consumer adapters and their Playwright runtime dependency.
 - The family archive is inspected against its manifest and checksums. It contains
   generated runtime code and required launch assets, no repository checkout,
   development tests/plans, source maps, user credentials or browser sessions.
@@ -18,9 +18,9 @@
   entrypoint, repair the exact Antigravity and OpenCode registrations, complete
   initialize/tools-list using each registered command, roll back and repeat both
   handshakes, then roll forward and repeat them again.
-- Setup disables all browser-consumer providers and removes recognized OmniRoute
-  consumer-browser autostart entries on Windows/Linux. It preserves unknown
-  same-name startup files and every browser profile/sign-in file.
+- Upgrade migration disables saved browser-consumer routes and removes only
+  recognized OmniRoute consumer-browser autostart entries on Windows/Linux. It
+  preserves unknown same-name startup files and all browser profile/sign-in data.
 - The package includes eleven compact, portable skills: focused implementation,
   focused code review, root-cause debugging, verify change, TDD workflow, coding
   standards, search first, security review, context budget, OmniRoute-first
@@ -67,8 +67,8 @@
   request used a fake provider; no live inference ran. Native Linux installation
   was not tested. The smoke also verified update/rollback, the source archive,
   setup UI fields, and safe optional-Devin failure handling.
-- Provider availability and host model choice are user-dependent. Browser
-  consumers are disabled in the 0.6.8 shareable package.
+- Provider availability and host model choice are user-dependent. Browser-
+  consumer adapters are not part of the 0.6.9 shareable package.
 
 Local source gates on 2026-09-29: `npm run test:regular` passed 160 tests with
 two skips. The Windows/Linux release archive is also validated against its

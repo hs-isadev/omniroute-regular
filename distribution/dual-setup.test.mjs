@@ -156,7 +156,7 @@ test('upgrade repair disables browser consumers, removes only OmniRoute startup 
   assert.equal(typeof mod.disableBrowserConsumers,'function','browser-consumer disable migration missing');
   const home=await mkdtemp(join(tmpdir(),'dual-disable-consumers-')),root=join(home,'OmniRouteRegular');
   const paths=getRuntimePaths(join(root,'data')),config=regularConfig();
-  const qwen=config.providers.find(provider=>provider.id==='qwen-consumer');Object.assign(qwen,{enabled:true,mcpCommand:process.execPath,mcpArgs:[join(home,'adapter.mjs')],mcpWorkingDirectory:home});
+  const qwen={id:'qwen-consumer',type:'mcp-stdio',enabled:true,freeTierOnly:true,credentialField:null,baseUrl:'http://127.0.0.1:9222',apiPrefix:'',mcpCommand:process.execPath,mcpArgs:[join(home,'adapter.mjs')],mcpWorkingDirectory:home,maxTaskClass:'small',discoveryTtlSeconds:60,models:[]};config.providers.push(qwen);
   config.routing.directProviderOrder=['qwen-consumer','openrouter'];await saveConfig(config,paths);
   const appData=join(home,'AppData/Roaming'),startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup');await mkdir(startup,{recursive:true});
   const managed=join(startup,'OmniRoute Browser Consumers.vbs');
@@ -180,30 +180,6 @@ test('Linux upgrade removes recognized browser-consumer autostart but keeps unre
   const result=await mod.disableBrowserConsumers({root,home,platform:'linux'});
   await assert.rejects(readFile(managed),{code:'ENOENT'});assert.match(await readFile(custom,'utf8'),/my-app/);
   assert.deepEqual(result.removedAutostart,['omniroute-browser-consumers.desktop']);
-});
-test('Windows repair migrates a version-pinned browser-consumer CMD when the stable VBS is missing',async()=>{
-  const home=await mkdtemp(join(tmpdir(),'dual-autostart-cmd-')),root=join(home,'OmniRouteRegular'),active='versions/0.6.6-private.10-new',payload=join(root,active);
-  const runtime={payload,node:join(payload,'node','node.exe')},shared=join(payload,'app/packages/browser-consumer-adapter/src/shared-session.mjs');
-  for(const file of [runtime.node,shared,join(root,'Launch.ps1')]){await mkdir(dirname(file),{recursive:true});await writeFile(file,'fixture');}
-  const appData=join(home,'AppData/Roaming'),startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup');await mkdir(startup,{recursive:true});
-  const oldCommand=join(startup,'OmniRoute Browser Consumers.cmd'),vbs=join(startup,'OmniRoute Browser Consumers.vbs');
-  await writeFile(oldCommand,'@echo off\r\nstart "" /b "C:\\Users\\test\\AppData\\Local\\OmniRouteRegular\\versions\\0.6.6-private.4-old\\node\\node.exe" "C:\\Users\\test\\AppData\\Local\\OmniRouteRegular\\versions\\0.6.6-private.4-old\\app\\packages\\browser-consumer-adapter\\runtime\\shared-session.mjs" --background --launch-only --profile "C:\\Users\\test\\AppData\\Local\\OmniRouteRegular\\data\\browser-consumer-profile" --port 47842\r\n');
-  const repaired=await mod.repairBrowserConsumerAutostart({platform:'win32',root,runtime,home,env:{APPDATA:appData,SystemRoot:'C:\\Windows'}});
-  assert.equal(repaired.changed,true);const stable=await readFile(vbs,'utf8');
-  assert.match(stable,/Launch\.ps1/);assert.match(stable,/browser-consumers/);assert.doesNotMatch(stable,/versions[\\/]|node\.exe|shared-session\.mjs/);
-  await assert.rejects(readFile(oldCommand),{code:'ENOENT'});
-  const second=await mod.repairBrowserConsumerAutostart({platform:'win32',root,runtime,home,env:{APPDATA:appData,SystemRoot:'C:\\Windows'}});assert.equal(second.changed,false);
-  const custom='User-managed startup command\r\n';await writeFile(oldCommand,custom);
-  await assert.rejects(mod.repairBrowserConsumerAutostart({platform:'win32',root,runtime,home,env:{APPDATA:appData,SystemRoot:'C:\\Windows'}}),/autostart conflict/i);
-  assert.equal(await readFile(oldCommand,'utf8'),custom);
-});
-test('Linux browser-consumer autostart uses the stable root launcher instead of a versioned Node path',async()=>{
-  const home=await mkdtemp(join(tmpdir(),'dual-autostart-linux-')),root=join(home,'Install With Spaces'),active='versions/0.6.5-private.1-new',payload=join(root,active);
-  const node=join(payload,'node/node'),entrypoint=join(payload,'app/packages/browser-consumer-adapter/src/shared-session.mjs');
-  for(const file of [node,entrypoint]){await mkdir(dirname(file),{recursive:true});await writeFile(file,'fixture');}
-  await mkdir(root,{recursive:true});await writeFile(join(root,'Launch.sh'),'#!/bin/sh\n');await writeFile(join(root,'active-version.txt'),active+'\n');
-  const result=await mod.installSharedBrowserConsumerAutostart({platform:'linux',home,root,node,entrypoint});
-  const startup=await readFile(result.file,'utf8');assert.match(startup,/Exec=.*Launch\.sh.*browser-consumers/);assert.doesNotMatch(startup,/versions[\\/]|node\/node|shared-session\.mjs/);
 });
 test('OpenCode environment excludes upstream credentials and points both models at local router',()=>{
   assert.equal(typeof mod.openCodeEnvironment,'function','isolated environment missing');
@@ -256,7 +232,7 @@ test('Windows one-click setup installs only the current verified Devin CLI and s
   assert.match(launch,/ValidateSet\([^)]*'devin'/);
   assert.doesNotMatch(launch,/fusion|astra|sol|terra|--model/i);
 });
-test('consumer browser launchers are not exposed in installed wrappers',async()=>{
+test('browser-consumer launch actions are absent from installed wrappers',async()=>{
   const ps=await readFile(new URL('./dual/Launch.ps1',import.meta.url),'utf8');
   const sh=await readFile(new URL('./dual/Launch.sh',import.meta.url),'utf8');
   assert.doesNotMatch(ps,/browser-consumers|shared-session\.mjs/);
@@ -284,119 +260,11 @@ test('Antigravity launch reports an immediate desktop-process exit instead of cl
   await assert.rejects(launch,/Antigravity.*exited.*0x80000003/i);
 });
 
-test('release setup enables the packaged Claude consumer without storing a credential',async()=>{
-  assert.equal(typeof mod.configureClaudeConsumer,'function','Claude consumer setup missing');
-  const root=await mkdtemp(join(tmpdir(),'dual-claude-'));
-  const paths=getRuntimePaths(join(root,'data'));
-  const config=regularConfig();
-  await saveConfig(config,paths);
-  const node=join(root,'versions/0.5.0/node/node.exe');
-  const entrypoint=join(root,'versions/0.5.0/app/packages/claude-consumer-adapter/src/adapter.mjs');
-  await mod.configureClaudeConsumer({root,node,entrypoint});
-  const saved=await loadConfig(paths);
-  const provider=saved.providers.find(item=>item.id==='claude-consumer');
-  assert.equal(provider.enabled,true);
-  assert.equal(provider.credentialField,null);
-  assert.equal(provider.mcpCommand,node);
-  assert.deepEqual(provider.mcpArgs,[entrypoint,'--endpoint','http://127.0.0.1:47842']);
-  assert.equal(saved.routing.directProviderOrder[0],'claude-consumer');
-});
-
-test('one-click setup enables a separate packaged Z.AI browser consumer without storing a credential',async()=>{
-  assert.equal(typeof mod.configureZaiConsumer,'function','Z.AI consumer setup missing');
-  const root=await mkdtemp(join(tmpdir(),'dual-zai-'));
-  const paths=getRuntimePaths(join(root,'data'));
-  const config=regularConfig();
-  await saveConfig(config,paths);
-  const node=join(root,'versions/0.5.0/node/node.exe');
-  const entrypoint=join(root,'versions/0.5.0/app/packages/zai-consumer-adapter/src/adapter.mjs');
-  await mod.configureZaiConsumer({root,node,entrypoint});
-  const saved=await loadConfig(paths);
-  const provider=saved.providers.find(item=>item.id==='zai-consumer');
-  assert.equal(provider.enabled,true);
-  assert.equal(provider.credentialField,null);
-  assert.equal(provider.mcpCommand,node);
-  assert.deepEqual(provider.mcpArgs,[entrypoint,'--endpoint','http://127.0.0.1:47842']);
-  assert.equal(saved.routing.directProviderOrder[1],'zai-consumer');
-  assert.equal(saved.providers.find(item=>item.id==='zai').type,'openai-compatible');
-});
-
-test('consumer autostart is per-user, background, and contains no account data',async()=>{
-  assert.equal(typeof mod.installClaudeConsumerAutostart,'function','Claude consumer autostart missing');
-  const home=await mkdtemp(join(tmpdir(),'dual-autostart-'));
-  const root=join(home,'install'),node=join(root,'node'),entrypoint=join(root,'credential-server.mjs');
-  const result=await mod.installClaudeConsumerAutostart({platform:'linux',home,root,node,entrypoint});
-  const text=await readFile(result.file,'utf8');
-  assert.match(text,/X-GNOME-Autostart-enabled=true/);
-  assert.match(text,/--background/);
-  assert.match(text,/--profile/);
-  assert.match(text,/claude-consumer-profile/);
-  assert.match(text,/--port 47842/);
-  assert.doesNotMatch(text,/cookie|token|password/i);
-});
-
-test('Z.AI consumer gets its own profile, port, and per-user background autostart',async()=>{
-  assert.equal(typeof mod.installZaiConsumerAutostart,'function','Z.AI consumer autostart missing');
-  const home=await mkdtemp(join(tmpdir(),'dual-zai-autostart-'));
-  const root=join(home,'install'),node=join(root,'node'),entrypoint=join(root,'zai-credential-server.mjs');
-  const result=await mod.installZaiConsumerAutostart({platform:'linux',home,root,node,entrypoint});
-  const text=await readFile(result.file,'utf8');
-  assert.match(text,/X-GNOME-Autostart-enabled=true/);
-  assert.match(text,/--background/);
-  assert.match(text,/zai-consumer-profile/);
-  assert.match(text,/--port 47843/);
-  assert.doesNotMatch(text,/cookie|token|password/i);
-});
-
-test('Windows Z.AI autostart is hidden, profile-isolated, and contains no account data',async()=>{
-  const home=await mkdtemp(join(tmpdir(),'dual-zai-win-autostart-'));
-  const root=join(home,'install'),node=join(root,'node.exe'),entrypoint=join(root,'zai-credential-server.mjs');
-  const appData=join(home,'AppData/Roaming');
-  const result=await mod.installZaiConsumerAutostart({platform:'win32',home,root,node,entrypoint,env:{APPDATA:appData}});
-  const text=await readFile(result.file,'utf8');
-  assert.match(result.file,/OmniRoute Z\.AI Consumer\.vbs$/);
-  assert.match(text,/--background/);
-  assert.match(text,/zai-consumer-profile/);
-  assert.match(text,/--port 47843/);
-  assert.match(text,/, 0, False/);
-  assert.doesNotMatch(text,/cookie|token|password/i);
-});
-
-test('browser bootstrap commands disconnect their CDP clients and let one-click setup continue',async()=>{
-  for(const relative of ['../packages/claude-consumer-adapter/src/credential-server.mjs','../packages/zai-consumer-adapter/src/credential-server.mjs']){
-    const source=await readFile(new URL(relative,import.meta.url),'utf8');
-    assert.match(source,/start\(\)\.then\(\(\)=>process\.exit\(0\)\)/,relative);
-    assert.match(source,/await waitForConsumerAuthentication\(/,relative);
-    assert.match(source,/await minimizeBrowserWindow\(/,relative);
-  }
-});
-
 test('one-click setup never opens or autostarts consumer browsers',async()=>{
   const source=await readFile(new URL('./dual-setup.mjs',import.meta.url),'utf8');
   const setup=source.slice(source.indexOf('export async function setupBoth'));
-  for(const call of ['configureClaudeConsumer','configureZaiConsumer','configurePrivateBrowserConsumers','installSharedBrowserConsumerAutostart','launchSharedBrowserConsumerSetup']) assert.doesNotMatch(setup,new RegExp(`await ${call}\\(`),call);
+  for(const call of ['configureClaudeConsumer','configureZaiConsumer','configurePrivateBrowserConsumers','installSharedBrowserConsumerAutostart','launchSharedBrowserConsumerSetup']) assert.doesNotMatch(source,new RegExp(call),call);
   assert.match(source,/disableBrowserConsumers/);
+  assert.doesNotMatch(source,/browser-consumer-adapter|claude-consumer-adapter|zai-consumer-adapter/);
   assert.doesNotMatch(setup,/Opening one shared browser|six consumer sign-in tabs/);
-});
-
-test('release package includes both browser adapters and marks six integrated routes',async()=>{
-  const source=await readFile(new URL('../scripts/package-dual.mjs',import.meta.url),'utf8').catch(error=>{
-    if(error.code!=='ENOENT')throw error;
-    return null;
-  });
-  if(source!==null){
-    assert.match(source,/version='0\.5\.1'/);
-    assert.match(source,/claude-consumer-adapter/);
-    assert.match(source,/claude-web-consumer/);
-    assert.match(source,/zai-consumer-adapter/);
-    assert.match(source,/glm-web-consumer/);
-    assert.match(source,/playwright-core/);
-  }else{
-    const adapter=await readFile(new URL('../packages/claude-consumer-adapter/src/adapter.mjs',import.meta.url),'utf8');
-    assert.match(adapter,/playwright/);
-    assert.match(adapter,/claude-web-consumer/);
-    const zaiAdapter=await readFile(new URL('../packages/zai-consumer-adapter/src/adapter.mjs',import.meta.url),'utf8');
-    assert.match(zaiAdapter,/glm-web-consumer/);
-    assert.match(await readFile(new URL('../node_modules/playwright-core/package.json',import.meta.url),'utf8'),/playwright-core/);
-  }
 });

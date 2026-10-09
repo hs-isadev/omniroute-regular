@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {verifyPackage} from '../distribution/install.mjs';
 import {BUNDLED_SKILLS} from '../distribution/skill-catalog.mjs';
 
-const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-0.6.8';
+const repo=resolve(import.meta.dirname,'..'),name='OmniRoute-0.6.9';
 const bundledSkills=BUNDLED_SKILLS;
 const archive=resolve(process.argv[2]??join(repo,'release',name+'.zip'));
 const temp=await mkdtemp(join(repo,'test-artifacts/family-smoke-'));
@@ -75,7 +75,7 @@ async function inspect(dir) {
     assert.equal(entry.isSymbolicLink(),false);
     if(entry.isDirectory()){await inspect(path);continue;}
     scanned++;
-    assert.doesNotMatch(rel,/app\/packages\/browser-consumer-adapter\/scripts\//);
+    assert.doesNotMatch(rel,/app\/packages\/(?:browser|claude|zai)-consumer-adapter\//);
     assert.doesNotMatch(rel,/(?:^|\/)(?:\.git|\.env|vault\.json|credentials\.txt|auth\.json|test-artifacts|plans)(?:$|[\/.])/i);
     assert.doesNotMatch(rel,/(?:^|\/)(?:cookies|Login Data)(?:$|-(?:journal|wal|shm)$|\.(?:db|sqlite)$)/i);
     const owned=/\/app\/(?:packages|apps|distribution|node_modules\/@omniroute)\//.test(rel);
@@ -127,9 +127,8 @@ const devinRegistration=await packagedDevin.configureDevinCli({root:install,node
 assert.deepEqual(devinRegistration,{status:'configured'});assert.equal(devinInvocation.command,fakeDevin);assert.deepEqual(devinInvocation.args.slice(0,7),['mcp','add','-s','user','-e',`OMNIROUTE_HOME=${join(install,'data')}`,'-e']);assert.equal(devinInvocation.args[7],'OMNIROUTE_ROUTING_MODE=regular');assert.deepEqual(devinInvocation.args.slice(-3),['--',node,join(install,active,'app/distribution/mcp-regular.mjs')]);assert.equal(devinInvocation.env.OMNIROUTE_ROUTING_MODE,'regular');assert.equal(devinInvocation.env.OPENROUTER_API_KEY,undefined);assert.doesNotMatch(devinInvocation.args.join(' '),/fusion|--model|api[_-]?key/i);
 const {assertRegularProviderPolicy}=await moduleAt('distribution/regular-policy.mjs');
 const config=structuredClone(DEFAULT_CONFIG);for(const p of config.providers)p.enabled=false;
-const qwen=config.providers.find(p=>p.id==='qwen-consumer'),adapter=join(app,'packages/browser-consumer-adapter/runtime/adapter.mjs');
-Object.assign(qwen,{enabled:true,freeTierConfirmed:true,mcpCommand:node,mcpArgs:[adapter,'--provider','qwen','--endpoint',qwen.baseUrl],mcpWorkingDirectory:dirname(adapter)});
-assertRegularProviderPolicy(config);
+config.providers.push({id:'qwen-consumer',type:'mcp-stdio',enabled:true,freeTierOnly:true,credentialField:null,baseUrl:'http://127.0.0.1:9222',apiPrefix:'',mcpCommand:node,mcpArgs:['old-browser-adapter.mjs'],maxTaskClass:'small',discoveryTtlSeconds:60,models:[]});
+assert.throws(()=>assertRegularProviderPolicy(config),/trusted|allowlist/i);
 
 let registeredHandshakes=0,registeredOpenCodeHandshakes=0;
 if(process.platform==='win32'){
@@ -140,8 +139,7 @@ if(process.platform==='win32'){
   const hostHome=join(temp,'Antigravity Home With Spaces');await mkdir(hostHome,{recursive:true});
   const runtimePaths=(await moduleAt('packages/config/dist/index.js')).getRuntimePaths(join(install,'data'));
   const runtimeConfig=(await moduleAt('distribution/settings.mjs')).regularConfig();for(const provider of runtimeConfig.providers)provider.enabled=false;
-  const legacyConsumer=runtimeConfig.providers.find(provider=>provider.id==='qwen-consumer'),legacyAdapter=join(app,'packages/browser-consumer-adapter/runtime/adapter.mjs');
-  Object.assign(legacyConsumer,{enabled:true,mcpCommand:node,mcpArgs:[legacyAdapter,'--provider','qwen','--endpoint',legacyConsumer.baseUrl],mcpWorkingDirectory:dirname(legacyAdapter)});
+  runtimeConfig.providers.push({id:'qwen-consumer',type:'mcp-stdio',enabled:true,freeTierOnly:true,credentialField:null,baseUrl:'http://127.0.0.1:9222',apiPrefix:'',mcpCommand:node,mcpArgs:['old-browser-adapter.mjs'],maxTaskClass:'small',discoveryTtlSeconds:60,models:[]});
   await (await moduleAt('packages/config/dist/index.js')).saveConfig(runtimeConfig,runtimePaths);
   const runtimeVault=await (await moduleAt('packages/vault/dist/index.js')).SecretVault.load(runtimePaths.vault);try{await runtimeVault.save(runtimePaths.vault);}finally{runtimeVault.dispose();}
   const cleanEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/KEY|TOKEN|SECRET|PASSWORD|NODE_OPTIONS|OMNIROUTE|OPENCODE/i.test(key)));

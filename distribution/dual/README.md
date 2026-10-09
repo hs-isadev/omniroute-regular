@@ -1,11 +1,11 @@
-# OmniRoute 0.6.8 — browser consumers off, old runtimes cleaned up
+# OmniRoute 0.6.9 — browser-consumer adapters removed
 
 This update verifies the installed MCP runtime before host registration, repairs
 registrations after updates, isolates provider health deadlines, and
 adds content-free live provider diagnostics.
 See ROUTING-POLICY.md for diagnostics/pins and HOST-ORCHESTRATION.md for bounded
 worker context budgets. API availability still determines eligibility. Browser-
-consumer providers are disabled in this package and never receive routed tasks.
+consumer adapters and their provider routes are removed from this package.
 
 One download for Windows 10/11 x64 and Linux x64 desktops. No Codex subscription
 needed. No API keys, accounts, vaults or personal projects are included.
@@ -88,11 +88,9 @@ open during setup to refresh its skill list.
 
 Windows launchers appear on the Desktop; Linux launchers appear in the app menu.
 Restart a host after changing keys. Developer hosts are not registered for
-autostart. Browser-consumer providers are disabled and are not used for routing.
-On upgrade, setup removes only recognized OmniRoute browser-consumer startup
-entries; it leaves browser profiles and sign-in data untouched, and preserves
-unrelated startup entries. Any already-open browser window is left alone and can
-be closed normally.
+autostart. On upgrade, setup removes only recognized OmniRoute browser-consumer
+startup entries and disables saved routes from older versions. Existing browser
+profiles and sign-in data are untouched; unrelated startup entries are preserved.
 OpenCode starts in a starter workspace; open your project from there or pass a
 project path to the installed launcher (`Launch.ps1 -Action opencode C:\Projects\Example`
 or `sh Launch.sh opencode /path/to/project`). Normal tool approval prompts remain.
@@ -119,8 +117,8 @@ providers retain prompts or restrict evaluation/commercial/confidential usage.
 Do not send private repository secrets to hosted workers. No billing settings
 are changed by setup. HF/Vercel credit-based inference and LongCat's paid API
 are excluded. The provider list is not a promise that every model is available.
-Browser consumers are disabled in this package; only configured API providers are
-eligible. Swarm fan-out uses healthy eligible API workers only and is skipped for casual/light work or when the original input,
+Only configured API providers are eligible. Swarm fan-out uses healthy eligible
+API workers only and is skipped for casual/light work or when the original input,
 bounded worker drafts, and requested final output would exceed the synthesis
 model's context window. Groq can participate when healthy, but provider rotation
 and failover may select other configured free providers. Every parallel worker

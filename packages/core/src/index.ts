@@ -309,8 +309,7 @@ export class OmniRouter {
       diagnostics.push(result.diagnostic);
       const selected = result.selection;
       if (!selected) return seed;
-      const selectedModel = snapshot.models.find(model => model.providerId === selected.providerId && model.modelId === selected.modelId);
-      return selected.providerId.endsWith("-consumer") && selectedModel?.reasoningEfforts.includes("high") ? {...selected, reasoningEffort: "high"} : selected;
+      return selected;
     }
     const supports = (model: ModelEntry, capability: Capability): boolean => ({
       text: model.capabilities.text,
@@ -327,7 +326,7 @@ export class OmniRouter {
     const selected = candidates[0];
     if (!selected) throw new SafeError("DIRECT_MODEL_UNAVAILABLE", "No healthy allowed free model satisfies the regular-mode capability requirements", 503);
     const maximum = Math.min(request.maxOutputTokens ?? (preference === "lightweight" ? 2048 : this.#config.routing.maxOutputTokensPerRequest), selected.maxOutputTokens ?? this.#config.routing.maxOutputTokensPerRequest, this.#config.routing.maxOutputTokensPerRequest);
-    const effort: ReasoningEffort = selected.providerId.endsWith("-consumer") && selected.reasoningEfforts.includes("high") ? "high" : preference === "lightweight" && selected.reasoningEfforts.includes("none") ? "none" : selected.reasoningEfforts.includes("low") ? "low" : selected.reasoningEfforts.includes("none") ? "none" : selected.reasoningEfforts[0] ?? "none";
+    const effort: ReasoningEffort = preference === "lightweight" && selected.reasoningEfforts.includes("none") ? "none" : selected.reasoningEfforts.includes("low") ? "low" : selected.reasoningEfforts.includes("none") ? "none" : selected.reasoningEfforts[0] ?? "none";
     return { providerId: selected.providerId, modelId: selected.modelId, reasoningEffort: effort, maxOutputTokens: maximum };
   }
 
@@ -350,7 +349,7 @@ export class OmniRouter {
 
   private regularSwarmPlan(primary: ModelSelection, signals: TaskSignals, snapshot: RegistrySnapshot): { plan: RoutingPlan | null; decision: string | null } {
     const complexEnough = signals.intent === "high_risk" || (signals.requiredCapabilities.includes("coding") && signals.intent === "complex_task");
-    if (!complexEnough || primary.providerId.endsWith("-consumer") || this.#config.routing.maxParallelWorkers < 2 || this.#config.routing.maxSubtasks < 2) return { plan: null, decision: null };
+    if (!complexEnough || this.#config.routing.maxParallelWorkers < 2 || this.#config.routing.maxSubtasks < 2) return { plan: null, decision: null };
     const maximumWorkers = Math.min(3, this.#config.routing.maxParallelWorkers, this.#config.routing.maxSubtasks);
     const subtaskOutputTokens = Math.min(primary.maxOutputTokens, this.#config.routing.expectedSubtaskOutputTokens);
     const primaryModel = modelFrom(snapshot, primary);
@@ -360,7 +359,7 @@ export class OmniRouter {
     }
     const seed = { ...primary, maxOutputTokens: subtaskOutputTokens };
     const candidates = this.#freeFailover.enabled(seed, snapshot)
-      ? this.#freeFailover.candidates(seed, snapshot, signals.requiredCapabilities, signals.estimatedInputTokens + 256, "quality").filter((selection) => !selection.providerId.endsWith("-consumer"))
+      ? this.#freeFailover.candidates(seed, snapshot, signals.requiredCapabilities, signals.estimatedInputTokens + 256, "quality")
       : [seed];
     if (candidates.length === 0) return { plan: null, decision: "regular swarm skipped: no healthy eligible API workers" };
     const roles = maximumWorkers === 2 ? [

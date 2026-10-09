@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AnthropicProvider, BrowserConsumerProvider, buildRegistry, ClaudeConsumerProvider, createProviders, OpenAICompatibleProvider, OpenAIProvider, ProviderHttpError, retryProviderCall, ZaiConsumerProvider } from "@omniroute/providers";
+import { AnthropicProvider, buildRegistry, createProviders, OpenAICompatibleProvider, OpenAIProvider, ProviderHttpError, retryProviderCall } from "@omniroute/providers";
 import { MockProvider } from "@omniroute/testing";
 import { configFixture } from "./helpers.js";
 
@@ -125,46 +125,6 @@ test("Gemini model discovery normalizes resource prefixes without rewriting othe
   }
 });
 
-test("Claude consumer adapter sends the request as natural user text without a system-like wrapper", async () => {
-  const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
-  const provider = new ClaudeConsumerProvider({
-    id: "claude-consumer",
-    command: "node",
-    args: ["adapter.js", "mcp"],
-    callTool: async (_spec, name, args) => {
-      calls.push({ name, arguments: args });
-      if (name === "test_connection") return { content: [{ type: "text", text: JSON.stringify({ status: "ready" }) }] };
-      return { content: [{ type: "text", text: JSON.stringify({ output: "Claude answer", usage: { model: "claude-web-consumer", estimatedTokens: 23 } }) }] };
-    },
-  });
-
-  assert.equal(provider.supportsStreaming, false);
-  assert.equal((await provider.healthCheck()).status, "healthy");
-  assert.deepEqual((await provider.listModels()).map((model) => model.id), ["claude-web-consumer"]);
-  const result = await provider.generate({ modelId: "claude-web-consumer", prompt: "Small request", instructions: "Be concise", reasoningEffort: "high", maxOutputTokens: 256, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null });
-
-  assert.equal(result.text, "Claude answer");
-  assert.equal(result.usage.measurement, "estimated");
-  assert.equal(result.usage.inputTokens + result.usage.outputTokens, 23);
-  assert.equal(calls[1]?.name, "claude_query");
-  assert.equal(calls[1]?.arguments.prompt, "Small request");
-  assert.equal(calls[1]?.arguments.highThinking, true);
-  assert.doesNotMatch(String(calls[1]?.arguments.prompt), /produce the requested work|do not claim|preserve uncertainty/i);
-});
-
-test("Claude consumer adapter errors are retryable so the free-provider ladder can continue", async () => {
-  const provider = new ClaudeConsumerProvider({
-    id: "claude-consumer",
-    command: "node",
-    args: ["adapter.js", "mcp"],
-    callTool: async () => ({ content: [{ type: "text", text: JSON.stringify({ error: "Claude browser session is not available" }) }], isError: true }),
-  });
-  await assert.rejects(
-    provider.generate({ modelId: "claude-web-consumer", prompt: "Hi", instructions: "", reasoningEffort: "none", maxOutputTokens: 64, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null }),
-    (error: unknown) => provider.classifyError(error).category === "unavailable" && provider.classifyError(error).retryable,
-  );
-});
-
 test("provider credential pool never rotates slots on a provider quota response", async () => {
   const config = configFixture();
   const settings = config.providers.find((provider) => provider.id === "openai")!;
@@ -256,66 +216,4 @@ test("model registry isolates a slow provider from later provider health checks"
   clearTimeout(timer);
   assert.equal(registry.models.find((model) => model.providerId === "openai")?.health.status, "unhealthy");
   assert.equal(registry.models.find((model) => model.providerId === "fast")?.health.status, "healthy");
-});
-
-test("Z.AI consumer adapter sends natural user text through the signed-in web session", async () => {
-  const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
-  const provider = new ZaiConsumerProvider({
-    id: "zai-consumer",
-    command: "node",
-    args: ["adapter.js", "mcp"],
-    callTool: async (_spec, name, args) => {
-      calls.push({ name, arguments: args });
-      if (name === "test_connection") return { content: [{ type: "text", text: JSON.stringify({ status: "ready" }) }] };
-      return { content: [{ type: "text", text: JSON.stringify({ output: "GLM answer", usage: { model: "glm-web-consumer", estimatedTokens: 17 } }) }] };
-    },
-  });
-
-  assert.equal(provider.supportsStreaming, false);
-  assert.equal((await provider.healthCheck()).status, "healthy");
-  assert.deepEqual((await provider.listModels()).map((model) => model.id), ["glm-web-consumer"]);
-  const result = await provider.generate({ modelId: "glm-web-consumer", prompt: "Small request", instructions: "Be concise", reasoningEffort: "high", maxOutputTokens: 256, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null });
-
-  assert.equal(result.text, "GLM answer");
-  assert.equal(result.usage.measurement, "estimated");
-  assert.equal(result.usage.inputTokens + result.usage.outputTokens, 17);
-  assert.equal(calls[1]?.name, "zai_query");
-  assert.deepEqual(calls[1]?.arguments, { prompt: "Small request", highThinking: true });
-});
-
-test("Z.AI consumer adapter outages are retryable and never fall through to the API-shaped zai identity", async () => {
-  const provider = new ZaiConsumerProvider({
-    id: "zai-consumer",
-    command: "node",
-    args: ["adapter.js", "mcp"],
-    callTool: async () => ({ content: [{ type: "text", text: JSON.stringify({ error: "Z.AI browser session is not available" }) }], isError: true }),
-  });
-  await assert.rejects(
-    provider.generate({ modelId: "glm-web-consumer", prompt: "Hi", instructions: "", reasoningEffort: "none", maxOutputTokens: 64, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null }),
-    (error: unknown) => provider.classifyError(error).category === "unavailable" && provider.classifyError(error).retryable,
-  );
-  await assert.rejects(
-    provider.generate({ modelId: "glm-4.7-flash", prompt: "Hi", instructions: "", reasoningEffort: "none", maxOutputTokens: 64, jsonSchema: null, schemaName: null, signal: AbortSignal.timeout(5000), safetyIdentifier: null }),
-    /does not expose/,
-  );
-});
-
-test("generic private browser consumers expose only their configured model and retry cleanly", async () => {
-  const calls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
-  const provider = new BrowserConsumerProvider({
-    id: "qwen-consumer", modelId: "qwen-web-consumer", displayName: "Qwen Web Consumer", toolName: "qwen_query",
-    command: "node", args: ["adapter.mjs", "--provider", "qwen"],
-    callTool: async (_spec, name, args) => {
-      calls.push({ name, arguments: args });
-      if (name === "test_connection") return { content: [{ type: "text", text: JSON.stringify({ status: "ready" }) }] };
-      return { content: [{ type: "text", text: JSON.stringify({ output: "Qwen answer", usage: { estimatedTokens: 11 } }) }] };
-    },
-  });
-  assert.deepEqual((await provider.listModels()).map(model=>model.id),["qwen-web-consumer"]);
-  const result=await provider.generate({ modelId:"qwen-web-consumer",prompt:"Small request",instructions:"ignored",reasoningEffort:"high",maxOutputTokens:64,jsonSchema:null,schemaName:null,signal:AbortSignal.timeout(5000),safetyIdentifier:null });
-  assert.equal(result.text,"Qwen answer");
-  assert.equal(calls.at(-1)?.name,"qwen_query");
-  assert.deepEqual(calls.at(-1)?.arguments,{prompt:"Small request",highThinking:true});
-  const unavailable=new BrowserConsumerProvider({id:"kimi-consumer",modelId:"kimi-web-consumer",displayName:"Kimi Web Consumer",toolName:"kimi_query",command:"node",args:["adapter.mjs"],callTool:async()=>({content:[{type:"text",text:JSON.stringify({error:"not ready"})}],isError:true})});
-  await assert.rejects(unavailable.generate({modelId:"kimi-web-consumer",prompt:"Hi",instructions:"",reasoningEffort:"none",maxOutputTokens:64,jsonSchema:null,schemaName:null,signal:AbortSignal.timeout(5000),safetyIdentifier:null}),error=>unavailable.classifyError(error).retryable);
 });

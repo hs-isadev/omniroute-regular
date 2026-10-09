@@ -13,13 +13,7 @@ import {RULES,findAntigravity} from './antigravity.mjs';
 import {claudeHarnessEnvironment} from '../apps/cli/dist/harness-env.js';
 import {createChatBackend,startChatProxy,openCodeConfig} from './dual-chat.mjs';
 import {configureDevinCli,launchDevinCli,verifyDevinCli} from './devin.mjs';
-import {PRIVATE_BROWSER_CONSUMERS,getSharedSessionDefinition} from '../packages/browser-consumer-adapter/src/runtime.mjs';
 import {BUNDLED_SKILLS} from './skill-catalog.mjs';
-const CLAUDE_CONSUMER_PORT=47842;
-const CLAUDE_CONSUMER_ENDPOINT=`http://127.0.0.1:${CLAUDE_CONSUMER_PORT}`;
-const ZAI_CONSUMER_PORT=47843;
-const SHARED_BROWSER_SESSION=getSharedSessionDefinition();
-const SHARED_BROWSER_ENDPOINT=`http://127.0.0.1:${SHARED_BROWSER_SESSION.port}`;
 const ROUTING_RULE_START='<!-- BEGIN OMNIROUTE REGULAR GLOBAL ROUTING -->';
 const ROUTING_RULE_END='<!-- END OMNIROUTE REGULAR GLOBAL ROUTING -->';
 const ROUTING_RULE=`${ROUTING_RULE_START}
@@ -144,45 +138,11 @@ export async function installBundledSkills({home=homedir()}={}){
   }
   return {skillNames:[...BUNDLED_SKILLS],newlyInstalledByHost,availableByHost,preservedConflicts};
 }
-export async function repairBrowserConsumerRuntime({root,runtime}){
-  const paths=getRuntimePaths(join(root,'data'));if(await optional(paths.config)===null)return {changed:false,providers:[]};
-  const config=await loadConfig(paths),repaired=[];
-  const specs=new Map([
-    ['claude-consumer',{adapter:join(runtime.payload,'app/packages/claude-consumer-adapter/src/adapter.mjs'),args:[]}],
-    ['zai-consumer',{adapter:join(runtime.payload,'app/packages/zai-consumer-adapter/src/adapter.mjs'),args:[]}],
-    ...PRIVATE_BROWSER_CONSUMERS.map(item=>[item.providerId,{adapter:join(runtime.payload,'app/packages/browser-consumer-adapter/src/adapter.mjs'),args:['--provider',item.id]}]),
-  ]);
-  for(const provider of config.providers.filter(candidate=>candidate.enabled&&specs.has(candidate.id))){
-    const spec=specs.get(provider.id);await requireRuntimeFile(spec.adapter,`${provider.id} adapter`);
-    const args=[spec.adapter,...spec.args,'--endpoint',provider.baseUrl],workingDirectory=dirname(spec.adapter);
-    if(provider.mcpCommand!==runtime.node||JSON.stringify(provider.mcpArgs)!==JSON.stringify(args)||provider.mcpWorkingDirectory!==workingDirectory){
-      Object.assign(provider,{mcpCommand:runtime.node,mcpArgs:args,mcpWorkingDirectory:workingDirectory});repaired.push(provider.id);
-    }
-  }
-  if(repaired.length)await saveConfig(config,paths);
-  return {changed:repaired.length>0,providers:repaired};
-}
 function isLegacyBrowserConsumerAutostart(content){
   return content.includes('shared-session.mjs')&&content.includes('browser-consumer-profile')&&content.includes('--port 47842');
 }
 function isLegacyVersionPinnedBrowserConsumerCommand(content){
   return isLegacyBrowserConsumerAutostart(content)&&/versions[\\/]/i.test(content)&&/node[\\/]node\.exe/i.test(content);
-}
-export async function repairBrowserConsumerAutostart({root,runtime,home=homedir(),env,platform=process.platform}){
-  if(!env)return {changed:false,reason:'not-requested'};
-  const file=platform==='win32'&&env.APPDATA?join(env.APPDATA,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.vbs'):
-    platform==='linux'?join(home,'.config/autostart/omniroute-browser-consumers.desktop'):null;
-  if(!file)return {changed:false,reason:'unsupported-or-unconfigured'};
-  const legacyCommandFile=platform==='win32'&&env.APPDATA?join(env.APPDATA,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Browser Consumers.cmd'):null;
-  const before=await optional(file),beforeLegacyCommand=legacyCommandFile?await optional(legacyCommandFile):null;
-  if(before===null&&beforeLegacyCommand===null)return {changed:false,reason:'not-installed'};
-  const stable=await stableBrowserConsumerAutostart(platform,root,env);
-  const legacy=before!==null&&isLegacyBrowserConsumerAutostart(before),legacyCommand=beforeLegacyCommand!==null&&isLegacyVersionPinnedBrowserConsumerCommand(beforeLegacyCommand);
-  if(before!==null&&before!==stable&&!legacy)throw new Error('Browser consumer autostart conflict; original preserved');
-  if(beforeLegacyCommand!==null&&!legacyCommand)throw new Error('Browser consumer autostart conflict; original preserved');
-  const entrypoint=join(runtime.payload,'app/packages/browser-consumer-adapter/src/shared-session.mjs');await requireRuntimeFile(entrypoint,'browser consumer startup entrypoint');
-  await installSharedBrowserConsumerAutostart({platform,home,root,node:runtime.node,entrypoint,env});
-  return {changed:(await optional(file))!==before||(legacyCommandFile!==null&&(await optional(legacyCommandFile))!==beforeLegacyCommand),file};
 }
 export async function repairHostRegistrations({root,home=homedir(),env,platform=process.platform}){
   const runtime=await resolveActiveRuntime(root);
@@ -245,133 +205,6 @@ export async function launchDevin(root,{executable}={}){
   if(registration.status!=='configured')return registration;
   return launchDevinCli({root,executable:devin,verified:true});
 }
-export async function configureClaudeConsumer({root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/claude-consumer-adapter/src/adapter.mjs',import.meta.url))}) {
-  for(const path of [root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute Claude consumer paths required');
-  const paths=getRuntimePaths(join(root,'data')),config=await loadConfig(paths);
-  const provider=config.providers.find(item=>item.id==='claude-consumer');
-  if(!provider)throw new Error('This build does not include the Claude consumer provider.');
-  Object.assign(provider,{enabled:true,freeTierConfirmed:true,baseUrl:CLAUDE_CONSUMER_ENDPOINT,mcpCommand:node,mcpArgs:[entrypoint,'--endpoint',CLAUDE_CONSUMER_ENDPOINT],mcpWorkingDirectory:dirname(entrypoint)});
-  config.routing.directProviderOrder=['claude-consumer',...config.routing.directProviderOrder.filter(id=>id!=='claude-consumer')];
-  await saveConfig(config,paths);
-  return {providerId:provider.id,entrypoint};
-}
-export async function configureZaiConsumer({root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/zai-consumer-adapter/src/adapter.mjs',import.meta.url))}) {
-  for(const path of [root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute Z.AI consumer paths required');
-  const paths=getRuntimePaths(join(root,'data')),config=await loadConfig(paths);
-  const provider=config.providers.find(item=>item.id==='zai-consumer');
-  if(!provider)throw new Error('This build does not include the Z.AI consumer provider.');
-  Object.assign(provider,{enabled:true,freeTierConfirmed:true,baseUrl:SHARED_BROWSER_ENDPOINT,mcpCommand:node,mcpArgs:[entrypoint,'--endpoint',SHARED_BROWSER_ENDPOINT],mcpWorkingDirectory:dirname(entrypoint)});
-  config.routing.directProviderOrder=['claude-consumer','zai-consumer',...config.routing.directProviderOrder.filter(id=>id!=='claude-consumer'&&id!=='zai-consumer')];
-  await saveConfig(config,paths);
-  return {providerId:provider.id,entrypoint};
-}
-
-export async function installSharedBrowserConsumerAutostart({platform=process.platform,home=homedir(),root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/shared-session.mjs',import.meta.url)),env=process.env}) {
-  for(const path of [home,root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute shared browser autostart paths required');
-  if(platform==='linux'){
-    const file=join(home,'.config/autostart/omniroute-browser-consumers.desktop'),before=await optional(file);
-    const launcher=join(root,'Launch.sh');await requireRuntimeFile(launcher,'stable browser consumer launcher');
-    const content=await stableBrowserConsumerAutostart(platform,root,env);
-    if(before!==content)await atomic(file,content,before);
-    const names=['omniroute-claude-consumer.desktop','omniroute-zai-consumer.desktop',...PRIVATE_BROWSER_CONSUMERS.map(item=>`omniroute-${item.id}-consumer.desktop`)];
-    const removed=[];for(const name of names){const path=join(home,'.config/autostart',name);try{await unlink(path);removed.push(path);}catch(error){if(error.code!=='ENOENT')throw error;}}
-    return {file,removed};
-  }
-  if(platform==='win32'){
-    const appData=env.APPDATA;if(!appData||!isAbsolute(appData))throw new Error('Windows APPDATA is unavailable.');
-    const startup=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup'),file=join(startup,'OmniRoute Browser Consumers.vbs'),before=await optional(file);
-    const legacyCommand=join(startup,'OmniRoute Browser Consumers.cmd'),legacyCommandContent=await optional(legacyCommand);
-    if(legacyCommandContent!==null&&!isLegacyVersionPinnedBrowserConsumerCommand(legacyCommandContent))throw new Error('Browser consumer autostart conflict; original preserved');
-    const launcher=join(root,'Launch.ps1');await requireRuntimeFile(launcher,'stable browser consumer launcher');
-    const content=await stableBrowserConsumerAutostart(platform,root,env);
-    if(before!==content)await atomic(file,content,before);
-    const names=['OmniRoute Browser Consumers.cmd','OmniRoute Claude Consumer.vbs','OmniRoute Z.AI Consumer.vbs',...PRIVATE_BROWSER_CONSUMERS.map(item=>`OmniRoute ${item.displayName} Consumer Private.vbs`)];
-    const removed=[];for(const name of names){const path=join(startup,name);try{await unlink(path);removed.push(path);}catch(error){if(error.code!=='ENOENT')throw error;}}
-    return {file,removed};
-  }
-  throw new Error('Shared browser consumer autostart supports Windows and Linux desktops.');
-}
-async function stableBrowserConsumerAutostart(platform,root,env={}){
-  if(platform==='linux')return `[Desktop Entry]\nType=Application\nName=OmniRoute Browser Consumers\nExec=${desktopExec(join(root,'Launch.sh'))} browser-consumers\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`;
-  if(platform==='win32'){
-    const systemRoot=env.SystemRoot??env.SYSTEMROOT??'C:\\Windows';
-    const powershell=join(systemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),launcher=join(root,'Launch.ps1');
-    const command=`"${powershell}" -NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "${launcher}" -Action browser-consumers`;
-    return `CreateObject("WScript.Shell").Run "${command.replaceAll('"','""')}", 0, False\r\n`;
-  }
-  throw new Error('Shared browser consumer autostart supports Windows and Linux desktops.');
-}
-
-export async function configurePrivateBrowserConsumers({root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/adapter.mjs',import.meta.url))}) {
-  for(const path of [root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute private browser consumer paths required');
-  const paths=getRuntimePaths(join(root,'data')),config=await loadConfig(paths);
-  const privateIds=new Set(PRIVATE_BROWSER_CONSUMERS.map(item=>item.providerId));
-  for(const item of PRIVATE_BROWSER_CONSUMERS){
-    const provider=config.providers.find(candidate=>candidate.id===item.providerId);if(!provider)throw new Error(`This build does not include the ${item.displayName} consumer provider.`);
-    const endpoint=`http://127.0.0.1:${item.port}`;
-    Object.assign(provider,{enabled:true,freeTierConfirmed:true,baseUrl:endpoint,mcpCommand:node,mcpArgs:[entrypoint,'--provider',item.id,'--endpoint',endpoint],mcpWorkingDirectory:dirname(entrypoint)});
-  }
-  config.routing.directProviderOrder=['claude-consumer','zai-consumer',...PRIVATE_BROWSER_CONSUMERS.map(item=>item.providerId),...config.routing.directProviderOrder.filter(id=>id!=='claude-consumer'&&id!=='zai-consumer'&&!privateIds.has(id))];
-  await saveConfig(config,paths);return config;
-}
-function desktopExec(value){return `"${String(value).replaceAll('\\','\\\\').replaceAll('"','\\"')}"`;}
-export async function installClaudeConsumerAutostart({platform=process.platform,home=homedir(),root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/claude-consumer-adapter/src/credential-server.mjs',import.meta.url)),env=process.env}) {
-  for(const path of [home,root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute Claude autostart paths required');
-  const profile=join(root,'data/claude-consumer-profile');
-  if(platform==='linux'){
-    const file=join(home,'.config/autostart/omniroute-claude-consumer.desktop'),before=await optional(file);
-    const content=`[Desktop Entry]\nType=Application\nName=OmniRoute Claude Consumer\nExec=${desktopExec(node)} ${desktopExec(entrypoint)} --background --profile ${desktopExec(profile)} --port ${CLAUDE_CONSUMER_PORT}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`;
-    if(before!==content)await atomic(file,content,before);
-    return {file};
-  }
-  if(platform==='win32'){
-    const appData=env.APPDATA;if(!appData||!isAbsolute(appData))throw new Error('Windows APPDATA is unavailable.');
-    const file=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Claude Consumer.vbs'),before=await optional(file);
-    const command=`"${node}" "${entrypoint}" --background --profile "${profile}" --port ${CLAUDE_CONSUMER_PORT}`,content=`CreateObject("WScript.Shell").Run "${command.replaceAll('"','""')}", 0, False\r\n`;
-    if(before!==content)await atomic(file,content,before);
-    return {file};
-  }
-  throw new Error('Claude consumer autostart supports Windows and Linux desktops.');
-}
-export async function installZaiConsumerAutostart({platform=process.platform,home=homedir(),root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/zai-consumer-adapter/src/credential-server.mjs',import.meta.url)),env=process.env}) {
-  for(const path of [home,root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute Z.AI autostart paths required');
-  const profile=join(root,'data/zai-consumer-profile');
-  if(platform==='linux'){
-    const file=join(home,'.config/autostart/omniroute-zai-consumer.desktop'),before=await optional(file);
-    const content=`[Desktop Entry]\nType=Application\nName=OmniRoute Z.AI Consumer\nExec=${desktopExec(node)} ${desktopExec(entrypoint)} --background --profile ${desktopExec(profile)} --port ${ZAI_CONSUMER_PORT}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`;
-    if(before!==content)await atomic(file,content,before);
-    return {file};
-  }
-  if(platform==='win32'){
-    const appData=env.APPDATA;if(!appData||!isAbsolute(appData))throw new Error('Windows APPDATA is unavailable.');
-    const file=join(appData,'Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute Z.AI Consumer.vbs'),before=await optional(file);
-    const command=`"${node}" "${entrypoint}" --background --profile "${profile}" --port ${ZAI_CONSUMER_PORT}`,content=`CreateObject("WScript.Shell").Run "${command.replaceAll('"','""')}", 0, False\r\n`;
-    if(before!==content)await atomic(file,content,before);
-    return {file};
-  }
-  throw new Error('Z.AI consumer autostart supports Windows and Linux desktops.');
-}
-
-export async function installPrivateBrowserConsumerAutostarts({platform=process.platform,home=homedir(),root,node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/credential-server.mjs',import.meta.url)),env=process.env}) {
-  for(const path of [home,root,node,entrypoint])if(!isAbsolute(path))throw new Error('Absolute private browser consumer autostart paths required');
-  const results=[];
-  for(const item of PRIVATE_BROWSER_CONSUMERS){
-    const profile=join(root,'data',item.profileName);
-    if(platform==='linux'){
-      const file=join(home,`.config/autostart/omniroute-${item.id}-consumer.desktop`),before=await optional(file);
-      const content=`[Desktop Entry]\nType=Application\nName=OmniRoute ${item.displayName} Consumer (Private)\nExec=${desktopExec(node)} ${desktopExec(entrypoint)} --provider ${item.id} --background --profile ${desktopExec(profile)} --port ${item.port}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`;
-      if(before!==content)await atomic(file,content,before);results.push({id:item.id,file});continue;
-    }
-    if(platform==='win32'){
-      const appData=env.APPDATA;if(!appData||!isAbsolute(appData))throw new Error('Windows APPDATA is unavailable.');
-      const file=join(appData,`Microsoft/Windows/Start Menu/Programs/Startup/OmniRoute ${item.displayName} Consumer Private.vbs`),before=await optional(file);
-      const command=`"${node}" "${entrypoint}" --provider ${item.id} --background --profile "${profile}" --port ${item.port}`,content=`CreateObject("WScript.Shell").Run "${command.replaceAll('"','""')}", 0, False\r\n`;
-      if(before!==content)await atomic(file,content,before);results.push({id:item.id,file});continue;
-    }
-    throw new Error('Private browser consumer autostart supports Windows and Linux desktops.');
-  }
-  return results;
-}
 export function openCodeEnvironment(base,root,inline) {
   const env=claudeHarnessEnvironment(base,'regular',join(root,'data'));
   Object.assign(env,{XDG_CONFIG_HOME:join(root,'opencode/config'),XDG_DATA_HOME:join(root,'opencode/share'),XDG_CACHE_HOME:join(root,'opencode/cache'),XDG_STATE_HOME:join(root,'opencode/state'),OPENCODE_CONFIG_DIR:join(root,'opencode/config'),OPENCODE_CONFIG_CONTENT:inline,OPENCODE_DISABLE_AUTOUPDATE:'true',OPENCODE_DISABLE_MODELS_FETCH:'true',OPENCODE_DISABLE_LSP_DOWNLOAD:'true',OPENCODE_DISABLE_CLAUDE_CODE:'true',OPENCODE_DISABLE_DEFAULT_PLUGINS:'true'});
@@ -382,29 +215,6 @@ export function openCodeLaunchArgs(args=[]) {
   return [...args,...(args.includes('--no-replay')?[]:['--no-replay']),'--pure','--model','omniroute/regular'];
 }
 function run(command,args,options={}){return new Promise((res,rej)=>{const child=spawn(command,args,{stdio:'inherit',shell:false,windowsHide:true,...options});child.once('error',rej);child.once('exit',code=>code===0?res():rej(new Error('Setup step failed ('+code+').')));});}
-export async function launchClaudeConsumerSetup(root,{node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/claude-consumer-adapter/src/credential-server.mjs',import.meta.url))}={}) {
-  await run(node,[entrypoint,'--profile',join(root,'data/claude-consumer-profile'),'--port',String(CLAUDE_CONSUMER_PORT)]);
-}
-export async function launchZaiConsumerSetup(root,{node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/zai-consumer-adapter/src/credential-server.mjs',import.meta.url))}={}) {
-  await run(node,[entrypoint,'--profile',join(root,'data/zai-consumer-profile'),'--port',String(ZAI_CONSUMER_PORT)]);
-}
-export async function launchConsumerSetups(root,{launchClaude=launchClaudeConsumerSetup,launchZai=launchZaiConsumerSetup}={}) {
-  await Promise.all([launchClaude(root),launchZai(root)]);
-}
-export async function launchPrivateBrowserConsumerSetup(root,item,{node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/credential-server.mjs',import.meta.url))}={}) {
-  await run(node,[entrypoint,'--provider',item.id,'--profile',join(root,'data',item.profileName),'--port',String(item.port)]);
-}
-export async function launchAllConsumerSetups(root,launchers={}) {
-  const tasks=[
-    (launchers.claude??launchClaudeConsumerSetup)(root),
-    (launchers.zai??launchZaiConsumerSetup)(root),
-    ...PRIVATE_BROWSER_CONSUMERS.map(item=>(launchers[item.id]??(target=>launchPrivateBrowserConsumerSetup(target,item)))(root)),
-  ];
-  await Promise.all(tasks);
-}
-export async function launchSharedBrowserConsumerSetup(root,{node=process.execPath,entrypoint=fileURLToPath(new URL('../packages/browser-consumer-adapter/src/shared-session.mjs',import.meta.url)),run:runImpl=run}={}) {
-  await runImpl(node,[entrypoint,'--profile',join(root,'data',SHARED_BROWSER_SESSION.profileName),'--port',String(SHARED_BROWSER_SESSION.port)]);
-}
 export async function launchOpenCode(root,args=[]) {
   const active=(await readFile(join(root,'active-version.txt'),'utf8')).trim();if(!/^versions\/[a-zA-Z0-9.-]+$/.test(active))throw new Error('Invalid installed version');
   const backend=await createChatBackend(join(root,'data')),proxy=await startChatProxy(backend);
@@ -460,10 +270,6 @@ export async function setupBoth(root,{noKeys=false,noLaunch=false,home=homedir()
   if(registrations.developers.rules.preservedConflicts.length)console.log(`Kept ${registrations.developers.rules.preservedConflicts.length} existing global routing rule file(s) unchanged; review Codex/OpenCode OmniRoute instructions if delegation is not automatic.`);
   console.log(devin.status==='configured'?'Devin CLI has a local regular-mode OmniRoute MCP entry.':'Devin CLI is optional and was not changed; use the OmniRoute Devin CLI shortcut after its official installation.');
   if(!noKeys)await openKeyForm(root);
-  if(registrations.browserConsumers.disabledProviders.length)console.log(`Disabled browser-consumer routes: ${registrations.browserConsumers.disabledProviders.join(', ')}.`);
-  if(registrations.browserConsumers.removedAutostart.length)console.log('Removed old OmniRoute consumer-browser startup entries. Existing browser profiles were preserved.');
-  if(registrations.browserConsumers.preservedConflicts.length)console.log(`Kept unrelated startup entries with OmniRoute consumer names: ${registrations.browserConsumers.preservedConflicts.join(', ')}.`);
-  console.log('Consumer-browser providers are disabled; saved sign-in profiles are left untouched.');
   if(!noLaunch)await launchAntigravity(root).catch(e=>console.log(e.message));
   console.log('Setup complete. Use OpenCode or open Antigravity, Codex, Claude Code, or Devin normally. Restart open hosts after changing keys.');
 }

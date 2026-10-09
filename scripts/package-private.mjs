@@ -9,7 +9,7 @@ import {prepareRuntimePayload} from './prepare-runtime-payload.mjs';
 import {verifyPackage} from '../distribution/install.mjs';
 import {BUNDLED_SKILLS} from '../distribution/skill-catalog.mjs';
 
-const repo=resolve(import.meta.dirname,'..'),version='0.6.8',release=join(repo,'release','OmniRoute-'+version);
+const repo=resolve(import.meta.dirname,'..'),version='0.6.9',release=join(repo,'release','OmniRoute-'+version);
 try{await access(release);throw new Error('Package folder exists; preserve it before rebuilding.');}catch(error){if(error.code!=='ENOENT')throw error;}
 await mkdir(release,{recursive:true});const work=await mkdtemp(join(repo,'.build','private-'));
 async function run(command,args){await new Promise((resolvePromise,reject)=>{const child=spawn(command,args,{stdio:'inherit',windowsHide:true});child.once('error',reject);child.once('exit',code=>code===0?resolvePromise():reject(new Error(`${command} failed ${code}`)));});}
@@ -35,20 +35,12 @@ async function verifiedOpenCodeArchive(platform){
   if(actual!==artifact.sha256)throw new Error(`Official OpenCode SHA-256 mismatch for ${artifact.file}: ${actual}`);
   return archive;
 }
-const browserPackages=['claude-consumer-adapter','zai-consumer-adapter','browser-consumer-adapter'];
-const hosts=['opencode','antigravity','codex','claude-code','claude-web-consumer','glm-web-consumer','qwen-web-consumer','kimi-web-consumer','deepseek-web-consumer','perplexity-web-consumer'];
+const hosts=['opencode','antigravity','codex','claude-code'];
 for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']]){
   const source=join(repo,'release','OmniRoute-Regular-0.2.2-'+platform);await verifyPackage(source,platform);
   const target=join(release,label),payload=join(target,'payload');await mkdir(target);await cp(join(source,'payload'),payload,{recursive:true,errorOnExist:true,force:false});
   for(const name of ['config','contracts','core','integrations','mcp-server','observability','providers','vault'])await cp(join(repo,'packages',name,'dist'),join(payload,'app/packages',name,'dist'),{recursive:true,force:true});
   for(const name of ['cli','daemon'])await cp(join(repo,'apps',name,'dist'),join(payload,'app/apps',name,'dist'),{recursive:true,force:true});
-  for(const name of browserPackages){
-    const source=join(repo,'packages',name),target=join(payload,'app/packages',name);
-    // The shareable installer owns browser autostart through the stable package launcher.
-    // Do not bundle standalone task-scheduler experiments from the developer checkout.
-    await cp(source,target,{recursive:true,force:true,filter:path=>name!=='browser-consumer-adapter'||!path.split(/[\\/]/).includes('scripts')});
-  }
-  for(const name of ['playwright','playwright-core'])await cp(join(repo,'node_modules',name),join(payload,'app/node_modules',name),{recursive:true,force:true});
   await cp(join(repo,'package.json'),join(payload,'app/package.json'),{force:true});await cp(join(repo,'package-lock.json'),join(payload,'app/package-lock.json'),{force:true});
   for(const name of ['dual-chat.mjs','dual-setup.mjs','skill-catalog.mjs','devin.mjs','gui-keys.mjs','settings-gui.py','Settings.ps1','settings.mjs','key-editor.mjs','mcp-regular.mjs','regular-policy.mjs','antigravity.mjs','install.mjs'])await cp(join(repo,'distribution',name),join(payload,'app/distribution',name));
   await cp(join(repo,'distribution/dual'),join(payload,'app/distribution/dual'),{recursive:true});
@@ -58,15 +50,16 @@ for(const [platform,label] of [['windows-x64','Windows'],['linux-x64','Linux']])
   const archive=await verifiedOpenCodeArchive(platform);
   const extracted=join(work,platform);await mkdir(extracted);await run(process.platform==='win32'?'tar.exe':'tar',[windows?'-xf':'-xzf',archive,'-C',extracted]);await mkdir(join(payload,'opencode'));await cp(join(extracted,windows?'opencode.exe':'opencode'),join(payload,'opencode',windows?'opencode.exe':'opencode'));await cp(join(repo,'distribution/OPENCODE-LICENSE.txt'),join(payload,'opencode/LICENSE.txt'));await cp(join(repo,'THIRD-PARTY-NOTICES.md'),join(payload,'app/THIRD-PARTY-NOTICES.md'));if(!windows)await chmod(join(payload,'opencode/opencode'),0o755);
   await writeFile(join(payload,'dual-provenance.json'),JSON.stringify({version,hosts,status:'shareable-family-package',personalDataIncluded:false,browserSessionsIncluded:false,publishable:true,sourceBaseline:'OmniRoute 0.6.6: five independently validated encrypted credential slots per provider, duplicate-safe non-overwriting slot allocation, concurrent credential-pool rotation and failover, explicit slot results, current Groq catalog, and verified host/runtime repair',notice:'Each recipient signs in with their own accounts. No credentials or sessions are included, and no CAPTCHA or anti-bot bypass is implemented.'},null,2)+'\n');
-  await writeFile(join(payload,'provenance.json'),JSON.stringify({version,platform,builtAt:new Date().toISOString(),sourceBaseCommit:execFileSync('git',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8',windowsHide:true}).trim(),workingTreeChanges:true,runtimeFormat:'generated/minified JavaScript and required launch assets',developmentSourceIncluded:false,sourceMapsIncluded:false,signature:'unsigned; verify release SHA-256'},null,2)+'\n');
+  const trackedChanges=execFileSync('git',['status','--porcelain','--untracked-files=no'],{cwd:repo,encoding:'utf8',windowsHide:true}).trim().length>0;
+  await writeFile(join(payload,'provenance.json'),JSON.stringify({version,platform,builtAt:new Date().toISOString(),sourceBaseCommit:execFileSync('git',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8',windowsHide:true}).trim(),workingTreeChanges:trackedChanges,runtimeFormat:'generated/minified JavaScript and required launch assets',developmentSourceIncluded:false,sourceMapsIncluded:false,signature:'unsigned; verify release SHA-256'},null,2)+'\n');
   console.log(JSON.stringify(await prepareRuntimePayload(payload,repo)));
   const files=[];async function walk(directory){for(const item of await readdir(directory,{withFileTypes:true})){const path=join(directory,item.name),rel=relative(payload,path).replaceAll('\\','/');if(item.isSymbolicLink())throw new Error('No symlinks allowed in payload');if(item.isDirectory())await walk(path);else{if(/(?:^|\/)(?:credentials[^/]*\.txt|vault\.json|auth\.json|\.env(?:\..*)?|.*\.log)$/.test(rel))throw new Error(`Personal/credential file rejected: ${rel}`);files.push({path:rel,sha256:hash(await readFile(path))});}}}await walk(payload);files.sort((a,b)=>a.path.localeCompare(b.path));
   await writeFile(join(target,'manifest.json'),JSON.stringify({version,platform,host:'antigravity',hosts,privateLocalOnly:false,runtimeArtifactOnly:true,files},null,2)+'\n');await verifyPackage(target,platform);console.log(`Verified ${label}: ${files.length} payload files`);
 }
-await cp(join(repo,'distribution/dual/README.md'),join(release,'README.md'));await cp(join(repo,'distribution/MODEL-LIMITS.md'),join(release,'MODEL-LIMITS.md'));await cp(join(repo,'distribution/VERIFICATION.md'),join(release,'VERIFICATION.md'));await cp(join(repo,'THIRD-PARTY-NOTICES.md'),join(release,'THIRD-PARTY-NOTICES.md'));await cp(join(repo,'docs/releases/v0.6.8.md'),join(release,'RELEASE-NOTES.md'));await cp(join(repo,'distribution/dual/Install-Windows.cmd'),join(release,'Install-Windows.cmd'));await cp(join(repo,'distribution/dual/Install-Linux.sh'),join(release,'Install-Linux.sh'));
+await cp(join(repo,'distribution/dual/README.md'),join(release,'README.md'));await cp(join(repo,'distribution/MODEL-LIMITS.md'),join(release,'MODEL-LIMITS.md'));await cp(join(repo,'distribution/VERIFICATION.md'),join(release,'VERIFICATION.md'));await cp(join(repo,'THIRD-PARTY-NOTICES.md'),join(release,'THIRD-PARTY-NOTICES.md'));await cp(join(repo,'docs/releases/v0.6.9.md'),join(release,'RELEASE-NOTES.md'));await cp(join(repo,'distribution/dual/Install-Windows.cmd'),join(release,'Install-Windows.cmd'));await cp(join(repo,'distribution/dual/Install-Linux.sh'),join(release,'Install-Linux.sh'));
 await mkdir(join(release,'docs/testing'),{recursive:true});await cp(join(repo,'docs/testing/provider-key-status.tdd.md'),join(release,'docs/testing/provider-key-status.tdd.md'));
 await cp(join(repo,'docs/testing/harness-launch-and-version-prune.tdd.md'),join(release,'docs/testing/harness-launch-and-version-prune.tdd.md'));
-await writeFile(join(release,'USE-NOTICE.txt'),'No API keys, browser profiles, cookies, passwords, or account sessions are included. Each recipient signs in with their own accounts after installation. Setup opens one dedicated local browser profile with six user-controlled sign-in tabs. The adapters pace usage and stop on verification or blocking notices; they do not bypass CAPTCHA, anti-bot, rate-limit, or access controls.\n');
+await writeFile(join(release,'USE-NOTICE.txt'),'No API keys, browser profiles, cookies, passwords, or account sessions are included. Browser-consumer adapters are not part of this release. Each recipient supplies any optional provider API keys through the local setup flow.\n');
 await cp(join(repo,'docs/routing-policy.md'),join(release,'ROUTING-POLICY.md'));
 await cp(join(repo,'docs/host-orchestration.md'),join(release,'HOST-ORCHESTRATION.md'));
 await run('git',['archive','--format=zip','--prefix=code/','--output',join(release,'code.zip'),'HEAD']);

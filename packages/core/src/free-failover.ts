@@ -72,10 +72,10 @@ export class FreeModelFailover {
       if (model.rateLimitState === "limited") reasons.push("QUOTA_LIMITED");
       if (this.cooling(model)) reasons.push("COOLDOWN");
       if (this.providerCooling(model.providerId)) reasons.push("PROVIDER_COOLDOWN");
-      const maximum = settings?.maxTaskClass ?? (model.providerId.endsWith("-consumer") ? "small" : undefined);
+      const maximum = settings?.maxTaskClass;
       if (maximum && (!policy.taskClass || classes.indexOf(policy.taskClass) > classes.indexOf(maximum))) reasons.push("TASK_CLASS_LIMIT");
       if (policy.minimumTier && (model.intelligenceTier ?? 0) < policy.minimumTier) reasons.push("QUALITY_FLOOR");
-      const concurrentLimit = settings?.maxConcurrentRequests ?? (model.providerId.endsWith("-consumer") ? 1 : this.config.daemon.maxConcurrentRoutes);
+      const concurrentLimit = settings?.maxConcurrentRequests ?? this.config.daemon.maxConcurrentRoutes;
       if ((this.active.get(model.providerId) ?? 0) >= concurrentLimit) reasons.push("CONCURRENCY_LIMIT");
       for (const capability of required) if (!supports(model, capability)) reasons.push("CAPABILITY_" + capability.toUpperCase());
       if (policy.minimumOutputTokens && policy.minimumOutputTokens > Math.min(model.maxOutputTokens ?? 0, this.config.routing.maxOutputTokensPerRequest)) reasons.push("OUTPUT_LIMIT");

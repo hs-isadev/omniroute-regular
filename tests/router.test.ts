@@ -258,31 +258,6 @@ test("regular swarm propagates cancellation, records cancelled workers, and skip
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test("regular routing prefers Claude consumer for small work but excludes it from medium work", async () => {
-  const run = async (prompt: string) => {
-    const root = await mkdtemp(join(tmpdir(), "omniroute-claude-scope-"));
-    try {
-      const claude = new MockProvider("claude-consumer");
-      const groq = new MockProvider("groq");
-      claude.responses.push({ text: "claude answer" });
-      groq.responses.push({ text: "groq answer" });
-      const config = freeConfigFixture();
-      for (const provider of config.providers) provider.enabled = ["claude-consumer", "groq"].includes(provider.id);
-      config.providers.find((provider) => provider.id === "claude-consumer")!.models[0]!.reasoningEfforts = ["none", "high"];
-      config.routing.directProviderOrder = ["claude-consumer", "groq"];
-      const claudeModel = modelFixture({ providerId: "claude-consumer", modelId: "claude-web-consumer", contextWindow: 32_768, maxOutputTokens: 4_096, reasoningEfforts: ["none", "high"], capabilities: { text: true, coding: true, toolCalling: false, structuredOutput: false, web: false }, pricing: { inputPerMillionUsd: 0, outputPerMillionUsd: 0, cachedInputPerMillionUsd: 0, updatedAt: null } });
-      const groqModel = modelFixture({ providerId: "groq", modelId: "openai/gpt-oss-120b", pricing: { inputPerMillionUsd: 0, outputPerMillionUsd: 0, cachedInputPerMillionUsd: 0, updatedAt: null } });
-      const router = new OmniRouter({ config, providers: new Map([[claude.id, claude], [groq.id, groq]]), registry: async () => registryFixture([claudeModel, groqModel]), audit: new AuditStore(join(root, "routes.jsonl")), logger: new JsonlLogger(join(root, "log.jsonl")) });
-      return (await router.route({ ...request(prompt), routingMode: "regular" }, AbortSignal.timeout(5000))).attribution.worker;
-    } finally { await rm(root, { recursive: true, force: true }); }
-  };
-
-  const small=await run("Summarize this short paragraph.");
-  assert.equal(small.providerId, "claude-consumer");
-  assert.equal(small.reasoningEffort, "high");
-  assert.equal((await run("Provide:\n1. One focused answer\n2. A second answer\n3. A combined final answer")).providerId, "groq");
-});
-
 test("orchestrator mode uses the configured non-Sol free orchestrator", async () => {
   const root = await mkdtemp(join(tmpdir(), "omniroute-router-free-orchestrator-"));
   try {

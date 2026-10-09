@@ -32,7 +32,7 @@ test("coupled or low-value work stays with host; sensitive filenames are rejecte
 
 test("Codex and Antigravity instructions cover context budgeting, ownership and actual host availability", async () => {
   const antigravity = await readFile(new URL("../distribution/antigravity.mjs", import.meta.url), "utf8");
-  for (const instructions of [CODEX_OMNIROUTE_FIRST_POLICY, antigravity]) for (const phrase of ["canonical task", "acceptance criteria", "taskPacket", "context", "synthesis", "independent", "small-only"]) assert.ok(instructions.includes(phrase), phrase);
+  for (const instructions of [CODEX_OMNIROUTE_FIRST_POLICY, antigravity]) for (const phrase of ["canonical task", "acceptance criteria", "taskPacket", "context", "synthesis", "independent"]) assert.ok(instructions.includes(phrase), phrase);
   for (const model of ["Sol", "Astra", "Terra"]) assert.ok(CODEX_OMNIROUTE_FIRST_POLICY.includes(model));
   assert.match(antigravity, /do not assume it can run Sol or Astra/);
 });

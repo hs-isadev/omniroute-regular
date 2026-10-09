@@ -9,48 +9,12 @@ import { configureProvider } from "../apps/cli/src/provider-management.js";
 
 const request = (modelId: string) => ({ modelId, prompt: "Hi", instructions: "Reply briefly", reasoningEffort: "none" as const, maxOutputTokens: 16, jsonSchema: null, schemaName: null, safetyIdentifier: null, signal: AbortSignal.timeout(5000) });
 
-test("Claude consumer is a credential-free, small-task-only provider profile", () => {
-  const settings = DEFAULT_CONFIG.providers.find((provider) => provider.id === "claude-consumer");
-  assert.ok(settings);
-  assert.equal(settings.type, "mcp-stdio");
-  assert.equal(settings.credentialField, null);
-  assert.equal(settings.freeTierOnly, true);
-  assert.equal(settings.maxTaskClass, "small");
-  assert.deepEqual(settings.models.map((model) => model.modelId), ["claude-web-consumer"]);
-
-  const config = structuredClone(DEFAULT_CONFIG);
-  const enabled = config.providers.find((provider) => provider.id === "claude-consumer")!;
-  enabled.enabled = true;
-  enabled.mcpCommand = "node";
-  enabled.mcpArgs = ["adapter.js", "mcp"];
-  validateConfig(config);
-  assert.ok(createProviders(config, { credentials: {}, mcpToolCaller: async () => ({ content: [] }) }).has("claude-consumer"));
-
-  enabled.mcpArgs = [];
-  assert.throws(() => validateConfig(config), /requires a command and arguments/);
-});
-
-test("Z.AI web consumer is distinct from the API-key provider and restricted to small tasks", () => {
-  const browser = DEFAULT_CONFIG.providers.find((provider) => provider.id === "zai-consumer");
+test("browser-consumer providers are absent while the Z.AI API provider remains available", () => {
+  assert.equal(DEFAULT_CONFIG.providers.some((provider) => provider.id.endsWith("-consumer")), false);
   const api = DEFAULT_CONFIG.providers.find((provider) => provider.id === "zai");
-  assert.ok(browser);
   assert.ok(api);
-  assert.equal(browser.type, "mcp-stdio");
-  assert.equal(browser.credentialField, null);
-  assert.equal(browser.freeTierOnly, true);
-  assert.equal(browser.maxTaskClass, "small");
-  assert.deepEqual(browser.models.map((model) => model.modelId), ["glm-web-consumer"]);
   assert.equal(api.type, "openai-compatible");
   assert.equal(api.credentialField, "ZAI_API_KEY");
-  assert.notEqual(browser.id, api.id);
-
-  const config = structuredClone(DEFAULT_CONFIG);
-  const enabled = config.providers.find((provider) => provider.id === "zai-consumer")!;
-  enabled.enabled = true;
-  enabled.mcpCommand = "node";
-  enabled.mcpArgs = ["zai-adapter.js", "mcp"];
-  validateConfig(config);
-  assert.ok(createProviders(config, { credentials: {}, mcpToolCaller: async () => ({ content: [] }) }).has("zai-consumer"));
 });
 
 test("strict-free catalog includes current no-card Cerebras and SambaNova API tiers", () => {

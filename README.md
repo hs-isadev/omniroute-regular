@@ -16,8 +16,8 @@ sign in to your own accounts.
 4. Follow the prompts. In the **API Keys** window, click **Get key** beside a
    provider, enter your own key, then click **Save and test**. The window tells
    you which providers connected.
-5. Sign in yourself when an app or the optional separate browser opens. Restart
-   any coding app that was already open.
+5. Sign in yourself when a supported host app opens. Restart any coding app
+   that was already open.
 
 When you run a newer setup in the same install folder, it keeps the new version
 and one older version so you can roll back. It removes older intact OmniRoute
@@ -46,9 +46,9 @@ to get around provider limits.
 - Connects Codex and Claude Code if they are already installed. It does not
   install or sign you in to those apps.
 - Installs 11 coding helper skills for Codex, OpenCode, and Antigravity.
-- If you use the optional browser providers, keeps their sign-in in a separate
-  local browser profile. After setup, that browser is set to start minimized
-  when you sign in to your computer.
+- Removes recognized OmniRoute browser-consumer autostarts from older installs.
+  Browser-consumer adapters are no longer included; existing browser profiles
+  and sign-in data are left untouched.
 
 ## Good to know
 
